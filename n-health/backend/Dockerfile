@@ -21,7 +21,10 @@ COPY . .
 # Clear prisma cache and regenerate - this forces Prisma to rebuild binaries
 RUN rm -rf node_modules/.prisma && npx prisma generate
 
+# Build TypeScript
+RUN npm run build
+
 EXPOSE 4000
 
-# Start the development server
-CMD ["npm", "run", "dev"]
+# Run migrations and start server
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
