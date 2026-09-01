@@ -90,6 +90,13 @@ export async function cancelAppointment(req: Request, res: Response) {
 
 // ---------- Pharmacy orders ----------
 
+interface OrderItem {
+  inventoryId: string;
+  name: string;
+  qty: number;
+  price: number;
+}
+
 const createOrderSchema = z.object({
   pharmacyId: z.string(),
   prescriptionId: z.string().optional(),
@@ -128,7 +135,7 @@ export async function createOrder(req: Request, res: Response) {
         patientId: patient.id,
         pharmacyId: data.pharmacyId,
         prescriptionId: data.prescriptionId,
-        items: data.items,
+        items: data.items as any,
         total,
       },
     });
@@ -145,7 +152,7 @@ export async function getOrderInvoicePdf(req: Request, res: Response) {
   });
   if (!order || order.patientId !== patient.id) throw ApiError.notFound('Order not found');
 
-  const items = order.items as { name: string; qty: number; price: number }[];
+  const items = order.items as unknown as OrderItem[];
 
   const h = await startDocument('Invoice', `Order #${order.id.slice(0, 8)}`);
   drawField(h, 'Patient', order.patient.user.name);
@@ -167,6 +174,13 @@ export async function getOrderInvoicePdf(req: Request, res: Response) {
 
 // ---------- Prescriptions (read-only for patient) ----------
 
+interface Medication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  durationDays: number;
+}
+
 export async function listPrescriptions(req: Request, res: Response) {
   const patient = await getPatientProfile(req.user!.userId);
   const prescriptions = await prisma.prescription.findMany({
@@ -176,8 +190,6 @@ export async function listPrescriptions(req: Request, res: Response) {
   });
   res.json(prescriptions);
 }
-
-interface Medication { name: string; dosage: string; frequency: string; durationDays: number }
 
 export async function getPrescriptionPdf(req: Request, res: Response) {
   const patient = await getPatientProfile(req.user!.userId);
@@ -190,9 +202,6 @@ export async function getPrescriptionPdf(req: Request, res: Response) {
   });
   if (!prescription || prescription.patientId !== patient.id) throw ApiError.notFound('Prescription not found');
 
-  // Prisma types this as Prisma.JsonValue, which doesn't narrow directly to
-  // Medication[] with a single assertion - safe here since we know the shape
-  // was validated on the way in by createPrescription's own zod schema.
   const meds = prescription.medications as unknown as Medication[];
 
   const h = await startDocument('Prescription', `Issued ${prescription.issuedAt.toLocaleDateString()}`);
