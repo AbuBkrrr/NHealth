@@ -135,7 +135,7 @@ export async function createOrder(req: Request, res: Response) {
         patientId: patient.id,
         pharmacyId: data.pharmacyId,
         prescriptionId: data.prescriptionId,
-        items: data.items as any,
+        items: data.items as unknown as any,
         total,
       },
     });
