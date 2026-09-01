@@ -135,6 +135,13 @@ export async function getPatientDetail(req: Request, res: Response) {
 
 // ---------- Prescriptions ----------
 
+interface Medication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  durationDays: number;
+}
+
 const medicationSchema = z.object({
   name: z.string().min(1),
   dosage: z.string().min(1),
@@ -153,7 +160,7 @@ export async function createPrescription(req: Request, res: Response) {
   await assertDoctorTreatsPatient(doctor.id, data.patientId);
 
   const prescription = await prisma.prescription.create({
-    data: { patientId: data.patientId, doctorId: doctor.id, medications: data.medications },
+    data: { patientId: data.patientId, doctorId: doctor.id, medications: data.medications as any },
   });
 
   const patient = await prisma.patientProfile.findUnique({ where: { id: data.patientId }, select: { userId: true } });
@@ -174,8 +181,6 @@ export async function listPrescriptionsIssued(req: Request, res: Response) {
   res.json(prescriptions);
 }
 
-interface Medication { name: string; dosage: string; frequency: string; durationDays: number }
-
 export async function getPrescriptionPdf(req: Request, res: Response) {
   const doctor = await getDoctorProfile(req.user!.userId);
   const prescription = await prisma.prescription.findUnique({
@@ -187,9 +192,6 @@ export async function getPrescriptionPdf(req: Request, res: Response) {
   });
   if (!prescription || prescription.doctorId !== doctor.id) throw ApiError.notFound('Prescription not found');
 
-  // Prisma types this as Prisma.JsonValue, which doesn't narrow directly to
-  // Medication[] with a single assertion - safe here since we know the shape
-  // was validated on the way in by createPrescription's own zod schema.
   const meds = prescription.medications as unknown as Medication[];
 
   const h = await startDocument('Prescription', `Issued ${prescription.issuedAt.toLocaleDateString()}`);
