@@ -45,7 +45,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 4000
       DATABASE_URL: postgresql://nhealth:nhealth@postgres:5432/nhealth?schema=public
       JWT_SECRET: docker-local-dev-secret-change-if-shared
@@ -57,6 +57,8 @@ services:
     volumes:
       # Uploaded avatars persist across container restarts.
       - nhealth_uploads:/app/uploads
+      # Hot reload for development (optional, requires source code mounted)
+      - ./backend/src:/app/src
 
   adminer:
     image: adminer:latest
