@@ -7,12 +7,11 @@ import { ApiError } from '../utils/ApiError';
 import { Role } from '@prisma/client';
 
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email('Invalid email format'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  name: z.string().min(1),
-  phone: z.string().optional(),
-  role: z.nativeEnum(Role),
-  // Role-specific fields, validated loosely here and used to create the profile row.
+  name: z.string().min(1, 'Name is required'),
+  phone: z.string().optional().nullable(),
+  role: z.nativeEnum(Role, { errorMap: () => ({ message: 'Invalid role' }) }),
   profile: z.record(z.any()).optional(),
 });
 
@@ -93,21 +92,22 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
         },
       });
     case 'ADMIN':
-      // Admins have no role-specific profile table - just the User row itself.
       return undefined;
   }
 }
 
 export async function register(req: Request, res: Response) {
   try {
+    console.log('📝 Register request:', JSON.stringify(req.body));
     const data = registerSchema.parse(req.body);
+    console.log('✅ Validation passed');
 
     if (data.role === 'ADMIN') {
-      throw ApiError.forbidden('Admin accounts cannot self-register - ask a super admin to create one.');
+      throw ApiError.forbidden('Admin accounts cannot self-register');
     }
 
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existing) throw ApiError.conflict('An account with this email already exists');
+    if (existing) throw ApiError.conflict('Email already registered');
 
     const passwordHash = await bcrypt.hash(data.password, 12);
 
@@ -116,12 +116,14 @@ export async function register(req: Request, res: Response) {
         email: data.email,
         passwordHash,
         name: data.name,
-        phone: data.phone,
+        phone: data.phone || null,
         role: data.role,
       },
     });
 
+    console.log('👤 User created:', user.id);
     await createRoleProfile(user.id, data.role, data.profile ?? {});
+    console.log('📋 Profile created');
 
     const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
     res.status(201).json({
@@ -129,48 +131,67 @@ export async function register(req: Request, res: Response) {
       user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
     });
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('❌ Register error:', error);
+    if (error instanceof z.ZodError) {
+      console.error('Validation errors:', error.errors);
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Registration failed', message: msg });
+  }
+}
+
+export async function login(req: Request, res: Response) {
+  try {
+    const data = loginSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { email: data.email } });
+    if (!user) throw ApiError.unauthorized('Invalid email or password');
+
+    const valid = await bcrypt.compare(data.password, user.passwordHash);
+    if (!valid) throw ApiError.unauthorized('Invalid email or password');
+
+    if (!user.isActive) throw ApiError.forbidden('Account inactive');
+
+    const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
+    });
+  } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.errors });
     }
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({ error: error.message });
     }
-    res.status(500).json({ error: 'Registration failed', message: error instanceof Error ? error.message : 'Unknown error' });
+    res.status(500).json({ error: 'Login failed' });
   }
 }
 
-export async function login(req: Request, res: Response) {
-  const data = loginSchema.parse(req.body);
-
-  const user = await prisma.user.findUnique({ where: { email: data.email } });
-  if (!user) throw ApiError.unauthorized('Invalid email or password');
-
-  const valid = await bcrypt.compare(data.password, user.passwordHash);
-  if (!valid) throw ApiError.unauthorized('Invalid email or password');
-
-  if (!user.isActive) throw ApiError.forbidden('This account has been deactivated');
-
-  const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
-  res.json({
-    token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
-  });
-}
-
 export async function me(req: Request, res: Response) {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.userId },
-    include: {
-      patientProfile: true,
-      doctorProfile: true,
-      pharmacyProfile: true,
-      labProfile: true,
-      ambulanceProfile: true,
-      nurseProfile: true,
-    },
-  });
-  if (!user) throw ApiError.notFound('User not found');
-  const { passwordHash, ...safeUser } = user;
-  res.json(safeUser);
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      include: {
+        patientProfile: true,
+        doctorProfile: true,
+        pharmacyProfile: true,
+        labProfile: true,
+        ambulanceProfile: true,
+        nurseProfile: true,
+      },
+    });
+    if (!user) throw ApiError.notFound('User not found');
+    const { passwordHash, ...safeUser } = user;
+    res.json(safeUser);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to get user' });
+  }
 }
