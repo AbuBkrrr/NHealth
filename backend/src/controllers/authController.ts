@@ -99,34 +99,45 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
 }
 
 export async function register(req: Request, res: Response) {
-  const data = registerSchema.parse(req.body);
+  try {
+    const data = registerSchema.parse(req.body);
 
-  if (data.role === 'ADMIN') {
-    throw ApiError.forbidden('Admin accounts cannot self-register - ask a super admin to create one.');
+    if (data.role === 'ADMIN') {
+      throw ApiError.forbidden('Admin accounts cannot self-register - ask a super admin to create one.');
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email: data.email } });
+    if (existing) throw ApiError.conflict('An account with this email already exists');
+
+    const passwordHash = await bcrypt.hash(data.password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        email: data.email,
+        passwordHash,
+        name: data.name,
+        phone: data.phone,
+        role: data.role,
+      },
+    });
+
+    await createRoleProfile(user.id, data.role, data.profile ?? {});
+
+    const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
+    res.status(201).json({
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Registration failed', message: error instanceof Error ? error.message : 'Unknown error' });
   }
-
-  const existing = await prisma.user.findUnique({ where: { email: data.email } });
-  if (existing) throw ApiError.conflict('An account with this email already exists');
-
-  const passwordHash = await bcrypt.hash(data.password, 12);
-
-  const user = await prisma.user.create({
-    data: {
-      email: data.email,
-      passwordHash,
-      name: data.name,
-      phone: data.phone,
-      role: data.role,
-    },
-  });
-
-  await createRoleProfile(user.id, data.role, data.profile ?? {});
-
-  const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
-  res.status(201).json({
-    token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
-  });
 }
 
 export async function login(req: Request, res: Response) {
