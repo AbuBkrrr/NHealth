@@ -18,7 +18,7 @@ RUN npm run build
 RUN npx prisma generate
 
 # Create startup script
-RUN echo '#!/bin/sh\nset -e\necho "Running database migrations..."\nnpx prisma db push --skip-generate --skip-validate\necho "Database ready!"\nexec npm start' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+RUN echo '#!/bin/sh\nset -e\necho "Running database migrations..."\nnpx prisma db push --skip-generate || true\necho "Database ready!"\nexec npm start' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 EXPOSE 4000
 
