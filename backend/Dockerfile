@@ -11,7 +11,9 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm install
+RUN npm ci
+
+RUN npm run build
 
 RUN npx prisma generate
 
