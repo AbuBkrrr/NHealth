@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
 
 // Reuse a single PrismaClient instance across the app
 declare global {
@@ -15,12 +17,31 @@ if (process.env.NODE_ENV !== 'production') {
 // Initialize schema on startup
 export async function initializeDatabase() {
   try {
-    console.log('Initializing database schema...');
-    // This will synchronize the schema with the database
+    console.log('Checking database connection...');
+    // Test connection
     await prisma.$executeRawUnsafe('SELECT 1');
-    console.log('Database schema initialized successfully');
+    console.log('Database connected!');
+    
+    // Check if User table exists
+    try {
+      await prisma.user.findFirst({ take: 0 });
+      console.log('User table exists - schema is initialized');
+    } catch (err) {
+      console.log('User table not found - initializing schema...');
+      // Try to run migrations
+      try {
+        const { execSync } = await import('child_process');
+        execSync('npx prisma db push --skip-generate', { 
+          stdio: 'inherit',
+          env: { ...process.env }
+        });
+        console.log('Migrations applied successfully');
+      } catch (migrationErr) {
+        console.warn('Migration failed (may already exist):', migrationErr);
+      }
+    }
   } catch (error) {
     console.error('Database initialization error:', error);
-    // Don't fail startup - continue anyway
+    // Don't fail startup - Prisma will handle it
   }
 }
