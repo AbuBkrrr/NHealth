@@ -69,9 +69,9 @@ export async function registerUser(req: Request, res: Response) {
         userId: user.id,
         email: user.email,
         role: user.role,
-      },
-      jwtSecret,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      } as any,
+      jwtSecret as any,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
     );
 
     res.status(201).json({
@@ -122,9 +122,9 @@ export async function loginUser(req: Request, res: Response) {
         userId: user.id,
         email: user.email,
         role: user.role,
-      },
-      jwtSecret,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      } as any,
+      jwtSecret as any,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
     );
 
     res.json({
