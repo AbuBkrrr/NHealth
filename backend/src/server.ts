@@ -2,17 +2,15 @@ import http from 'http';
 import { createApp } from './app';
 import { initSockets } from './sockets';
 import { env } from './config/env';
-import { prisma } from './config/prisma';
+import { prisma, initializeDatabase } from './config/prisma';
 
 async function start() {
   try {
     console.log('Initializing database...');
-    // This will automatically create tables if they don't exist
-    await prisma.$executeRawUnsafe('SELECT 1');
-    console.log('Database connected!');
+    await initializeDatabase();
+    console.log('Database ready!');
   } catch (error) {
-    console.error('Database initialization failed:', error);
-    // Continue anyway - Prisma will handle schema creation
+    console.error('Database error:', error);
   }
 
   const app = createApp();
