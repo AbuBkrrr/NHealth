@@ -63,13 +63,14 @@ export async function registerUser(req: Request, res: Response) {
     });
 
     // ========== GENERATE JWT TOKEN ==========
+    const jwtSecret = process.env.JWT_SECRET || 'default-secret-key-change-in-production';
     const token = jwt.sign(
       {
         userId: user.id,
         email: user.email,
         role: user.role,
       },
-      process.env.JWT_SECRET || 'your-secret-key',
+      jwtSecret,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
@@ -115,13 +116,14 @@ export async function loginUser(req: Request, res: Response) {
       return res.status(403).json({ error: 'Account inactive' });
     }
 
+    const jwtSecret = process.env.JWT_SECRET || 'default-secret-key-change-in-production';
     const token = jwt.sign(
       {
         userId: user.id,
         email: user.email,
         role: user.role,
       },
-      process.env.JWT_SECRET || 'your-secret-key',
+      jwtSecret,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
@@ -141,6 +143,10 @@ export async function loginUser(req: Request, res: Response) {
   }
 }
 
+/**
+ * GET /api/auth/me
+ * Get current user
+ */
 export async function getCurrentUser(req: Request, res: Response) {
   try {
     const userId = (req as any).userId;
@@ -164,4 +170,36 @@ export async function getCurrentUser(req: Request, res: Response) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
   }
+}
+
+/**
+ * POST /api/auth/verify-email
+ * Placeholder - email verification not implemented yet
+ */
+export async function verifyEmail(req: Request, res: Response) {
+  res.status(200).json({ message: 'Email verification not implemented yet' });
+}
+
+/**
+ * POST /api/auth/resend-verification
+ * Placeholder - email verification not implemented yet
+ */
+export async function resendVerificationEmail(req: Request, res: Response) {
+  res.status(200).json({ message: 'Email verification not implemented yet' });
+}
+
+/**
+ * POST /api/auth/forgot-password
+ * Placeholder - password reset not implemented yet
+ */
+export async function forgotPassword(req: Request, res: Response) {
+  res.status(200).json({ message: 'Password reset not implemented yet' });
+}
+
+/**
+ * POST /api/auth/reset-password
+ * Placeholder - password reset not implemented yet
+ */
+export async function resetPassword(req: Request, res: Response) {
+  res.status(200).json({ message: 'Password reset not implemented yet' });
 }
