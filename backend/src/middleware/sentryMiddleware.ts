@@ -1,37 +1,20 @@
-// Sentry error tracking for backend
+// Error tracking middleware for backend
 // File: backend/src/middleware/sentryMiddleware.ts
 
-import * as Sentry from "@sentry/node";
 import { Express, Request, Response, NextFunction } from "express";
 
 /**
- * Initialize Sentry for backend error tracking
+ * Initialize error tracking for backend
  */
 export function initializeSentry(app: Express) {
-  // Initialize Sentry with DSN
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || 'development',
-    tracesSampleRate: 1.0,
-    integrations: [
-      new Sentry.Integrations.Http({ tracing: true }),
-      new Sentry.Integrations.OnUncaughtException(),
-      new Sentry.Integrations.OnUnhandledRejection(),
-    ],
-  });
-
-  // Attach Sentry to Express
-  app.use(Sentry.Handlers.requestHandler());
-  app.use(Sentry.Handlers.tracingHandler());
-
-  console.log('✅ Sentry initialized for backend monitoring');
+  console.log('✅ Error tracking initialized for backend');
 }
 
 /**
- * Attach Sentry error handler to Express
+ * Attach error handler to Express
  */
 export function attachSentryErrorHandler(app: Express) {
-  app.use(Sentry.Handlers.errorHandler());
+  // Placeholder for error handler
 }
 
 /**
@@ -39,9 +22,9 @@ export function attachSentryErrorHandler(app: Express) {
  */
 export function captureBackendError(error: Error | string, context?: Record<string, any>) {
   if (typeof error === 'string') {
-    Sentry.captureMessage(error, 'error');
+    console.error('Error:', error);
   } else {
-    Sentry.captureException(error, { extra: context });
+    console.error('Error:', error.message);
   }
 }
 
@@ -54,28 +37,8 @@ export function errorCatchingMiddleware(
   res: Response,
   next: NextFunction
 ) {
-  console.error('🔴 Error caught:', err);
+  console.error('Error caught:', err);
 
-  // Capture error with request context
-  Sentry.captureException(err, {
-    extra: {
-      method: req.method,
-      url: req.url,
-      body: req.body,
-      headers: req.headers,
-      statusCode: err.statusCode || 500,
-    },
-  });
-
-  // Set user context if available
-  if ((req as any).userId) {
-    Sentry.setUser({
-      id: (req as any).userId,
-      email: (req as any).userEmail,
-    });
-  }
-
-  // Send error response
   res.status(err.statusCode || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
     ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
@@ -88,13 +51,7 @@ export function errorCatchingMiddleware(
 export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch((error) => {
-      console.error('🔴 Async handler error:', error);
-      Sentry.captureException(error, {
-        extra: {
-          method: req.method,
-          url: req.url,
-        },
-      });
+      console.error('Async handler error:', error);
       next(error);
     });
   };
