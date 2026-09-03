@@ -1,0 +1,71 @@
+# One-command local stack: Postgres + the backend API (+ Adminer to browse
+# the database in a browser). Replaces installing Postgres natively.
+#
+# Usage:
+#   docker compose up --build
+#   docker compose up --build -d      # detached, runs in the background
+#   docker compose logs -f backend    # tail the backend's logs
+#   docker compose exec backend npm run prisma:seed   # seed demo data
+#   docker compose down               # stop everything
+#   docker compose down -v            # stop AND wipe the database volume
+#
+# Once it's up, everything from the localhost setup guide applies as normal:
+#   - Backend:   http://localhost:4000  (health check: /health)
+#   - Postgres:  localhost:5432 (user/pass/db: nhealth/nhealth/nhealth)
+#   - Adminer:   http://localhost:8080  (System: PostgreSQL, Server: postgres,
+#                Username: nhealth, Password: nhealth, Database: nhealth)
+#
+# admin-web and the mobile app are NOT part of this compose file - they're
+# unrelated to needing a database, and this keeps startup fast. Run them the
+# normal way (npm run dev / npx expo start) once the backend here is up.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nhealth
+      POSTGRES_PASSWORD: nhealth
+      POSTGRES_DB: nhealth
+    ports:
+      - "5432:5432"
+    volumes:
+      - nhealth_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nhealth -d nhealth"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://nhealth:nhealth@postgres:5432/nhealth?schema=public
+      JWT_SECRET: docker-local-dev-secret-change-if-shared
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: "*"
+      PUBLIC_URL: http://localhost:4000
+    ports:
+      - "4000:4000"
+    volumes:
+      # Uploaded avatars persist across container restarts.
+      - nhealth_uploads:/app/uploads
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+
+volumes:
+  nhealth_pgdata:
+  nhealth_uploads:
