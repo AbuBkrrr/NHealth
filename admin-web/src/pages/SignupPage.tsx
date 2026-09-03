@@ -125,13 +125,11 @@ export function SignupPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        name: `${firstName.trim()} ${lastName.trim()}`,
         email: email.trim(),
         phone: phone.trim(),
         password,
         role: role === 'patient' ? 'PATIENT' : provider.toUpperCase(),
-        providerType: provider,
       }),
     });
 
