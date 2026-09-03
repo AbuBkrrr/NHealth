@@ -17,9 +17,6 @@ RUN npm run build
 
 RUN npx prisma generate
 
-# Run migrations on startup
-RUN echo '#!/bin/sh\nnpx prisma migrate deploy\nnpm start' > /app/start.sh && chmod +x /app/start.sh
-
 EXPOSE 4000
 
-CMD ["/app/start.sh"]
+CMD ["npm", "start"]
