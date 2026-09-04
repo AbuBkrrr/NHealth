@@ -16,6 +16,7 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   position: relative;
+  max-height: 90vh;
 }
 
 .phone-notch {
@@ -37,6 +38,8 @@
   flex-direction: column;
   gap: 20px;
   position: relative;
+  overflow-y: auto;
+  max-height: 100vh;
 }
 
 /* Header */

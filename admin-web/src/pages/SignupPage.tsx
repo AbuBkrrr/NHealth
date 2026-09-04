@@ -121,32 +121,43 @@ export function SignupPage() {
     setLoading(true);
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
-    const response = await fetch(`${apiUrl}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: `${firstName.trim()} ${lastName.trim()}`,
-        email: email.trim(),
-        phone: phone.trim(),
-        password,
-        role: role === 'patient' ? 'PATIENT' : provider.toUpperCase(),
-      }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'Registration failed');
-    }
-
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+    
     try {
+      const response = await fetch(`${apiUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${firstName.trim()} ${lastName.trim()}`,
+          email: email.trim(),
+          phone: phone.trim(),
+          password,
+          role: role === 'patient' ? 'PATIENT' : provider.toUpperCase(),
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || `Registration failed (${response.status})`);
+      }
+
       const data = await response.json();
       localStorage.setItem('admin_token', data.token);
       localStorage.setItem('admin_user', JSON.stringify(data.user));
       setStep(5);
       setTimeout(() => navigate('/'), 1000);
     } catch (err: any) {
+      clearTimeout(timeout);
       console.error('Registration error:', err);
-      setError(err.message || 'Registration failed. Please try again.');
+      if (err.name === 'AbortError') {
+        setError('Request timed out. Please check your connection and try again.');
+      } else {
+        setError(err.message || 'Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
