@@ -28,7 +28,8 @@
     "multer": "^2.0.0",
     "pdf-lib": "^1.17.1",
     "socket.io": "^4.7.5",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "libphonenumber-js": "^1.10.26"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
