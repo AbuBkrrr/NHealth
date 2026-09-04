@@ -25,16 +25,11 @@ function RoleBasedHome() {
   
   if (!user) return <Navigate to="/login" />;
   
-  // Route based on role
-  if (user.role === 'PATIENT') return <PatientHomePage />;
-  if (user.role === 'DOCTOR') return <DoctorDashboardPage />;
-  if (user.role === 'NURSE') return <NurseDashboardPage />;
-  if (user.role === 'PHARMACY') return <PharmacyDashboardPage />;
-  if (user.role === 'LAB') return <LabDashboardPage />;
-  if (user.role === 'AMBULANCE') return <AmbulanceDashboardPage />;
+  // Route based on role - ADMIN only
+  if (user.role === 'ADMIN') return <DashboardPage />;
   
-  // Default to admin dashboard for ADMIN role
-  return <DashboardPage />;
+  // All other roles redirect to their specific dashboards
+  return <Navigate to={`/${user.role.toLowerCase()}`} />;
 }
 
 export default function App() {
@@ -47,7 +42,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
 
-          {/* Protected Routes */}
+          {/* Protected Patient Route */}
           <Route
             path="/patient"
             element={
@@ -56,6 +51,8 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Protected Doctor Route */}
           <Route
             path="/doctor"
             element={
@@ -64,6 +61,48 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Protected Nurse Route */}
+          <Route
+            path="/nurse"
+            element={
+              <ProtectedRoute>
+                <NurseDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Pharmacy Route */}
+          <Route
+            path="/pharmacy"
+            element={
+              <ProtectedRoute>
+                <PharmacyDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Lab Route */}
+          <Route
+            path="/lab"
+            element={
+              <ProtectedRoute>
+                <LabDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Ambulance Route */}
+          <Route
+            path="/ambulance"
+            element={
+              <ProtectedRoute>
+                <AmbulanceDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Admin Layout Routes */}
           <Route
             element={
               <ProtectedRoute>
