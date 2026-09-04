@@ -182,7 +182,8 @@ export function LoginPage() {
                     onClick={() => {
                       setSelectedRole('ADMIN');
                       // Focus on email field
-                      document.querySelector('input[type="email"]')?.focus();
+                      const emailInput = document.querySelector('input[type="email"]') as HTMLInputElement;
+                      if (emailInput) emailInput.focus();
                     }}
                   >
                     Admin Login
