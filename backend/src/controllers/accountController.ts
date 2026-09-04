@@ -74,8 +74,8 @@ export async function updateAccount(req: Request, res: Response) {
   const data = updateAccountSchema.parse(req.body);
 
   if (data.phone) {
-    const existing = await prisma.user.findUnique({ where: { phone: data.phone } });
-    if (existing && existing.id !== req.user!.userId) {
+    const existing = await prisma.user.findFirst({ where: { phone: data.phone, id: { not: req.user!.userId } } });
+    if (existing) {
       throw ApiError.conflict('That phone number is already in use by another account');
     }
   }
