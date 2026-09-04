@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../api/client';
 import { StatusBar } from '../components/StatusBar';
 import '../styles/LoginPage.css';
 
@@ -41,8 +42,7 @@ export function LoginPage() {
       navigate('/');
     } catch (err: any) {
       console.error('Login error:', err);
-      // Try to extract error from response
-      const errorMsg = err.response?.data?.error || err.message || 'Login failed. Please try again.';
+      const errorMsg = getErrorMessage(err, 'Login failed. Please try again.');
       setError(errorMsg);
     } finally {
       setLoading(false);

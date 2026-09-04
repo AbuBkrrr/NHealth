@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getErrorMessage } from '../api/client';
 import { StatusBar } from '../components/StatusBar';
 import '../styles/SignupPage.css';
 
@@ -156,7 +157,8 @@ export function SignupPage() {
       if (err.name === 'AbortError') {
         setError('Request timed out. Please check your connection and try again.');
       } else {
-        setError(err.message || 'Registration failed. Please try again.');
+        const errorMsg = getErrorMessage(err, 'Registration failed. Please try again.');
+        setError(errorMsg);
       }
     } finally {
       setLoading(false);
