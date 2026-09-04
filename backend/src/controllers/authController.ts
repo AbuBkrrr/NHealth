@@ -146,40 +146,42 @@ export async function register(req: Request, res: Response) {
 
 export async function login(req: Request, res: Response) {
   try {
+    console.log('🔐 Login attempt:', req.body.email);
     const data = loginSchema.parse(req.body);
 
     const user = await prisma.user.findUnique({ where: { email: data.email } });
     if (!user) {
-      console.log('❌ Login failed: Email not registered:', data.email);
-      return res.status(401).json({ error: 'Email not registered. Please sign up to create an account.' });
+      console.log('❌ Email not found:', data.email);
+      return res.status(401).json({ error: 'Email not registered. Please sign up first.' });
     }
 
     const valid = await bcrypt.compare(data.password, user.passwordHash);
     if (!valid) {
-      console.log('❌ Login failed: Invalid password for:', data.email);
+      console.log('❌ Invalid password for:', data.email);
       return res.status(401).json({ error: 'Invalid password. Please try again.' });
     }
 
     if (!user.isActive) {
-      console.log('❌ Login failed: Account inactive:', data.email);
-      return res.status(403).json({ error: 'Account inactive' });
+      console.log('❌ Account inactive:', data.email);
+      return res.status(403).json({ error: 'Account is inactive.' });
     }
 
     const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
     console.log('✅ Login successful:', data.email, 'Role:', user.role);
-    res.json({
+    res.status(200).json({
       token,
       user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
     });
   } catch (error) {
     console.error('❌ Login error:', error);
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      console.error('Validation error:', error.errors);
+      return res.status(400).json({ error: 'Invalid email or password format', details: error.errors });
     }
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({ error: error.message });
     }
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Server error during login' });
   }
 }
 

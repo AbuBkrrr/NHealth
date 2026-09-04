@@ -41,7 +41,9 @@ export function LoginPage() {
       navigate('/');
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'Login failed. Please try again.');
+      // Try to extract error from response
+      const errorMsg = err.response?.data?.error || err.message || 'Login failed. Please try again.';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
