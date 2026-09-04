@@ -18,6 +18,10 @@ export function Layout() {
         <NavLink to="/users" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           Users
         </NavLink>
+	// In your sidebar/navigation component
+	<NavItem to="/insurance" icon="🛡️">Insurance</NavItem>
+	<NavItem to="/donations/blood" icon="🩸">Blood Donations</NavItem>
+	<NavItem to="/donations/fund" icon="💰">Charity</NavItem>
         {user?.isSuperAdmin && (
           <>
             <NavLink to="/admins" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>

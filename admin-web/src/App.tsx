@@ -18,6 +18,9 @@ import { NurseDashboardPage } from './pages/NurseDashboardPage';
 import { PharmacyDashboardPage } from './pages/PharmacyDashboardPage';
 import { LabDashboardPage } from './pages/LabDashboardPage';
 import { AmbulanceDashboardPage } from './pages/AmbulanceDashboardPage';
+import { InsuranceSchemes } from './components/insurance/InsuranceSchemes';
+import { BloodRequestList } from './components/donations/BloodRequestList';
+import { CharityCampaigns } from './components/donations/CharityCampaigns'; // Create if missing
 
 // Role-based home route
 function RoleBasedHome() {
@@ -41,6 +44,9 @@ export default function App() {
           <Route path="/" element={<WelcomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+	  <Route path="/insurance" element={<InsuranceSchemes />} />
+	  <Route path="/donations/blood" element={<BloodRequestList />} />
+	  <Route path="/donations/fund" element={<CharityCampaigns />} />
 
           {/* Protected Patient Route */}
           <Route
