@@ -133,14 +133,16 @@ export async function register(req: Request, res: Response) {
   } catch (error) {
     console.error('❌ Register error:', error);
     if (error instanceof z.ZodError) {
-      console.error('Validation errors:', error.errors);
-      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      console.error('Validation error:', error.errors);
+      return res.status(400).json({ error: 'Invalid input. Please check your details.', details: error.errors });
     }
     if (error instanceof ApiError) {
+      console.error('API error:', error.message);
       return res.status(error.statusCode).json({ error: error.message });
     }
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ error: 'Registration failed', message: msg });
+    console.error('Final error:', msg);
+    res.status(500).json({ error: `Registration failed: ${msg}` });
   }
 }
 
