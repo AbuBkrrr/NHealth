@@ -8,39 +8,35 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<'role' | 'credentials'>('role');
-  const [selectedRole, setSelectedRole] = useState<'patient' | 'provider' | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'PATIENT' | 'DOCTOR' | 'NURSE' | 'PHARMACY' | 'LAB' | 'AMBULANCE' | 'ADMIN' | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const handleRoleSelect = (role: 'patient' | 'provider') => {
-    setSelectedRole(role);
-    setStep('credentials');
-    setError(null);
-  };
+  const [showAdminCard, setShowAdminCard] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!selectedRole) {
+      setError('Please select a role');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Please enter your email');
+      return;
+    }
+
+    if (!password.trim()) {
+      setError('Please enter your password');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Validate inputs
-      if (!email.trim()) {
-        setError('Please enter your email address');
-        setLoading(false);
-        return;
-      }
-
-      if (!password.trim()) {
-        setError('Please enter your password');
-        setLoading(false);
-        return;
-      }
-
-      // BACKEND LOGIN (REQUIRED - No fallback)
       await login(email, password);
       navigate('/');
     } catch (err: any) {
@@ -53,102 +49,149 @@ export function LoginPage() {
 
   return (
     <div className="login-container">
-      {/* Phone Frame */}
       <div className="phone-frame">
-        {/* Notch */}
         <div className="phone-notch"></div>
-
-        {/* Real-Time Status Bar */}
         <StatusBar />
 
-        {step === 'role' ? (
-          // Role Selection Screen
-          <div className="login-content">
-            <div className="logo-section">
-              <div className="logo">🏥</div>
-              <h1>N-Health</h1>
-              <p>Complete Health Ecosystem</p>
-            </div>
+        <div className="login-content">
+          {/* Header */}
+          <div className="login-header">
+            <div className="logo">🏥</div>
+            <h1>Welcome to N-Health</h1>
+            <p>Sign in to continue</p>
+          </div>
 
-            <div className="role-selection">
+          {/* Role Selection Dropdown */}
+          <div className="role-selection-section">
+            <div className="role-buttons-grid">
+              {/* Patient Button */}
               <button
-                className="role-btn patient-btn"
-                onClick={() => handleRoleSelect('patient')}
+                className={`role-option patient-option ${selectedRole === 'PATIENT' ? 'selected' : ''}`}
+                onClick={() => setSelectedRole('PATIENT')}
               >
                 <span className="icon">👤</span>
                 <span className="label">Patient</span>
                 <span className="desc">Access healthcare services</span>
               </button>
 
+              {/* Provider Button */}
               <button
-                className="role-btn provider-btn"
-                onClick={() => handleRoleSelect('provider')}
+                className={`role-option provider-option ${selectedRole ? selectedRole !== 'PATIENT' ? 'selected' : '' : ''}`}
+                onClick={() => setSelectedRole('DOCTOR')}
               >
                 <span className="icon">🏥</span>
                 <span className="label">Provider</span>
-                <span className="desc">Doctor, Pharmacy, Lab</span>
+                <span className="desc">Doctor, Pharmacy, Lab, etc.</span>
               </button>
             </div>
+
+            {/* Provider Submenu */}
+            {selectedRole && selectedRole !== 'PATIENT' && (
+              <div className="provider-submenu">
+                <button
+                  className={`provider-btn ${selectedRole === 'DOCTOR' ? 'active' : ''}`}
+                  onClick={() => setSelectedRole('DOCTOR')}
+                >
+                  👨‍⚕️ Doctor
+                </button>
+                <button
+                  className={`provider-btn ${selectedRole === 'NURSE' ? 'active' : ''}`}
+                  onClick={() => setSelectedRole('NURSE')}
+                >
+                  👩‍⚕️ Nurse
+                </button>
+                <button
+                  className={`provider-btn ${selectedRole === 'PHARMACY' ? 'active' : ''}`}
+                  onClick={() => setSelectedRole('PHARMACY')}
+                >
+                  💊 Pharmacy
+                </button>
+                <button
+                  className={`provider-btn ${selectedRole === 'LAB' ? 'active' : ''}`}
+                  onClick={() => setSelectedRole('LAB')}
+                >
+                  🔬 Lab
+                </button>
+                <button
+                  className={`provider-btn ${selectedRole === 'AMBULANCE' ? 'active' : ''}`}
+                  onClick={() => setSelectedRole('AMBULANCE')}
+                >
+                  🚑 Ambulance
+                </button>
+              </div>
+            )}
           </div>
-        ) : (
-          // Credentials Screen
-          <div className="login-content">
-            <button className="back-btn" onClick={() => setStep('role')}>
-              ← Back
-            </button>
 
-            <div className="credentials-header">
-              <h2>Welcome to N-Health</h2>
-              <p>Sign in to continue</p>
-            </div>
-
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="login-form">
             {error && <div className="error-message">{error}</div>}
 
-            <form onSubmit={handleSubmit} className="credentials-form">
-              <div className="form-group">
-                <label>Email Address</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (error) setError(null);
-                  }}
-                  placeholder="your.email@healthprovider.com"
-                  required
-                  autoComplete="email"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (error) setError(null);
-                  }}
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-primary"
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                placeholder="your@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-              >
-                {loading ? 'Signing In...' : 'Sign In'}
-              </button>
-            </form>
+              />
+            </div>
 
-            <p className="signup-link">
-              Don't have an account? <a href="/signup">Sign Up</a>
-            </p>
+            <div className="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading || !selectedRole}
+            >
+              {loading ? 'Signing In...' : 'Sign In'}
+            </button>
+          </form>
+
+          {/* Sign Up Link */}
+          <p className="signup-link">
+            Don't have an account? <a href="/signup">Sign Up</a>
+          </p>
+
+          {/* Institution/Admin Section - Hidden at bottom */}
+          <div className="admin-section">
+            <button
+              className="admin-toggle"
+              onClick={() => setShowAdminCard(!showAdminCard)}
+              title="Click for institutional/admin access"
+            >
+              ⚙️
+            </button>
+
+            {showAdminCard && (
+              <div className="admin-card">
+                <div className="admin-content">
+                  <h3>🏛️ Institutional Access</h3>
+                  <p>Clinics, Hospitals & Health Centers</p>
+                  <button
+                    className="btn btn-admin"
+                    onClick={() => {
+                      setSelectedRole('ADMIN');
+                      // Focus on email field
+                      document.querySelector('input[type="email"]')?.focus();
+                    }}
+                  >
+                    Admin Login
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
