@@ -14,7 +14,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^5.19.1",
+    "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -25,6 +25,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.0",
     "pdf-lib": "^1.17.1",
+    "prisma": "^5.22.0",
     "socket.io": "^4.7.5",
     "zod": "^3.23.8"
   },
@@ -37,7 +38,6 @@
     "@types/multer": "^1.4.11",
     "@types/node": "^20.14.0",
     "nodemon": "^3.1.4",
-    "prisma": "^5.19.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
   },
