@@ -114,7 +114,7 @@ enum PayableType {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  phone        String?
+  phone        String?  @unique
   passwordHash String
   role         Role
   name         String
@@ -176,7 +176,7 @@ model DoctorProfile {
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   specialty         String
   specialtyId       String?
-  specialty_rel     Specialization? @relation("DoctorSpecialty", fields: [specialtyId], references: [id])
+  specialty_rel     Specialization? @relation("DoctorSpecialty", fields: [specialtyId], references: [id], onDelete: SetNull)
   licenseNumber     String
   hospital          String?
   bio               String?
@@ -240,7 +240,7 @@ model NurseProfile {
   licenseNumber String
   specialty     String?
   specialtyId   String?
-  specialty_rel Specialization? @relation("NurseSpecialty", fields: [specialtyId], references: [id])
+  specialty_rel Specialization? @relation("NurseSpecialty", fields: [specialtyId], references: [id], onDelete: SetNull)
   hourlyRate    Decimal @default(0)
   isAvailable   Boolean @default(true)
 
