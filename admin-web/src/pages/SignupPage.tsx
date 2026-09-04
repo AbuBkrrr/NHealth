@@ -141,8 +141,9 @@ export function SignupPage() {
     try {
       const data = await response.json();
       localStorage.setItem('admin_token', data.token);
+      localStorage.setItem('admin_user', JSON.stringify(data.user));
       setStep(5);
-      setTimeout(() => navigate('/'), 2000);
+      setTimeout(() => navigate('/'), 1000);
     } catch (err: any) {
       console.error('Registration error:', err);
       setError(err.message || 'Registration failed. Please try again.');
