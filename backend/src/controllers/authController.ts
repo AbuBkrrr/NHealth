@@ -7,11 +7,12 @@ import { ApiError } from '../utils/ApiError';
 import { Role } from '@prisma/client';
 
 const registerSchema = z.object({
-  email: z.string().email('Invalid email format'),
+  email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  name: z.string().min(1, 'Name is required'),
-  phone: z.string().optional().nullable(),
-  role: z.nativeEnum(Role, { errorMap: () => ({ message: 'Invalid role' }) }),
+  name: z.string().min(1),
+  phone: z.string().optional(),
+  role: z.nativeEnum(Role),
+  // Role-specific fields, validated loosely here and used to create the profile row.
   profile: z.record(z.any()).optional(),
 });
 
@@ -92,121 +93,73 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
         },
       });
     case 'ADMIN':
+      // Admins have no role-specific profile table - just the User row itself.
       return undefined;
   }
 }
 
 export async function register(req: Request, res: Response) {
-  try {
-    console.log('📝 Register request:', JSON.stringify(req.body));
-    const data = registerSchema.parse(req.body);
-    console.log('✅ Validation passed');
+  const data = registerSchema.parse(req.body);
 
-    if (data.role === 'ADMIN') {
-      throw ApiError.forbidden('Admin accounts cannot self-register');
-    }
-
-    const existing = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existing) throw ApiError.conflict('Email already registered');
-
-    const passwordHash = await bcrypt.hash(data.password, 12);
-
-    const user = await prisma.user.create({
-      data: {
-        email: data.email,
-        passwordHash,
-        name: data.name,
-        phone: data.phone || null,
-        role: data.role,
-      },
-    });
-
-    console.log('👤 User created:', user.id);
-    await createRoleProfile(user.id, data.role, data.profile ?? {});
-    console.log('📋 Profile created');
-
-    const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
-    res.status(201).json({
-      token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
-    });
-  } catch (error) {
-    console.error('❌ Register error:', error);
-    if (error instanceof z.ZodError) {
-      console.error('Validation error:', error.errors);
-      return res.status(400).json({ error: 'Invalid input. Please check your details.', details: error.errors });
-    }
-    if (error instanceof ApiError) {
-      console.error('API error:', error.message);
-      return res.status(error.statusCode).json({ error: error.message });
-    }
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Final error:', msg);
-    res.status(500).json({ error: `Registration failed: ${msg}` });
+  if (data.role === 'ADMIN') {
+    throw ApiError.forbidden('Admin accounts cannot self-register - ask a super admin to create one.');
   }
+
+  const existing = await prisma.user.findUnique({ where: { email: data.email } });
+  if (existing) throw ApiError.conflict('Email already registered. Please login to continue.');
+
+  const passwordHash = await bcrypt.hash(data.password, 12);
+
+  const user = await prisma.user.create({
+    data: {
+      email: data.email,
+      passwordHash,
+      name: data.name,
+      phone: data.phone,
+      role: data.role,
+    },
+  });
+
+  await createRoleProfile(user.id, data.role, data.profile ?? {});
+
+  const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
+  res.status(201).json({
+    token,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
+  });
 }
 
 export async function login(req: Request, res: Response) {
-  try {
-    console.log('🔐 Login attempt:', req.body.email);
-    const data = loginSchema.parse(req.body);
+  const data = loginSchema.parse(req.body);
 
-    const user = await prisma.user.findUnique({ where: { email: data.email } });
-    if (!user) {
-      console.log('❌ Email not found:', data.email);
-      return res.status(401).json({ error: 'Email not registered. Please sign up first.' });
-    }
+  const user = await prisma.user.findUnique({ where: { email: data.email } });
+  if (!user) throw ApiError.unauthorized('Invalid email or password');
 
-    const valid = await bcrypt.compare(data.password, user.passwordHash);
-    if (!valid) {
-      console.log('❌ Invalid password for:', data.email);
-      return res.status(401).json({ error: 'Invalid password. Please try again.' });
-    }
+  const valid = await bcrypt.compare(data.password, user.passwordHash);
+  if (!valid) throw ApiError.unauthorized('Invalid email or password');
 
-    if (!user.isActive) {
-      console.log('❌ Account inactive:', data.email);
-      return res.status(403).json({ error: 'Account is inactive.' });
-    }
+  if (!user.isActive) throw ApiError.forbidden('This account has been deactivated');
 
-    const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
-    console.log('✅ Login successful:', data.email, 'Role:', user.role);
-    res.status(200).json({
-      token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
-    });
-  } catch (error) {
-    console.error('❌ Login error:', error);
-    if (error instanceof z.ZodError) {
-      console.error('Validation error:', error.errors);
-      return res.status(400).json({ error: 'Invalid email or password format', details: error.errors });
-    }
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.message });
-    }
-    res.status(500).json({ error: 'Server error during login' });
-  }
+  const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin });
+  res.json({
+    token,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
+  });
 }
 
 export async function me(req: Request, res: Response) {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-      include: {
-        patientProfile: true,
-        doctorProfile: true,
-        pharmacyProfile: true,
-        labProfile: true,
-        ambulanceProfile: true,
-        nurseProfile: true,
-      },
-    });
-    if (!user) throw ApiError.notFound('User not found');
-    const { passwordHash, ...safeUser } = user;
-    res.json(safeUser);
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.statusCode).json({ error: error.message });
-    }
-    res.status(500).json({ error: 'Failed to get user' });
-  }
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.userId },
+    include: {
+      patientProfile: true,
+      doctorProfile: true,
+      pharmacyProfile: true,
+      labProfile: true,
+      ambulanceProfile: true,
+      nurseProfile: true,
+    },
+  });
+  if (!user) throw ApiError.notFound('User not found');
+  const { passwordHash, ...safeUser } = user;
+  res.json(safeUser);
 }
