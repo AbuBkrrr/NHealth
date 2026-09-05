@@ -8,9 +8,26 @@ const Stack = createNativeStackNavigator();
 
 export function AppointmentsStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.white }, headerTintColor: colors.textPrimary }}>
-      <Stack.Screen name="AppointmentsMain" component={PatientAppointmentsScreen} options={{ title: 'Appointments' }} />
-      <Stack.Screen name="Prescriptions" component={PrescriptionsScreen} options={{ title: 'Prescriptions' }} />
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerStyle: { backgroundColor: colors.white }, 
+        headerTintColor: colors.textPrimary,
+        headerTitleStyle: { fontWeight: '600' },
+      }}
+    >
+      <Stack.Screen 
+        name="AppointmentsMain" 
+        component={PatientAppointmentsScreen} 
+        options={{ 
+          title: 'Appointments',
+          headerShown: true,
+        }} 
+      />
+      <Stack.Screen 
+        name="Prescriptions" 
+        component={PrescriptionsScreen} 
+        options={{ title: 'My Prescriptions' }} 
+      />
     </Stack.Navigator>
   );
 }

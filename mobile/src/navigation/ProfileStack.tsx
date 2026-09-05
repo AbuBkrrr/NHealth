@@ -7,8 +7,21 @@ const Stack = createNativeStackNavigator();
 
 export function ProfileStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.white }, headerTintColor: colors.textPrimary }}>
-      <Stack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: 'Profile' }} />
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerStyle: { backgroundColor: colors.white }, 
+        headerTintColor: colors.textPrimary,
+        headerTitleStyle: { fontWeight: '600' },
+      }}
+    >
+      <Stack.Screen 
+        name="ProfileMain" 
+        component={ProfileScreen} 
+        options={{ 
+          title: 'Profile',
+          headerShown: true,
+        }} 
+      />
     </Stack.Navigator>
   );
 }

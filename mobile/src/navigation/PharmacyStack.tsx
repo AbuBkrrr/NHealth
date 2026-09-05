@@ -8,9 +8,26 @@ const Stack = createNativeStackNavigator();
 
 export function PharmacyStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.white }, headerTintColor: colors.textPrimary }}>
-      <Stack.Screen name="PharmacyMain" component={PharmacyScreen} options={{ title: 'Pharmacy' }} />
-      <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} options={{ title: 'My Orders' }} />
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerStyle: { backgroundColor: colors.white }, 
+        headerTintColor: colors.textPrimary,
+        headerTitleStyle: { fontWeight: '600' },
+      }}
+    >
+      <Stack.Screen 
+        name="PharmacyMain" 
+        component={PharmacyScreen} 
+        options={{ 
+          title: 'Pharmacy',
+          headerShown: true,
+        }} 
+      />
+      <Stack.Screen 
+        name="OrderHistory" 
+        component={OrderHistoryScreen} 
+        options={{ title: 'My Orders' }} 
+      />
     </Stack.Navigator>
   );
 }
