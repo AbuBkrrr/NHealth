@@ -188,3 +188,169 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
 .row-actions { display: flex; gap: 8px; }
 .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+
+/* RESPONSIVE DESIGN */
+@media (max-width: 768px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    height: auto;
+  }
+
+  .sidebar-logo {
+    padding: 0 12px;
+    white-space: nowrap;
+    margin-right: 20px;
+  }
+
+  .nav-link {
+    padding: 8px 12px;
+    font-size: 13px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+
+  .nav-link.active {
+    border-left: none;
+    border-bottom-color: var(--primary);
+  }
+
+  .main-content {
+    padding: 16px 12px;
+    max-width: 100%;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .toolbar input,
+  .toolbar select {
+    width: 100%;
+  }
+
+  table {
+    font-size: 12px;
+  }
+
+  th, td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .row-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .row-actions button {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .login-card {
+    width: 90%;
+    padding: 24px;
+    max-width: 400px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    padding: 8px 0;
+    overflow-x: auto;
+  }
+
+  .main-content {
+    padding: 12px 8px;
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .page-subtitle {
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+
+  .card {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-number {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+
+  button {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .toolbar input,
+  .toolbar select {
+    width: 100%;
+  }
+
+  th, td {
+    padding: 6px 8px;
+  }
+
+  table {
+    font-size: 11px;
+  }
+
+  .login-card {
+    width: 95%;
+    padding: 20px;
+  }
+
+  .login-card h1 {
+    font-size: 24px;
+  }
+
+  .empty-state {
+    padding: 40px 12px;
+    font-size: 13px;
+  }
+}

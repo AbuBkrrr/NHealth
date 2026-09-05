@@ -367,11 +367,134 @@
   margin-top: 12px;
 }
 
-@media (max-width: 420px) {
+@media (max-width: 768px) {
+  .signup-container {
+    padding: 10px;
+  }
+
+  .phone-frame {
+    width: 100%;
+    max-width: 420px;
+    height: 100vh;
+    max-height: 100vh;
+    border-width: 8px;
+    border-radius: 30px;
+  }
+
+  .signup-content {
+    padding: 20px 16px;
+  }
+
+  .signup-header h1,
+  .signup-header h2 {
+    font-size: 20px;
+  }
+
+  .role-options {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .role-btn {
+    padding: 16px 10px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
   .phone-frame {
     width: 100%;
     height: 100vh;
-    border: none;
-    border-radius: 0;
+    border: 6px solid #1a1a1a;
+    border-radius: 24px;
+  }
+
+  .phone-notch {
+    width: 100px;
+    height: 20px;
+  }
+
+  .signup-content {
+    padding: 16px 14px;
+  }
+
+  .signup-header h1 {
+    font-size: 22px;
+    margin-bottom: 4px;
+  }
+
+  .signup-header h2 {
+    font-size: 18px;
+  }
+
+  .signup-header p {
+    font-size: 12px;
+  }
+
+  .role-options {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .role-btn {
+    padding: 14px 10px;
+    gap: 6px;
+  }
+
+  .role-btn .icon {
+    font-size: 24px;
+  }
+
+  .role-btn .label {
+    font-size: 13px;
+  }
+
+  .role-btn .desc {
+    font-size: 11px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .form-group {
+    gap: 4px;
+  }
+
+  .form-group label {
+    font-size: 11px;
+  }
+
+  .form-group input {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .btn {
+    padding: 11px;
+    font-size: 13px;
+  }
+
+  .error-message {
+    font-size: 11px;
+    padding: 10px;
+  }
+
+  .signin-link {
+    font-size: 11px;
+  }
+
+  .success-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+
+  .success-content h2 {
+    font-size: 20px;
   }
 }

@@ -328,21 +328,135 @@
 }
 
 /* Responsive */
-@media (max-width: 480px) {
+@media (max-width: 768px) {
+  .login-container {
+    padding: 10px;
+  }
+
   .phone-frame {
-    border-width: 8px;
-    border-radius: 30px;
+    max-width: 95%;
+    max-height: 95vh;
+    border-width: 10px;
   }
 
   .login-content {
     padding: 50px 20px 20px 20px;
   }
 
+  .login-header h1 {
+    font-size: 22px;
+  }
+
   .role-buttons-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .provider-submenu {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .form-group input {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .btn {
+    padding: 12px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 8px;
+  }
+
+  .phone-frame {
+    border-width: 6px;
+    border-radius: 25px;
+    max-height: 100vh;
+  }
+
+  .phone-notch {
+    width: 100px;
+    height: 24px;
+  }
+
+  .login-content {
+    padding: 45px 16px 16px 16px;
+    gap: 14px;
+  }
+
+  .login-header h1 {
+    font-size: 20px;
+  }
+
+  .login-header p {
+    font-size: 12px;
+  }
+
+  .role-option {
+    padding: 12px;
+  }
+
+  .role-option .icon {
+    font-size: 24px;
+  }
+
+  .role-option .label {
+    font-size: 12px;
+  }
+
+  .role-buttons-grid {
+    gap: 8px;
+  }
+
+  .provider-submenu {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .provider-btn {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .form-group {
+    gap: 6px;
+  }
+
+  .form-group label {
+    font-size: 12px;
+  }
+
+  .form-group input {
+    padding: 10px 10px;
+    font-size: 14px;
+  }
+
+  .btn {
+    padding: 11px;
+    font-size: 14px;
+  }
+
+  .error-message {
+    font-size: 12px;
+    padding: 10px;
+  }
+
+  .signup-link {
+    font-size: 12px;
+  }
+
+  .admin-card {
+    width: 95%;
+    padding: 12px;
+    font-size: 12px;
+  }
+
+  .admin-card h3 {
+    font-size: 14px;
   }
 }
