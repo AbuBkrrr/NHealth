@@ -26,7 +26,7 @@ export function HomeStack() {
         component={PatientHomeScreen} 
         options={{ 
           title: 'N-Health', 
-          headerShown: true,
+          headerShown: false,
         }} 
       />
       <Stack.Screen name="Emergency" component={PatientEmergencyScreen} options={{ title: 'Emergency Request' }} />

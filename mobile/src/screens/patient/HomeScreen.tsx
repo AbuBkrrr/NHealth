@@ -22,22 +22,6 @@ export function PatientHomeScreen({ navigation }: any) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   useEffect(() => {
-    // Set header options with icons
-    navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerIcons}>
-          <Pressable onPress={() => navigation.navigate('Messages')} style={styles.headerIcon}>
-            <Text style={styles.headerIconText}>🔔</Text>
-          </Pressable>
-          <Pressable onPress={() => navigation.navigate('Profile')} style={styles.headerIcon}>
-            <Text style={styles.headerIconText}>👤</Text>
-          </Pressable>
-        </View>
-      ),
-    });
-  }, [navigation]);
-
-  useEffect(() => {
     patientApi
       .listAppointments()
       .then((appts) => {
@@ -51,14 +35,24 @@ export function PatientHomeScreen({ navigation }: any) {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 30 }}>
       {/* GREETING */}
       <View style={styles.header}>
-        <Text style={styles.greeting}>Hello, 👋 {user?.name?.split(' ')[0]}</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.greeting}>Hello, 👋 {user?.name?.split(' ')[0]}</Text>
+          <View style={styles.headerIconsContainer}>
+            <Pressable onPress={() => navigation.jumpTo('Messages')} style={styles.iconButton}>
+              <Text style={styles.iconText}>🔔</Text>
+            </Pressable>
+            <Pressable onPress={() => navigation.jumpTo('Profile')} style={styles.iconButton}>
+              <Text style={styles.iconText}>👤</Text>
+            </Pressable>
+          </View>
+        </View>
         <Text style={styles.subGreeting}>Your complete health companion</Text>
       </View>
 
       {/* WALLET CARD */}
       <Card style={styles.walletCard}>
         <Text style={styles.walletLabel}>Wallet Balance</Text>
-        <Text style={styles.walletAmount}>₦{(Math.random() * 500000).toFixed(2)}</Text>
+        <Text style={styles.walletAmount}>₦245,750.00</Text>
         <Text style={styles.walletStatus}>✓ NHIS Active</Text>
         <View style={styles.walletActions}>
           <Pressable style={styles.walletButton} onPress={() => navigation.navigate('Fund')}>
@@ -116,31 +110,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingTop: 16,
   },
-  headerIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginRight: 16,
-  },
-  headerIcon: {
-    padding: 8,
-  },
-  headerIconText: {
-    fontSize: 20,
-  },
   header: {
     paddingHorizontal: 16,
     marginBottom: 16,
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
   greeting: { 
     fontSize: 24, 
     fontWeight: '800', 
-    color: colors.textPrimary 
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  headerIconsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  iconButton: {
+    padding: 8,
+  },
+  iconText: {
+    fontSize: 20,
   },
   subGreeting: { 
     fontSize: 14, 
-    color: colors.textSecondary, 
-    marginTop: 4 
+    color: colors.textSecondary,
   },
   walletCard: {
     backgroundColor: colors.primary,
