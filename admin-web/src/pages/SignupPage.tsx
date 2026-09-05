@@ -353,7 +353,6 @@ export function SignupPage() {
 
               <button 
                 className="btn btn-primary" 
-                disabled={loading} 
                 onClick={createAccount}
               >
                 {loading ? 'Creating Account...' : 'Create Account'}

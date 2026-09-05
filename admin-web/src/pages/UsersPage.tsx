@@ -81,7 +81,6 @@ export function UsersPage() {
                     <button
                       className={u.isActive ? 'danger' : ''}
                       onClick={() => toggleStatus(u)}
-                      disabled={busyId === u.id}
                     >
                       {u.isActive ? 'Suspend' : 'Reactivate'}
                     </button>
@@ -96,8 +95,8 @@ export function UsersPage() {
       <div className="pagination">
         <span>{total} total users</span>
         <div className="row-actions">
-          <button className="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
-          <button className="outline" disabled={page * pageSize >= total} onClick={() => setPage((p) => p + 1)}>Next</button>
+          <button className="outline" onClick={() => setPage((p) => p - 1)}>Previous</button>
+          <button className="outline" onClick={() => setPage((p) => p + 1)}>Next</button>
         </div>
       </div>
     </div>

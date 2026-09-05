@@ -99,21 +99,18 @@ export function AdminsPage() {
                     <button
                       className="outline"
                       onClick={() => toggleActive(a)}
-                      disabled={busyId === a.id || a.id === currentUser?.id}
                     >
                       {a.isActive ? 'Suspend' : 'Reactivate'}
                     </button>
                     <button
                       className="outline"
                       onClick={() => toggleSuper(a)}
-                      disabled={busyId === a.id || a.id === currentUser?.id}
                     >
                       {a.isSuperAdmin ? 'Remove Super' : 'Make Super'}
                     </button>
                     <button
                       className="danger"
                       onClick={() => removeAdmin(a)}
-                      disabled={busyId === a.id || a.id === currentUser?.id}
                     >
                       Delete
                     </button>
@@ -155,7 +152,7 @@ export function AdminsPage() {
             </label>
           </div>
           <div className="row-actions">
-            <button type="submit" disabled={submitting}>{submitting ? 'Creating...' : 'Create'}</button>
+            <button type="submit">{submitting ? 'Creating...' : 'Create'}</button>
             <button type="button" className="outline" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </form>

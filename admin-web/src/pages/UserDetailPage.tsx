@@ -46,7 +46,7 @@ export function UserDetailPage() {
           {user.isActive ? 'Active' : 'Suspended'}
         </span>
         <div style={{ marginTop: 16 }}>
-          <button className={user.isActive ? 'danger' : ''} onClick={toggleStatus} disabled={busy}>
+          <button className={user.isActive ? 'danger' : ''} onClick={toggleStatus}>
             {user.isActive ? 'Suspend Account' : 'Reactivate Account'}
           </button>
         </div>
