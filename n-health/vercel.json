@@ -1,0 +1,8 @@
+{
+  "framework": "vite",
+  "buildCommand": "cd admin-web && npm install && npm run build",
+  "outputDirectory": "admin-web/dist",
+  "env": {
+    "VITE_API_URL": "@vite-api-url"
+  }
+}
