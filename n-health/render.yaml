@@ -4,8 +4,8 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build && npx prisma migrate deploy
-    startCommand: node dist/server.js
+    buildCommand: npm install && npm run build
+    startCommand: npx prisma migrate deploy && node dist/server.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -21,7 +21,7 @@ services:
       - key: CORS_ORIGIN
         value: "*"
       - key: PUBLIC_URL
-        sync: false
+        value: https://n-health-api.onrender.com
 
   - type: web
     name: n-health-admin-web
