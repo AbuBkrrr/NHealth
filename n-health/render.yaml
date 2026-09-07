@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm install -g typescript && tsc --version && npx tsc && npx prisma migrate deploy
+    buildCommand: bash -c "cat backend/tsconfig.json && npm install && npm run build && npx prisma migrate deploy"
     startCommand: node dist/server.js
     healthCheckPath: /health
     envVars:
