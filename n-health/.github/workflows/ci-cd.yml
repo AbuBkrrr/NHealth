@@ -21,6 +21,30 @@ jobs:
       - name: Dependency security check
         run: echo "Security checks passed"
 
+  backend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install backend dependencies
+        run: cd backend && npm ci
+      - name: Build backend
+        run: cd backend && npm run build
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install frontend dependencies
+        run: cd admin-web && npm ci
+      - name: Build frontend
+        run: cd admin-web && npm run build
+
   notify:
     runs-on: ubuntu-latest
     if: always()
