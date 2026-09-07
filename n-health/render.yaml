@@ -3,7 +3,6 @@ services:
     name: n-health-backend
     runtime: docker
     plan: free
-    rootDir: backend
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
