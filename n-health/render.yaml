@@ -4,8 +4,8 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: npm install && npx tsc && npx prisma migrate deploy
+    startCommand: node dist/server.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -31,7 +31,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false
+        value: https://n-health-backend.onrender.com/api
     routes:
       - type: rewrite
         source: /*
