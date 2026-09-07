@@ -12,10 +12,8 @@
     "resolveJsonModule": true,
     "moduleResolution": "node",
     "declaration": false,
-    "sourceMap": true,
-    "allowJs": true,
-    "noEmit": false
+    "sourceMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist"]
 }
