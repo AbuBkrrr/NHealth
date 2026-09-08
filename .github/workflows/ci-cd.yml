@@ -25,7 +25,7 @@ jobs:
       - run: cd admin-web && npm run build
       - run: cd admin-web && npm run test 2>/dev/null || true
         continue-on-error: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: frontend-test-results
@@ -109,14 +109,14 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: ghcr.io/abubkrrr/nhealth/backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v5
         with:
           context: ./admin-web
           push: true
@@ -142,5 +142,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: echo "Deploying backend to production..."
+
 
 
