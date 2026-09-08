@@ -9,6 +9,7 @@ on:
 env:
   REGISTRY: ghcr.io
   NODE_VERSION: '24'
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   frontend-test:
@@ -136,3 +137,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: echo "Deploying backend to production..."
+
