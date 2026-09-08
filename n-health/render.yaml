@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npx tsc@5.3.3 && echo "Build complete"
+    buildCommand: bash build.sh
     startCommand: npx prisma migrate deploy && node dist/server.js
     healthCheckPath: /health
     envVars:
