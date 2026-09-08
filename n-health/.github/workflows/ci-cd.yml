@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: none  # Disable Docker image push
+
 jobs:
   code-quality:
     runs-on: ubuntu-latest
