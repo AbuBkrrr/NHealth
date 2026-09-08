@@ -10,8 +10,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node",
-    "declaration": false,
+    "moduleResolution": "node24",
+    "declaration": true,
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],
