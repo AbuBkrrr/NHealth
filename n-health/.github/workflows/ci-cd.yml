@@ -15,8 +15,8 @@ jobs:
     name: Frontend - Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -25,12 +25,6 @@ jobs:
       - run: cd admin-web && npm run build
       - run: cd admin-web && npm run test 2>/dev/null || true
         continue-on-error: true
-      - uses: actions/upload-artifact@v5
-        if: always()
-        with:
-          name: frontend-test-results
-          path: admin-web/coverage/
-          retention-days: 30
 
   backend-test:
     name: Backend - Build & Test
@@ -50,8 +44,8 @@ jobs:
         ports:
           - 5432:5432
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -72,8 +66,8 @@ jobs:
     name: Code Quality - Lint & Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: cd admin-web && npm ci
@@ -84,8 +78,8 @@ jobs:
     name: Security - Dependency Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: cd admin-web && npm audit --audit-level=low 2>/dev/null || true
@@ -102,21 +96,21 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: ghcr.io/abubkrrr/nhealth/backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v5
         with:
           context: ./admin-web
           push: true
@@ -130,7 +124,7 @@ jobs:
     needs: build-docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - run: echo "Deploying to staging..."
 
   deploy-production:
@@ -140,5 +134,5 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - run: echo "Deploying backend to production..."
