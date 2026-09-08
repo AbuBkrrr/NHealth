@@ -43,5 +43,10 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
+  },
+  "ts-node": {
+    "compilerOptions": {
+      "moduleResolution": "node"
+    }
   }
 }
