@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: n-health-api
+    name: n-health-backend
     runtime: node
     plan: free
     rootDir: backend
@@ -21,7 +21,7 @@ services:
       - key: CORS_ORIGIN
         value: "*"
       - key: PUBLIC_URL
-        value: https://n-health-api.onrender.com
+        value: https://n-health-backend.onrender.com
 
   - type: web
     name: n-health-admin-web
@@ -31,7 +31,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://n-health-api.onrender.com/api
+        value: https://n-health-backend.onrender.com/api
     routes:
       - type: rewrite
         source: /*
