@@ -4,7 +4,28 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: bash build.sh
+    buildCommand: npm install && sh -c 'cat > tsconfig.json << EOF
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "declaration": false,
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+EOF
+' && npx tsc@5.3.3
     startCommand: npx prisma migrate deploy && node dist/server.js
     healthCheckPath: /health
     envVars:
