@@ -4,9 +4,11 @@ npm-debug.log
 .gitignore
 README.md
 .env.example
-dist
 .DS_Store
 *.log
 .vscode
 .idea
-coverage
+src
+index.html
+vite.config.ts
+tsconfig.json
