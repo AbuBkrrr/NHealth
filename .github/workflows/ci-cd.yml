@@ -86,14 +86,14 @@ jobs:
 
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql://nhealth:nhealth@localhost:5432/nhealth
+          DATABASE_URL: postgresql://nhealth:nhealth@postgres:5432/nhealth
         run: |
           cd backend
           npm run migrate
 
       - name: Run backend tests
         env:
-          DATABASE_URL: postgresql://nhealth:nhealth@localhost:5432/nhealth
+          DATABASE_URL: postgresql://nhealth:nhealth@postgres:5432/nhealth
           JWT_SECRET: test-secret-key
         run: |
           cd backend
