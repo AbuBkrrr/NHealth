@@ -4,6 +4,7 @@
   "description": "N-Health backend API - auth, patients, doctors, pharmacy, lab, ambulance, nurse",
   "main": "dist/server.js",
   "scripts": {
+    "preinstall": "rm -rf node_modules dist tsconfig.json || true",
     "dev": "nodemon --exec ts-node src/server.ts",
     "build": "npm exec -- tsc",
     "start": "npx prisma migrate deploy && node dist/server.js",
