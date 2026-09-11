@@ -1,0 +1,325 @@
+/* Dark Mode Stylesheet for Admin-Web */
+
+:root[data-theme='dark'] {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2a2a2a;
+  --bg-tertiary: #3a3a3a;
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --border-color: #404040;
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --hover-bg: #333333;
+  --success-color: #4caf50;
+  --error-color: #f44336;
+  --warning-color: #ff9800;
+  --info-color: #2196f3;
+}
+
+:root[data-theme='light'] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #eeeeee;
+  --text-primary: #212121;
+  --text-secondary: #757575;
+  --border-color: #e0e0e0;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --hover-bg: #f9f9f9;
+  --success-color: #4caf50;
+  --error-color: #f44336;
+  --warning-color: #ff9800;
+  --info-color: #2196f3;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Containers */
+div, section, article, aside, main, nav {
+  background-color: inherit;
+}
+
+.container, .card, .panel {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px var(--shadow-color);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.card:hover {
+  background-color: var(--hover-bg);
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+/* Forms */
+input, textarea, select {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--info-color);
+  background-color: var(--bg-tertiary);
+}
+
+input::placeholder {
+  color: var(--text-secondary);
+}
+
+/* Buttons */
+button {
+  background-color: var(--info-color);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  font-weight: 500;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+button:active {
+  opacity: 0.8;
+}
+
+button.secondary {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+button.danger {
+  background-color: var(--error-color);
+}
+
+button.success {
+  background-color: var(--success-color);
+}
+
+/* Tables */
+table {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 12px;
+  text-align: left;
+  border-bottom: 2px solid var(--border-color);
+  font-weight: 600;
+}
+
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+tbody tr:hover {
+  background-color: var(--hover-bg);
+}
+
+/* Navigation */
+nav {
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 12px 16px;
+}
+
+nav a {
+  color: var(--text-primary);
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+nav a:hover {
+  background-color: var(--hover-bg);
+}
+
+nav a.active {
+  background-color: var(--info-color);
+  color: white;
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+}
+
+/* Modals and Overlays */
+.modal {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px var(--shadow-color);
+}
+
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Status Badges */
+.badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge.success {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.badge.error {
+  background-color: var(--error-color);
+  color: white;
+}
+
+.badge.warning {
+  background-color: var(--warning-color);
+  color: white;
+}
+
+.badge.info {
+  background-color: var(--info-color);
+  color: white;
+}
+
+/* Alerts */
+.alert {
+  padding: 12px 16px;
+  border-radius: 4px;
+  border-left: 4px solid;
+  margin-bottom: 16px;
+}
+
+.alert.success {
+  background-color: rgba(76, 175, 80, 0.1);
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.alert.error {
+  background-color: rgba(244, 67, 54, 0.1);
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+.alert.warning {
+  background-color: rgba(255, 152, 0, 0.1);
+  border-color: var(--warning-color);
+  color: var(--warning-color);
+}
+
+.alert.info {
+  background-color: rgba(33, 150, 243, 0.1);
+  border-color: var(--info-color);
+  color: var(--info-color);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Code blocks */
+code, pre {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: 'Courier New', monospace;
+}
+
+pre {
+  padding: 12px;
+  overflow-x: auto;
+}
+
+/* Links */
+a {
+  color: var(--info-color);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Loading spinner */
+.spinner {
+  border: 3px solid var(--border-color);
+  border-top-color: var(--info-color);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Utility classes */
+.text-muted {
+  color: var(--text-secondary);
+}
+
+.text-success {
+  color: var(--success-color);
+}
+
+.text-error {
+  color: var(--error-color);
+}
+
+.text-warning {
+  color: var(--warning-color);
+}
+
+.text-info {
+  color: var(--info-color);
+}
+
+.bg-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.border {
+  border: 1px solid var(--border-color);
+}
