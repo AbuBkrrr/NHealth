@@ -20,9 +20,13 @@ import paymentRoutes from './routes/paymentRoutes';
 import adminRoutes from './routes/adminRoutes';
 import screenRoutes from './routes/screenRoutes';
 import { errorHandler } from './middleware/errorHandler';
+import { authRateLimiter, apiRateLimiter, startRateLimiterCleanup } from './middleware/rateLimiter';
 
 export function createApp() {
   const app = express();
+
+  // Start rate limiter cleanup job
+  startRateLimiterCleanup();
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: env.corsOrigin }));
@@ -46,19 +50,22 @@ export function createApp() {
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-  app.use('/api/account', accountRoutes);
-  app.use('/api/auth', authRoutes);
-  app.use('/api/patient', patientRoutes);
-  app.use('/api/doctor', doctorRoutes);
-  app.use('/api/ambulance', ambulanceRoutes);
-  app.use('/api/lab', labRoutes);
-  app.use('/api/nurse', nurseRoutes);
-  app.use('/api/pharmacy', pharmacyRoutes);
-  app.use('/api/providers', providerRoutes);
-  app.use('/api/messages', messageRoutes);
-  app.use('/api/payments', paymentRoutes);
-  app.use('/api/admin', adminRoutes);
-  app.use('/api/screens', screenRoutes);
+  // Auth routes - with strict rate limiting (5 requests per 15 minutes)
+  app.use('/api/auth', authRateLimiter, authRoutes);
+
+  // Other API routes - with moderate rate limiting (100 requests per 15 minutes)
+  app.use('/api/account', apiRateLimiter, accountRoutes);
+  app.use('/api/patient', apiRateLimiter, patientRoutes);
+  app.use('/api/doctor', apiRateLimiter, doctorRoutes);
+  app.use('/api/ambulance', apiRateLimiter, ambulanceRoutes);
+  app.use('/api/lab', apiRateLimiter, labRoutes);
+  app.use('/api/nurse', apiRateLimiter, nurseRoutes);
+  app.use('/api/pharmacy', apiRateLimiter, pharmacyRoutes);
+  app.use('/api/providers', apiRateLimiter, providerRoutes);
+  app.use('/api/messages', apiRateLimiter, messageRoutes);
+  app.use('/api/payments', apiRateLimiter, paymentRoutes);
+  app.use('/api/admin', apiRateLimiter, adminRoutes);
+  app.use('/api/screens', apiRateLimiter, screenRoutes);
 
   // 404 fallback
   app.use((req, res) => res.status(404).json({ error: `No route for ${req.method} ${req.path}` }));
