@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.next
+.expo
+.turbo
+pnpm-lock.yaml
+*.lock
+.env
+.env.*.local
+coverage
+prisma/migrations

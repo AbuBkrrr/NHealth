@@ -1,0 +1,72 @@
+# N-Health Local Development Stack
+# Postgres + Backend API + Adminer (database browser)
+#
+# Usage:
+#   docker compose up --build
+#   docker compose up --build -d      # detached, runs in the background
+#   docker compose logs -f backend    # tail the backend's logs
+#   docker compose exec backend npm run prisma:seed   # seed demo data
+#   docker compose down               # stop everything
+#   docker compose down -v            # stop AND wipe the database volume
+#
+# Once running:
+#   - Backend:   http://localhost:4000  (health check: GET /health)
+#   - Postgres:  localhost:5432 (user: nhealth, password: nhealth, db: nhealth)
+#   - Adminer:   http://localhost:8080  (Web DB browser)
+#
+# Note: admin-web and mobile are NOT included - run them separately:
+#   - Admin:   cd apps/admin-web && npm run dev
+#   - Mobile:  cd apps/mobile && npm start
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nhealth
+      POSTGRES_PASSWORD: nhealth
+      POSTGRES_DB: nhealth
+    ports:
+      - '5433:5432'
+    volumes:
+      - nhealth_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nhealth -d nhealth']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://nhealth:nhealth@postgres:5432/nhealth?schema=public
+      JWT_SECRET: docker-local-dev-secret-change-if-shared
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: '*'
+      PUBLIC_URL: http://localhost:4000
+    ports:
+      - '4000:4000'
+    volumes:
+      # Uploaded avatars persist across container restarts.
+      - nhealth_uploads:/app/uploads
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - '8080:8080'
+
+volumes:
+  nhealth_pgdata:
+  nhealth_uploads:
+

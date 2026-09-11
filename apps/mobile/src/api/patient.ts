@@ -6,7 +6,7 @@ export interface Appointment {
   type: 'IN_PERSON' | 'VIDEO';
   status: string;
   reason?: string;
-  doctor: { user: { name: string; avatarUrl?: string } };
+  doctor: { user: { name: string; avatarUrl?: string }; specialty?: string };
 }
 
 export interface PharmacyOrder {

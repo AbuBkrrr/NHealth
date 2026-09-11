@@ -1,0 +1,8 @@
+{
+  "approvedBuilds": [
+    "@prisma/client@5.22.0",
+    "@prisma/engines@5.22.0",
+    "prisma@5.22.0",
+    "esbuild@0.21.5"
+  ]
+}
