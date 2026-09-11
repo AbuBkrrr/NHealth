@@ -1,0 +1,442 @@
+/* ============================================ */
+/* PROVIDER DASHBOARD STYLES                   */
+/* ============================================ */
+
+:root {
+  --primary: #1A73E8;
+  --primary-dark: #0D47A1;
+  --primary-light: #E8F0FE;
+  --success: #34A853;
+  --text-primary: #202124;
+  --text-secondary: #5F6368;
+  --text-light: #9AA0A6;
+  --shadow: 0 2px 10px rgba(0,0,0,0.1);
+  --shadow-lg: 0 4px 20px rgba(0,0,0,0.15);
+  --radius: 16px;
+  --radius-sm: 8px;
+  --transition: all 0.3s ease;
+}
+
+.provider-dashboard-container {
+  max-width: 390px;
+  height: 844px;
+  margin: 40px auto;
+  background: white;
+  border-radius: 40px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3), 0 0 0 12px #1a1a1a;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.provider-dashboard-container::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 24px;
+  background: #1a1a1a;
+  border-radius: 20px;
+  z-index: 1000;
+}
+
+.provider-dashboard-container::after {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 6px;
+  background: #333;
+  border-radius: 10px;
+  z-index: 1001;
+}
+
+/* ============================================ */
+/* APP BAR                                     */
+/* ============================================ */
+
+.app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: white;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  margin-top: 36px;
+}
+
+.app-bar .title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.app-bar .title span {
+  color: var(--primary);
+}
+
+.app-bar-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.app-bar-actions button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px;
+  transition: var(--transition);
+}
+
+.app-bar-actions button:hover {
+  color: var(--primary);
+}
+
+/* ============================================ */
+/* SCREEN                                      */
+/* ============================================ */
+
+.screen {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px;
+  scroll-behavior: smooth;
+}
+
+.screen.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.screen-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.screen::-webkit-scrollbar {
+  width: 3px;
+}
+
+.screen::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 10px;
+}
+
+/* ============================================ */
+/* WELCOME TEXT                                */
+/* ============================================ */
+
+.welcome-text {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.welcome-sub {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ============================================ */
+/* STATS GRID                                  */
+/* ============================================ */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: white;
+  border: 2px solid var(--primary-light);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  text-align: center;
+  border-left: 4px solid var(--primary);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ============================================ */
+/* CARDS                                       */
+/* ============================================ */
+
+.card {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  margin-bottom: 16px;
+  transition: var(--transition);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ============================================ */
+/* LIST ITEMS                                  */
+/* ============================================ */
+
+.list-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.list-item:last-child {
+  border-bottom: none;
+}
+
+.list-item:hover {
+  padding-left: 4px;
+}
+
+.list-item .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.list-item .content {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-item .title {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.list-item .subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.list-item .trailing {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* ============================================ */
+/* BADGES                                      */
+/* ============================================ */
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.badge-success {
+  background: #E6F4EA;
+  color: var(--success);
+}
+
+.badge-primary {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+/* ============================================ */
+/* FORM GROUPS                                 */
+/* ============================================ */
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #E8ECF1;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  background: #F5F7FA;
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+/* ============================================ */
+/* BUTTONS                                     */
+/* ============================================ */
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 2px solid var(--primary);
+  color: var(--primary);
+}
+
+.btn-outline:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ============================================ */
+/* BOTTOM NAVIGATION                           */
+/* ============================================ */
+
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid rgba(0,0,0,0.08);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0 16px 0;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.nav-button {
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--text-light);
+  transition: var(--transition);
+  font-size: 7px;
+  min-width: 36px;
+}
+
+.nav-button .nav-icon {
+  font-size: 18px;
+  transition: var(--transition);
+}
+
+.nav-button .nav-label {
+  font-size: 7px;
+  font-weight: 500;
+}
+
+.nav-button.active {
+  color: var(--primary);
+}
+
+.nav-button.active .nav-icon {
+  transform: translateY(-2px);
+}
+
+/* ============================================ */
+/* RESPONSIVE                                  */
+/* ============================================ */
+
+@media (max-width: 420px) {
+  .provider-dashboard-container {
+    width: 100%;
+    height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+  }
+
+  .provider-dashboard-container::before,
+  .provider-dashboard-container::after {
+    display: none;
+  }
+
+  .app-bar {
+    margin-top: 0;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

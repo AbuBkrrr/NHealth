@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "N-Health",
+    "slug": "n-health",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.nhealth.app" },
+    "android": {
+      "package": "com.nhealth.app",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "CAMERA"]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "N-Health uses your photos to let you set a profile picture.",
+          "cameraPermission": "N-Health uses your camera to let you take a profile picture."
+        }
+      ]
+    ]
+  }
+}
