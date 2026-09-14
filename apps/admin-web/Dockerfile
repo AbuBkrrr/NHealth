@@ -1,12 +1,12 @@
-FROM node:20-alpine AS builder
+﻿FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# --ignore-scripts skips Husky prepare hook
+RUN npm ci --ignore-scripts
 
 # Copy application code
 COPY . .
@@ -26,4 +26,4 @@ COPY --from=builder /app/package*.json ./
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["npx", "serve", "-s", "dist", "-l", "3000"]

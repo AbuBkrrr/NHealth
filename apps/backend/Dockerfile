@@ -1,4 +1,4 @@
-FROM node:20-slim
+﻿FROM node:20-slim
 
 # Install dependencies for Prisma
 RUN apt-get update && apt-get install -y \
@@ -11,7 +11,8 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm ci
+# --ignore-scripts skips Husky prepare hook (needs .git, which is absent in Docker context)
+RUN npm ci --ignore-scripts
 
 RUN npm run build
 
