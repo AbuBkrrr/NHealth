@@ -3,7 +3,7 @@ services:
     name: n-health-backend
     runtime: node
     plan: free
-    rootDir: backend
+    rootDir: apps/backend
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
@@ -19,19 +19,19 @@ services:
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: CORS_ORIGIN
-        value: "*" # tighten to your admin-web/mobile origins once you have them
+        value: "*"
       - key: PUBLIC_URL
-        sync: false # set this to this service's own public URL after first deploy (see README)
+        sync: false
 
   - type: web
     name: n-health-admin-web
     runtime: static
-    rootDir: admin-web
+    rootDir: apps/admin-web
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false # set to https://<n-health-backend>.onrender.com/api after the backend deploys
+        sync: false
     routes:
       - type: rewrite
         source: /*
