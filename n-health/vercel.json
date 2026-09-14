@@ -1,4 +1,0 @@
-{
-  "buildCommand": "npm install --prefix admin-web && npm run build --prefix admin-web",
-  "outputDirectory": "admin-web/dist"
-}
