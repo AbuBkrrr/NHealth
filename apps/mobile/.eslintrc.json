@@ -1,21 +1,29 @@
 {
   "root": true,
-  "extends": ["@nhealth/eslint-config/typescript"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended"
+  ],
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
-    "ecmaVersion": "latest",
+    "ecmaVersion": 2022,
     "sourceType": "module",
-    "ecmaFeatures": {
-      "jsx": true
-    }
+    "ecmaFeatures": { "jsx": true }
   },
+  "plugins": ["@typescript-eslint", "react", "react-hooks"],
   "env": {
-    "browser": true,
-    "es2021": true,
-    "react-native/react-native": true
+    "es2022": true,
+    "node": true
+  },
+  "settings": {
+    "react": { "version": "detect" }
   },
   "rules": {
-    "@typescript-eslint/no-explicit-any": "error",
-    "no-console": "off"
-  }
+    "react/react-in-jsx-scope": "off",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+  },
+  "ignorePatterns": ["node_modules", "dist", ".expo", "web-build", "babel.config.js", "metro.config.js"]
 }
