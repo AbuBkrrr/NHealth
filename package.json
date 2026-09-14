@@ -4,6 +4,7 @@
   "description": "N-Health: Complete Healthcare Ecosystem - Professional Monorepo",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@9.0.0",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
