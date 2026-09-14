@@ -1,4 +1,4 @@
-{
+﻿{
     "name":  "@nhealth/backend",
     "version":  "2.0.0",
     "description":  "N-Health backend API - Express + Prisma + Socket.io",
@@ -55,3 +55,4 @@
                    "seed":  "ts-node prisma/seed.ts"
                }
 }
+

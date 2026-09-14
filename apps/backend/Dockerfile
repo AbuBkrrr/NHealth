@@ -1,6 +1,5 @@
 ﻿FROM node:20-slim
 
-# Install dependencies for Prisma
 RUN apt-get update && apt-get install -y \
     openssl \
     libssl-dev \
@@ -11,7 +10,6 @@ WORKDIR /app
 
 COPY . .
 
-# --ignore-scripts skips Husky prepare hook (needs .git, which is absent in Docker context)
 RUN npm ci --ignore-scripts
 
 RUN npm run build
