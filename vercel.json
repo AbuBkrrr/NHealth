@@ -1,13 +1,5 @@
 ﻿{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile --ignore-scripts",
   "buildCommand": "pnpm --filter @nhealth/admin-web build",
-  "outputDirectory": "apps/admin-web/dist",
-  "framework": null,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
+  "outputDirectory": "apps/admin-web/dist"
 }
