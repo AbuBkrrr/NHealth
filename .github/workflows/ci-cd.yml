@@ -43,8 +43,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build backend image
-        run: docker build -t nhealth-backend:latest -f apps/backend/Dockerfile apps/backend
+     - name: Build backend image
+  run: docker build -t nhealth-backend:latest -f apps/backend/Dockerfile .
 
-      - name: Build admin-web image
-        run: docker build -t nhealth-admin-web:latest -f apps/admin-web/Dockerfile apps/admin-web
+- name: Build admin-web image
+  run: docker build -t nhealth-admin-web:latest -f apps/admin-web/Dockerfile .
