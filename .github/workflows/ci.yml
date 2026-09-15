@@ -6,22 +6,31 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  HUSKY: 0
+  CI: true
+
 jobs:
   lint-and-build:
     name: Lint & Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
-        
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Generate Prisma client
+        run: pnpm --filter backend exec prisma generate
 
       - name: Build backend
         run: pnpm --filter backend build

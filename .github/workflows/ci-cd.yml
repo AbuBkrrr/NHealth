@@ -5,12 +5,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  HUSKY: 0
+  CI: true
+
 jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -19,26 +25,13 @@ jobs:
           node-version: 22
           cache: 'pnpm'
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Build backend
-        run: pnpm --filter backend build
+      - run: pnpm --filter backend exec prisma generate
 
-      - name: Build admin-web
-        run: pnpm --filter admin-web build
+      - run: pnpm --filter backend build
 
-      - name: Upload admin-web artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: admin-web-dist
-          path: apps/admin-web/dist
-
-      - name: Upload backend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-dist
-          path: apps/backend/dist
+      - run: pnpm --filter admin-web build
 
   docker:
     name: Build Docker Images
@@ -48,13 +41,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Build backend image
-        run: |
-          docker build -t nhealth-backend:latest -f apps/backend/Dockerfile apps/backend
+        run: docker build -t nhealth-backend:latest -f apps/backend/Dockerfile apps/backend
 
       - name: Build admin-web image
-        run: |
-          docker build -t nhealth-admin-web:latest -f apps/admin-web/Dockerfile apps/admin-web
+        run: docker build -t nhealth-admin-web:latest -f apps/admin-web/Dockerfile apps/admin-web
