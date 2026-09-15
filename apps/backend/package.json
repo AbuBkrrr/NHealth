@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "@nhealth/backend",
     "version":  "2.0.0",
     "description":  "N-Health backend API - Express + Prisma + Socket.io",
@@ -6,7 +6,7 @@
     "main":  "dist/server.js",
     "scripts":  {
                     "dev":  "nodemon --exec ts-node src/server.ts",
-                    "build":  "tsc",
+                    "build": "node --stack-size=16384 ./node_modules/typescript/bin/tsc",
                     "start":  "node dist/server.js",
                     "typecheck":  "tsc --noEmit",
                     "lint":  "eslint src --ext .ts",
