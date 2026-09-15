@@ -1,23 +1,27 @@
-﻿FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
+
+ENV CI=true
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY packages ./packages
+COPY apps/admin-web/package.json ./apps/admin-web/
 
-RUN npm ci --ignore-scripts
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter admin-web
 
-COPY . .
+COPY apps/admin-web ./apps/admin-web
 
-RUN npm run build
+RUN pnpm --filter admin-web build
 
-FROM node:20-alpine
+FROM nginx:alpine
+COPY --from=builder /app/apps/admin-web/dist /usr/share/nginx/html
+COPY apps/admin-web/nginx.conf /etc/nginx/conf.d/default.conf
 
-WORKDIR /app
+EXPOSE 80
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-
-EXPOSE 3000
-
-CMD ["npx", "serve", "-s", "dist", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]
