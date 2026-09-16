@@ -152,12 +152,12 @@ export async function me(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
     include: {
-      patient: true,
-      doctor: true,
-      pharmacy: true,
-      lab: true,
-      ambulance: true,
-      nurse: true,
+      patientProfile: true,
+      doctorProfile: true,
+      pharmacyProfile: true,
+      labProfile: true,
+      ambulanceProfile: true,
+      nurseProfile: true,
     },
   });
   if (!user) throw ApiError.notFound('User not found');
