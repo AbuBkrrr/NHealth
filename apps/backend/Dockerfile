@@ -16,14 +16,13 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages ./packages
 COPY apps/backend/package.json ./apps/backend/
 
-RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
-# Build shared packages FIRST
-RUN pnpm --filter @nhealth/shared-utils build || echo "shared-utils has no build"
-RUN pnpm --filter @nhealth/shared-types build || echo "shared-types has no build"
+RUN pnpm --filter @nhealth/shared-utils build
+RUN pnpm --filter @nhealth/shared-types build
 
-# Now build backend
 COPY apps/backend ./apps/backend
+
 RUN pnpm --filter backend exec prisma generate
 RUN pnpm --filter backend build
 
