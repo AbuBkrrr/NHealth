@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -37,3 +37,4 @@ jobs:
 
       - name: Build admin-web
         run: pnpm --filter admin-web build
+
