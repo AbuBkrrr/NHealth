@@ -153,11 +153,6 @@ export async function me(req: Request, res: Response) {
     where: { id: req.user!.userId },
     include: {
       patientProfile: true,
-      doctorProfile: true,
-      pharmacyProfile: true,
-      labProfile: true,
-      ambulanceProfile: true,
-      nurseProfile: true,
     },
   });
   if (!user) throw ApiError.notFound('User not found');
