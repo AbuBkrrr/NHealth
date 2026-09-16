@@ -47,6 +47,9 @@ importers:
       react-router-dom:
         specifier: ^6.26.2
         version: 6.30.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      serve:
+        specifier: ^14.2.6
+        version: 14.2.6
     devDependencies:
       '@nhealth/eslint-config':
         specifier: workspace:*
@@ -81,9 +84,6 @@ importers:
       prettier:
         specifier: ^3.2.5
         version: 3.9.6
-      serve:
-        specifier: ^14.2.6
-        version: 14.2.6
       typescript:
         specifier: ^5.5.4
         version: 5.9.3
@@ -138,6 +138,9 @@ importers:
       pino-pretty:
         specifier: ^10.3.1
         version: 10.3.1
+      prisma:
+        specifier: ^5.22.0
+        version: 5.22.0
       socket.io:
         specifier: ^4.7.5
         version: 4.8.3
@@ -175,9 +178,6 @@ importers:
       nodemon:
         specifier: ^3.1.4
         version: 3.1.14
-      prisma:
-        specifier: ^5.22.0
-        version: 5.22.0
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@20.19.43)(typescript@5.5.4)
