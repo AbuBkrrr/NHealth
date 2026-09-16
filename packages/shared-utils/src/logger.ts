@@ -1,39 +1,32 @@
 import pino, { Logger } from 'pino';
 
-interface LoggerOptions {
-  name: string;
-  level?: string;
-  isDevelopment?: boolean;
+const isProduction = process.env.NODE_ENV === 'production';
+
+const baseConfig: pino.LoggerOptions = {
+  level: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
+};
+
+if (!isProduction) {
+  baseConfig.transport = {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+      translateTime: 'HH:MM:ss',
+      ignore: 'pid,hostname',
+    },
+  };
 }
 
-/**
- * Creates a configured Pino logger instance.
- * @param options - Logger configuration options
- * @returns Configured logger instance
- */
-export function createLogger(options: LoggerOptions): Logger {
-  const isDev = options.isDevelopment ?? (typeof process !== 'undefined' && process.env.NODE_ENV === 'development');
+// Default logger
+export const logger = pino(baseConfig);
 
-  return pino({
-    name: options.name,
-    level: options.level ?? (isDev ? 'debug' : 'info'),
-    transport: isDev && typeof process !== 'undefined'
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'SYS:standard',
-            ignore: 'pid,hostname',
-          },
-        }
-      : undefined,
-  });
+// Factory function used by services
+export function createLogger(name?: string): Logger {
+  return pino({ ...baseConfig, name: name || 'n-health' });
 }
 
-/**
- * Logger for backend services.
- */
-export const backendLogger = createLogger({
-  name: 'n-health-backend',
-  isDevelopment: typeof process !== 'undefined' && process.env.NODE_ENV === 'development',
-});
+// Backend logger (used by server)
+export const backendLogger = createLogger('n-health-backend');
+
+// Named export for compatibility
+export default logger;
