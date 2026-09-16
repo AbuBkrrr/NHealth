@@ -44,6 +44,7 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
         data: {
           userId,
           specialty: profile.specialty ?? 'General Practice',
+          specialtyId: profile.specialtyId,
           licenseNumber: profile.licenseNumber ?? '',
           hospital: profile.hospital,
           bio: profile.bio,
@@ -90,6 +91,7 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
           userId,
           licenseNumber: profile.licenseNumber ?? '',
           specialty: profile.specialty,
+          specialtyId: profile.specialtyId,   
           hourlyRate: profile.hourlyRate ?? 0,
         },
       });
