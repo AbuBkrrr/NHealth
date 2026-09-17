@@ -21,10 +21,7 @@
         "start:backend": "pnpm --filter @nhealth/backend start",
         "start:admin-web": "pnpm --filter @nhealth/admin-web start",
         "build:backend": "pnpm --filter @nhealth/backend build",
-        "build:admin-web": "pnpm --filter @nhealth/admin-web build",
-        "docker:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d",
-        "docker:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
-        "docker:logs": "docker compose -f infrastructure/docker/docker-compose.yml logs -f"
+        "build:admin-web": "pnpm --filter @nhealth/admin-web build"
     },
     "devDependencies": {
         "@nhealth/eslint-config": "workspace:*",
