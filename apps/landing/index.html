@@ -2882,9 +2882,12 @@
                 try { data = await response.json(); } catch (e) { /* ignore non-JSON */ }
 
                 // ================================================
-                // 🔍 DEBUG: Log the exact backend response
+                // 🔍 DEBUG LOG START - COPY/PASTE THIS TO FIND IT
                 // ================================================
-                console.log('Backend login response:', data);
+                console.log('🔍 BACKEND LOGIN RESPONSE:', data);
+                // ================================================
+                // 🔍 DEBUG LOG END
+                // ================================================
 
                 if (response.ok) {
                     // Save token + user
@@ -2908,10 +2911,10 @@
                                 const realUser = profileData.user || profileData;
                                 localStorage.setItem('user', JSON.stringify(realUser));
                                 currentUser = realUser;
-                                console.log('Fetched real user profile:', realUser);
+                                console.log('✅ Fetched real user profile:', realUser);
                             }
                         } catch (e) {
-                            console.log('Could not fetch /me endpoint, using login data');
+                            console.log('ℹ️ Could not fetch /me endpoint, using login data');
                         }
                     }
 
