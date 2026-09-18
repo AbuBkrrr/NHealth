@@ -6,6 +6,8 @@ import { prisma } from '../config/prisma';
 import { signToken } from '../utils/jwt';
 import { ApiError } from '../utils/ApiError';
 import { Role } from '@nhealth/shared-types';
+import crypto from 'crypto';
+
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -160,4 +162,57 @@ export async function me(req: Request, res: Response) {
   if (!user) throw ApiError.notFound('User not found');
   const { passwordHash, ...safeUser } = user;
   res.json(safeUser);
+}
+
+
+// Store OTPs in memory (use Redis in production)
+const resetCodes = new Map<string, { code: string; expiresAt: number }>();
+
+export async function forgotPassword(req: Request, res: Response) {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  // Always return 200 to prevent user enumeration
+  if (!user) {
+    return res.json({ message: 'If that email exists, a code has been sent.' });
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  resetCodes.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+  // TODO: Send email with the code
+  console.log(`\u{1F4E7} Password reset code for ${email}: ${code}`);
+
+  return res.json({ message: 'If that email exists, a code has been sent.' });
+}
+
+export async function verifyResetCode(req: Request, res: Response) {
+  const { email, code } = req.body;
+  if (!email || !code) return res.status(400).json({ error: 'Email and code required' });
+
+  const entry = resetCodes.get(email);
+  if (!entry || entry.code !== code || Date.now() > entry.expiresAt) {
+    return res.status(400).json({ error: 'Invalid or expired code' });
+  }
+
+  return res.json({ message: 'Code verified' });
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  const { email, code, password } = req.body;
+  if (!email || !code || !password) return res.status(400).json({ error: 'Missing fields' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  const entry = resetCodes.get(email);
+  if (!entry || entry.code !== code || Date.now() > entry.expiresAt) {
+    return res.status(400).json({ error: 'Invalid or expired code' });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  await prisma.user.update({ where: { email }, data: { password: hashedPassword } });
+  resetCodes.delete(email);
+
+  return res.json({ message: 'Password reset successful' });
 }

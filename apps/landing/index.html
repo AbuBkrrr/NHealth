@@ -431,6 +431,7 @@
                         <label>Password</label>
                         <input type="password" placeholder="••••••••" value="password123" id="login-password">
                     </div>
+                    <div style="text-align:right;margin-top:-6px;margin-bottom:12px;"><a href="#" onclick="event.preventDefault();openForgotPassword();" style="font-size:12px;color:var(--primary);text-decoration:none;font-weight:600;">Forgot Password?</a></div>
                     <button class="btn btn-primary btn-block" onclick="login()" id="login-btn">Sign In</button>
 
                     <div style="text-align:center; margin-top:12px; font-size:12px; color:var(--text-secondary);">
@@ -1296,5 +1297,6 @@
         setInterval(checkNetwork, 10000);
     </script>
     <script src="ui-fixes.js"></script>
+    <script src="forgot-password.js"></script>
 </body>
 </html>
