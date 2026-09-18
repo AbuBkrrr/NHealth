@@ -22,45 +22,56 @@ import { errorHandler } from './middleware/errorHandler';
 export function createApp() {
   const app = express();
 
-  app.use(helmet({ 
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  crossOriginEmbedderPolicy: false,
-}));
- // CORS configuration - explicitly handle multiple origins
-const allowedOrigins = [
-  'https://www.nhealth.com.ng',
-  'https://nhealth.com.ng',
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:8081',
-];
+  // ==================================================
+  // 1. CORS MUST BE THE VERY FIRST MIDDLEWARE
+  //    It must come before Helmet, express.json, etc.
+  // ==================================================
+  const allowedOrigins = [
+    'https://www.nhealth.com.ng',
+    'https://nhealth.com.ng',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8081',
+  ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, curl)
-    if (!origin) return callback(null, true);
-    
-    // If CORS_ORIGIN is '*', allow all origins
-    if (env.corsOrigin === '*') return callback(null, true);
-    
-    // Check against explicit allow list
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-    
-    // Also allow whatever CORS_ORIGIN is set to on Railway
-    if (env.corsOrigin === origin) {
-      return callback(null, true);
-    }
-    
-    console.log('❌ CORS blocked origin:', origin);
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 200,
-}));
+  app.use(cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, Postman, curl, server-to-server)
+      if (!origin) return callback(null, true);
+
+      // If CORS_ORIGIN is '*', allow all origins
+      if (env.corsOrigin === '*') return callback(null, true);
+
+      // Check against explicit allow list
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        return callback(null, true);
+      }
+
+      // Also allow whatever CORS_ORIGIN is set to on Railway
+      if (env.corsOrigin === origin) {
+        return callback(null, true);
+      }
+
+      console.log('❌ CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    optionsSuccessStatus: 200,
+  }));
+
+  // ==================================================
+  // 2. Now Helmet (AFTER CORS)
+  // ==================================================
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  // ==================================================
+  // 3. Body parsers and loggers
+  // ==================================================
   app.use(express.json());
   app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
@@ -69,6 +80,9 @@ app.use(cors({
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
+  // ==================================================
+  // 4. Routes
+  // ==================================================
   app.use('/api/account', accountRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/patient', patientRoutes);
