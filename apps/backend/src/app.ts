@@ -23,46 +23,52 @@ export function createApp() {
   const app = express();
 
   // ==================================================
-  // 1. CORS MUST BE THE VERY FIRST MIDDLEWARE
-  //    It must come before Helmet, express.json, etc.
+  // 1. EXPLICIT CORS HANDLER — MUST BE FIRST
+  //    This runs before any other middleware and sets
+  //    headers on every response, including OPTIONS.
   // ==================================================
-  const allowedOrigins = [
-    'https://www.nhealth.com.ng',
-    'https://nhealth.com.ng',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:8081',
-  ];
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
 
-  app.use(cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (mobile apps, Postman, curl, server-to-server)
-      if (!origin) return callback(null, true);
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) {
+      return next();
+    }
 
-      // If CORS_ORIGIN is '*', allow all origins
-      if (env.corsOrigin === '*') return callback(null, true);
+    const allowedOrigins = [
+      'https://www.nhealth.com.ng',
+      'https://nhealth.com.ng',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:8081',
+    ];
 
-      // Check against explicit allow list
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        return callback(null, true);
-      }
+    // Check if origin is allowed (exact match or env var '*')
+    const isAllowed =
+      env.corsOrigin === '*' ||
+      allowedOrigins.includes(origin) ||
+      env.corsOrigin === origin;
 
-      // Also allow whatever CORS_ORIGIN is set to on Railway
-      if (env.corsOrigin === origin) {
-        return callback(null, true);
-      }
-
+    if (isAllowed) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+    } else {
       console.log('❌ CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-    optionsSuccessStatus: 200,
-  }));
+    }
+
+    // Handle preflight OPTIONS request immediately
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+
+    next();
+  });
 
   // ==================================================
-  // 2. Now Helmet (AFTER CORS)
+  // 2. Helmet (AFTER CORS headers are set)
   // ==================================================
   app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
