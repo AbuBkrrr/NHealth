@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "nodemon --exec ts-node src/server.ts",
     "build": "node --stack-size=16384 ../../node_modules/typescript/lib/tsc.js",
-    "start": "prisma migrate deploy && node dist/apps/backend/src/server.js",
+    "start": "node dist/apps/backend/src/server.js",
+    "start:migrate": "prisma migrate deploy && node dist/apps/backend/src/server.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "clean": "rm -rf dist",
