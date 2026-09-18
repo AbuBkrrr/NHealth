@@ -1397,12 +1397,12 @@
                 <div class="app-bar">
                     <div class="title">N-<span>Health</span></div>
                     <div class="app-bar-actions">
-                        <button onclick="showNotification()">🔔 <span class="badge" style="position:relative; top:-8px; right:-4px; font-size:7px; padding:1px 5px;">3</span></button>
+                        <button onclick="navigateTo('patient-notifications')">🔔 <span class="badge" style="position:relative; top:-8px; right:-4px; font-size:7px; padding:1px 5px;">3</span></button>
                         <button onclick="navigateTo('patient-profile')">👤</button>
                     </div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
-                    <div class="welcome-text">Hello, 👋 <span id="patient-welcome-name">John</span></div>
+                    <div class="welcome-text">Hello, 👋 <span id="patient-welcome-name">User</span></div>
                     <div class="welcome-sub">Your complete health companion</div>
 
                     <div class="balance-card">
@@ -1412,8 +1412,8 @@
                             <span class="badge badge-success" style="background:rgba(255,255,255,0.2); color:white;">✓ NHIS Active</span>
                         </div>
                         <div class="balance-actions">
-                            <button class="btn-primary" onclick="showToast('💳 Fund Wallet opened')">💰 Fund</button>
-                            <button class="btn-outline" onclick="showToast('📊 Transaction history')">📊 History</button>
+                            <button class="btn-primary" onclick="navigateTo('patient-wallet')">💰 Fund</button>
+                            <button class="btn-outline" onclick="navigateTo('patient-wallet')">📊 History</button>
                         </div>
                     </div>
 
@@ -1472,6 +1472,52 @@
                             </div>
                             <div class="trailing"><span class="badge badge-institution">Verified</span></div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- PATIENT WALLET (NEW)                         -->
+            <!-- ============================================ -->
+            <div id="patient-wallet" class="screen">
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
+                <div class="app-bar">
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">💰 Wallet</div>
+                    <div style="width:36px;"></div>
+                </div>
+                <div style="padding:0 16px 80px 16px;">
+                    <div class="balance-card">
+                        <div class="balance-label">Available Balance</div>
+                        <div class="balance-amount">₦245,750.00</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title" style="font-size:14px; margin-bottom:8px;">Fund Wallet</div>
+                        <div class="form-group">
+                            <label>Amount (₦)</label>
+                            <input type="number" placeholder="e.g. 5000" id="fund-amount">
+                        </div>
+                        <div class="payment-options">
+                            <div class="payment-option selected" onclick="selectPaymentOption(this)">
+                                <div class="icon">💳</div>
+                                <div class="label">Card</div>
+                            </div>
+                            <div class="payment-option" onclick="selectPaymentOption(this)">
+                                <div class="icon">🏦</div>
+                                <div class="label">Transfer</div>
+                            </div>
+                            <div class="payment-option" onclick="selectPaymentOption(this)">
+                                <div class="icon">📱</div>
+                                <div class="label">USSD</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="showToast('💳 Payment gateway opening...')">Proceed to Pay</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-title" style="font-size:14px; margin-bottom:6px;">📊 Transaction History</div>
+                        <div class="list-item"><div class="avatar" style="background:#E6F4EA; color:var(--success);">📥</div><div class="content"><div class="title">Wallet Funded</div><div class="subtitle">Today, 9:30 AM</div></div><div class="trailing" style="color:var(--success); font-weight:600;">+₦5,000</div></div>
+                        <div class="list-item"><div class="avatar" style="background:#FCE8E6; color:var(--error);">📤</div><div class="content"><div class="title">Consultation Fee</div><div class="subtitle">Yesterday, 2:15 PM</div></div><div class="trailing" style="color:var(--error); font-weight:600;">-₦15,000</div></div>
+                        <div class="list-item"><div class="avatar" style="background:#FCE8E6; color:var(--error);">📤</div><div class="content"><div class="title">Pharmacy Order</div><div class="subtitle">Jan 15, 2024</div></div><div class="trailing" style="color:var(--error); font-weight:600;">-₦2,500</div></div>
                     </div>
                 </div>
             </div>
@@ -1687,6 +1733,59 @@
             </div>
 
             <!-- ============================================ -->
+            <!-- PATIENT LABS (NEW)                           -->
+            <!-- ============================================ -->
+            <div id="patient-labs" class="screen">
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
+                <div class="app-bar">
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title lab-title">🔬 <span>Labs</span></div>
+                    <div style="width:36px;"></div>
+                </div>
+                <div style="padding:0 16px 80px 16px;">
+                    <div class="form-group" style="position:relative;">
+                        <input type="text" placeholder="🔍 Search tests..." style="padding:10px 12px 10px 38px;">
+                        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:16px;">🔍</span>
+                    </div>
+
+                    <div class="card">
+                        <div class="list-item">
+                            <div class="avatar lab-avatar">🩸</div>
+                            <div class="content">
+                                <div class="title">Complete Blood Count (CBC)</div>
+                                <div class="subtitle">₦5,000 • Results in 4 hrs</div>
+                            </div>
+                            <div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div>
+                        </div>
+                        <div class="list-item">
+                            <div class="avatar lab-avatar">🧪</div>
+                            <div class="content">
+                                <div class="title">Malaria Parasite Test</div>
+                                <div class="subtitle">₦2,500 • Results in 1 hr</div>
+                            </div>
+                            <div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div>
+                        </div>
+                        <div class="list-item">
+                            <div class="avatar lab-avatar">🧬</div>
+                            <div class="content">
+                                <div class="title">Lipid Profile</div>
+                                <div class="subtitle">₦8,000 • Results in 6 hrs</div>
+                            </div>
+                            <div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div>
+                        </div>
+                        <div class="list-item">
+                            <div class="avatar lab-avatar">🧪</div>
+                            <div class="content">
+                                <div class="title">Liver Function Test</div>
+                                <div class="subtitle">₦12,000 • Results in 8 hrs</div>
+                            </div>
+                            <div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
             <!-- PATIENT PROVIDERS                            -->
             <!-- ============================================ -->
             <div id="patient-providers" class="screen">
@@ -1855,6 +1954,46 @@
                         </div>
                         <div id="blood-eligibility-result" style="display:none;"></div>
                     </div>
+
+                    <div id="donate-organ" style="display:none;">
+                        <div class="card" style="background:linear-gradient(135deg, #E8F0FE, #BBDEFB); border:2px solid var(--doctor-color);">
+                            <div style="text-align:center; font-size:32px;">❤️</div>
+                            <h3 style="text-align:center; color:var(--doctor-color); font-size:16px;">Organ Donation Registry</h3>
+                            <p style="text-align:center; color:var(--text-secondary); font-size:12px;">Your gift can save up to 8 lives.</p>
+                            <button class="btn btn-primary btn-block" onclick="showToast('📝 Organ donation form opened')">Register as Donor</button>
+                        </div>
+                        <div class="card">
+                            <div class="card-title" style="font-size:13px; margin-bottom:6px;">📋 Information</div>
+                            <div class="list-item"><div class="avatar">📖</div><div class="content"><div class="title">Learn about Organ Donation</div><div class="subtitle">Understand the process and myths</div></div></div>
+                            <div class="list-item"><div class="avatar">🏥</div><div class="content"><div class="title">Accredited Centers</div><div class="subtitle">Hospitals authorized for transplants</div></div></div>
+                        </div>
+                    </div>
+
+                    <div id="donate-patient" style="display:none;">
+                        <div class="card" style="border:2px solid var(--warning);">
+                            <div style="text-align:center; font-size:32px;">👤</div>
+                            <h3 style="text-align:center; color:var(--warning); font-size:16px;">Support a Patient</h3>
+                            <p style="text-align:center; color:var(--text-secondary); font-size:12px;">Help cover medical bills for vulnerable children.</p>
+                            <button class="btn btn-warning btn-block" onclick="showToast('📝 Patient sponsorship form opened')">Sponsor a Patient</button>
+                        </div>
+                        <div class="card">
+                            <div class="card-title" style="font-size:13px; margin-bottom:6px;">🔍 Urgent Cases</div>
+                            <div class="blood-request-item">
+                                <div class="header"><span class="patient-name">Baby Chidi</span><span class="blood-type">₦150,000 needed</span></div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Heart Surgery • 2 years old</div>
+                                <div class="progress-bar"><div class="fill warning" style="width:30%;"></div></div>
+                                <div style="font-size:10px; color:var(--text-light);">₦45,000 raised of ₦150,000</div>
+                                <button class="btn btn-outline btn-sm btn-block" style="margin-top:4px; border-color:var(--warning); color:var(--warning);" onclick="showToast('❤️ Donation options opened')">Donate</button>
+                            </div>
+                            <div class="blood-request-item">
+                                <div class="header"><span class="patient-name">Amina Suleiman</span><span class="blood-type">₦80,000 needed</span></div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Cancer Treatment • 8 years old</div>
+                                <div class="progress-bar"><div class="fill warning" style="width:60%;"></div></div>
+                                <div style="font-size:10px; color:var(--text-light);">₦48,000 raised of ₦80,000</div>
+                                <button class="btn btn-outline btn-sm btn-block" style="margin-top:4px; border-color:var(--warning); color:var(--warning);" onclick="showToast('❤️ Donation options opened')">Donate</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1902,6 +2041,46 @@
             </div>
 
             <!-- ============================================ -->
+            <!-- PATIENT NOTIFICATIONS (NEW)                  -->
+            <!-- ============================================ -->
+            <div id="patient-notifications" class="screen">
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
+                <div class="app-bar">
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">🔔 Notifications</div>
+                    <button onclick="showToast('All marked as read')" style="background:none; border:none; font-size:12px; cursor:pointer; color:var(--primary); font-weight:600;">Mark all read</button>
+                </div>
+                <div style="padding:0 16px 80px 16px;">
+                    <div class="card">
+                        <div class="list-item" style="border-bottom:1px solid #E8ECF1;">
+                            <div class="avatar" style="background:var(--primary-light); color:var(--primary);">💳</div>
+                            <div class="content">
+                                <div class="title">Payment Received</div>
+                                <div class="subtitle">₦5,000 from John Doe</div>
+                            </div>
+                            <div class="trailing" style="font-size:10px;">2m ago</div>
+                        </div>
+                        <div class="list-item" style="border-bottom:1px solid #E8ECF1;">
+                            <div class="avatar" style="background:var(--warning); color:white;">📦</div>
+                            <div class="content">
+                                <div class="title">Low Stock Alert</div>
+                                <div class="subtitle">Metformin 500mg is running low</div>
+                            </div>
+                            <div class="trailing" style="font-size:10px;">1h ago</div>
+                        </div>
+                        <div class="list-item">
+                            <div class="avatar" style="background:var(--success); color:white;">📋</div>
+                            <div class="content">
+                                <div class="title">Appointment Confirmed</div>
+                                <div class="subtitle">Dr. Adebayo Ogunlesi • Today, 10:00 AM</div>
+                            </div>
+                            <div class="trailing" style="font-size:10px;">3h ago</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
             <!-- PATIENT PROFILE                              -->
             <!-- ============================================ -->
             <div id="patient-profile" class="screen">
@@ -1913,13 +2092,18 @@
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="card" style="text-align:center; padding:20px;">
-                        <div class="avatar" style="width:70px; height:70px; margin:0 auto 8px; font-size:28px; background:var(--primary-light); color:var(--primary);">👤</div>
-                        <h3 style="font-size:18px;" id="profile-name">John Doe</h3>
-                        <div style="color:var(--text-secondary); font-size:13px;" id="profile-email">john.doe@example.com</div>
+                        <div class="avatar" id="profile-avatar-container" style="width:70px; height:70px; margin:0 auto 8px; font-size:28px; background:var(--primary-light); color:var(--primary); cursor:pointer; overflow:hidden; position:relative;" onclick="triggerAvatarUpload()">
+                            <img id="profile-avatar-img" src="" style="width:100%; height:100%; object-fit:cover; display:none;">
+                            <span id="profile-avatar-placeholder">👤</span>
+                        </div>
+                        <input type="file" id="avatar-input" accept="image/*" style="display:none;" onchange="handleAvatarUpload(event)">
+                        <h3 style="font-size:18px;" id="profile-name">User</h3>
+                        <div style="color:var(--text-secondary); font-size:13px;" id="profile-email">user@example.com</div>
                         <div style="display:flex; justify-content:center; gap:6px; margin-top:6px; flex-wrap:wrap;">
                             <span class="badge badge-primary">Patient</span>
                             <span class="badge badge-success">✓ NHIS Active</span>
                         </div>
+                        <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="triggerAvatarUpload()">📷 Change Photo</button>
                     </div>
                     <div class="card">
                         <div class="card-title" style="font-size:14px; margin-bottom:6px;">📋 Personal Information</div>
@@ -2563,6 +2747,7 @@
         const API_BASE_URL = 'https://n-health-backend-production.up.railway.app';
         const AUTH_LOGIN_ENDPOINT = API_BASE_URL + '/api/auth/login';
         const AUTH_REGISTER_ENDPOINT = API_BASE_URL + '/api/auth/register';
+        const AUTH_ME_ENDPOINT = API_BASE_URL + '/api/auth/me'; // Optional: for fetching real profile
 
         // ================================================
         // STATE
@@ -2696,6 +2881,11 @@
                 let data = {};
                 try { data = await response.json(); } catch (e) { /* ignore non-JSON */ }
 
+                // ================================================
+                // 🔍 DEBUG: Log the exact backend response
+                // ================================================
+                console.log('Backend login response:', data);
+
                 if (response.ok) {
                     // Save token + user
                     if (data.token) localStorage.setItem('token', data.token);
@@ -2704,13 +2894,32 @@
                         currentUser = data.user;
                     } else {
                         currentUser = { email };
+                        localStorage.setItem('user', JSON.stringify(currentUser));
                     }
 
-                    // Update profile display if available
+                    // Try fetching full profile from backend (optional)
+                    if (data.token) {
+                        try {
+                            const profileRes = await fetch(AUTH_ME_ENDPOINT, {
+                                headers: { 'Authorization': 'Bearer ' + data.token }
+                            });
+                            if (profileRes.ok) {
+                                const profileData = await profileRes.json();
+                                const realUser = profileData.user || profileData;
+                                localStorage.setItem('user', JSON.stringify(realUser));
+                                currentUser = realUser;
+                                console.log('Fetched real user profile:', realUser);
+                            }
+                        } catch (e) {
+                            console.log('Could not fetch /me endpoint, using login data');
+                        }
+                    }
+
+                    // Update profile display
                     applyUserToUI(currentUser);
 
                     // Route to the correct dashboard based on role
-                    const role = (data.user && data.user.role) ? data.user.role : userRole;
+                    const role = (currentUser && currentUser.role) ? currentUser.role : userRole;
                     if (role === 'patient') {
                         navigateTo('patient-home');
                     } else if (role === 'doctor') {
@@ -2724,7 +2933,7 @@
                     }
                     showToast('Welcome back! 👋');
                 } else {
-               showToast('❌ ' + (data.message || data.error || 'Login failed. Check your credentials.'));
+                    showToast('❌ ' + (data.message || data.error || 'Login failed. Check your credentials.'));
                 }
             } catch (err) {
                 console.error('Login error:', err);
@@ -2825,7 +3034,7 @@
                         navigateTo('auth');
                     }, 1500);
                 } else {
-                    showToast('❌ ' + (data.message || 'Registration failed.'));
+                    showToast('❌ ' + (data.message || data.error || 'Registration failed.'));
                 }
             } catch (err) {
                 console.error('Institution registration error:', err);
@@ -2857,6 +3066,33 @@
 
         function showRegister() {
             document.getElementById('registerForm').style.display = 'block';
+        }
+
+        // ================================================
+        // PROFILE PHOTO UPLOAD
+        // ================================================
+        function triggerAvatarUpload() {
+            const input = document.getElementById('avatar-input');
+            if (input) input.click();
+        }
+
+        function handleAvatarUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById('profile-avatar-img');
+                    const placeholder = document.getElementById('profile-avatar-placeholder');
+                    if (img) {
+                        img.src = e.target.result;
+                        img.style.display = 'block';
+                    }
+                    if (placeholder) placeholder.style.display = 'none';
+                    // Save to localStorage for persistence
+                    localStorage.setItem('avatar', e.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
         }
 
         // ================================================
@@ -3118,6 +3354,18 @@
         // INIT
         // ================================================
         document.addEventListener('DOMContentLoaded', function() {
+            // Restore avatar from localStorage
+            const savedAvatar = localStorage.getItem('avatar');
+            if (savedAvatar) {
+                const img = document.getElementById('profile-avatar-img');
+                const placeholder = document.getElementById('profile-avatar-placeholder');
+                if (img) {
+                    img.src = savedAvatar;
+                    img.style.display = 'block';
+                }
+                if (placeholder) placeholder.style.display = 'none';
+            }
+
             // If already logged in (token exists), skip splash and go to dashboard
             const token = localStorage.getItem('token');
             const storedUser = localStorage.getItem('user');
