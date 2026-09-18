@@ -1402,7 +1402,7 @@
                     </div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
-                    <div class="welcome-text">Hello, 👋 John</div>
+                    <div class="welcome-text">Hello, 👋 <span id="patient-welcome-name">John</span></div>
                     <div class="welcome-sub">Your complete health companion</div>
 
                     <div class="balance-card">
@@ -1591,12 +1591,12 @@
                                 <div id="time-slots-container" style="margin-top:12px;">
                                     <div style="font-size:13px; font-weight:500; margin-bottom:4px;">Available Times</div>
                                     <div class="time-slots" id="time-slots">
-                                        <div class="slot" onclick="selectTimeSlot('09:00')">09:00</div>
-                                        <div class="slot" onclick="selectTimeSlot('10:00')">10:00</div>
-                                        <div class="slot" onclick="selectTimeSlot('11:00')">11:00</div>
-                                        <div class="slot" onclick="selectTimeSlot('14:00')">14:00</div>
-                                        <div class="slot" onclick="selectTimeSlot('15:00')">15:00</div>
-                                        <div class="slot" onclick="selectTimeSlot('16:00')">16:00</div>
+                                        <div class="slot" onclick="selectTimeSlot('09:00', event)">09:00</div>
+                                        <div class="slot" onclick="selectTimeSlot('10:00', event)">10:00</div>
+                                        <div class="slot" onclick="selectTimeSlot('11:00', event)">11:00</div>
+                                        <div class="slot" onclick="selectTimeSlot('14:00', event)">14:00</div>
+                                        <div class="slot" onclick="selectTimeSlot('15:00', event)">15:00</div>
+                                        <div class="slot" onclick="selectTimeSlot('16:00', event)">16:00</div>
                                     </div>
                                 </div>
 
@@ -1914,8 +1914,8 @@
                 <div style="padding:0 16px 80px 16px;">
                     <div class="card" style="text-align:center; padding:20px;">
                         <div class="avatar" style="width:70px; height:70px; margin:0 auto 8px; font-size:28px; background:var(--primary-light); color:var(--primary);">👤</div>
-                        <h3 style="font-size:18px;">John Doe</h3>
-                        <div style="color:var(--text-secondary); font-size:13px;">john.doe@example.com</div>
+                        <h3 style="font-size:18px;" id="profile-name">John Doe</h3>
+                        <div style="color:var(--text-secondary); font-size:13px;" id="profile-email">john.doe@example.com</div>
                         <div style="display:flex; justify-content:center; gap:6px; margin-top:6px; flex-wrap:wrap;">
                             <span class="badge badge-primary">Patient</span>
                             <span class="badge badge-success">✓ NHIS Active</span>
@@ -2557,6 +2557,14 @@
     <!-- ============================================ -->
     <script>
         // ================================================
+        // CONFIGURATION - BACKEND API URL
+        // ================================================
+        // Change this URL if your backend endpoint is different.
+        const API_BASE_URL = 'https://n-health-backend-production.up.railway.app';
+        const AUTH_LOGIN_ENDPOINT = API_BASE_URL + '/api/auth/login';
+        const AUTH_REGISTER_ENDPOINT = API_BASE_URL + '/api/auth/register';
+
+        // ================================================
         // STATE
         // ================================================
         let currentScreen = 'splash';
@@ -2566,6 +2574,7 @@
         let selectedDate = '';
         let selectedTime = '';
         let isOnline = true;
+        let currentUser = null;
 
         // ================================================
         // NETWORK DETECTION
@@ -2637,14 +2646,10 @@
             document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
             document.getElementById('role-' + role).classList.add('selected');
 
-            // Show/hide provider type selector
             const providerTypes = ['doctor', 'pharmacy', 'lab', 'ambulance', 'nurse'];
             document.getElementById('provider-type-section').style.display = providerTypes.includes(role) ? 'block' : 'none';
-
-            // Show/hide institution register form
             document.getElementById('institution-register-form').style.display = role === 'institution' ? 'block' : 'none';
 
-            // Update login button
             const btn = document.getElementById('login-btn');
             if (role === 'patient') {
                 btn.textContent = 'Sign In as Patient';
@@ -2664,24 +2669,187 @@
             document.getElementById('ptype-' + type).classList.add('selected');
         }
 
-        function login() {
-            if (userRole === 'patient') {
-                navigateTo('patient-home');
-            } else if (userRole === 'doctor') {
-                navigateTo('doctor-home');
-            } else if (userRole === 'pharmacy') {
-                navigateTo('pharmacy-home');
-            } else if (userRole === 'institution') {
-                navigateTo('institution-home');
-            } else {
-                navigateTo('patient-home');
+        // ---- REAL LOGIN: calls backend API ----
+        async function login() {
+            const emailInput = document.getElementById('login-email');
+            const passwordInput = document.getElementById('login-password');
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!email || !password) {
+                showToast('⚠️ Please enter your email and password');
+                return;
             }
-            showToast('Welcome! 👋');
-            checkNetwork();
+
+            const btn = document.getElementById('login-btn');
+            const originalText = btn.textContent;
+            btn.textContent = 'Signing in...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(AUTH_LOGIN_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                let data = {};
+                try { data = await response.json(); } catch (e) { /* ignore non-JSON */ }
+
+                if (response.ok) {
+                    // Save token + user
+                    if (data.token) localStorage.setItem('token', data.token);
+                    if (data.user) {
+                        localStorage.setItem('user', JSON.stringify(data.user));
+                        currentUser = data.user;
+                    } else {
+                        currentUser = { email };
+                    }
+
+                    // Update profile display if available
+                    applyUserToUI(currentUser);
+
+                    // Route to the correct dashboard based on role
+                    const role = (data.user && data.user.role) ? data.user.role : userRole;
+                    if (role === 'patient') {
+                        navigateTo('patient-home');
+                    } else if (role === 'doctor') {
+                        navigateTo('doctor-home');
+                    } else if (role === 'pharmacy') {
+                        navigateTo('pharmacy-home');
+                    } else if (role === 'institution') {
+                        navigateTo('institution-home');
+                    } else {
+                        navigateTo('patient-home');
+                    }
+                    showToast('Welcome back! 👋');
+                } else {
+               showToast('❌ ' + (data.message || data.error || 'Login failed. Check your credentials.'));
+                }
+            } catch (err) {
+                console.error('Login error:', err);
+                showToast('❌ Network error. Please try again.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // ---- REAL REGISTER: calls backend API ----
+        async function registerUser() {
+            const name = document.getElementById('reg-name').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const phone = document.getElementById('reg-phone').value.trim();
+            const password = document.getElementById('reg-password').value;
+
+            if (!name || !email || !password) {
+                showToast('⚠️ Please fill in all required fields');
+                return;
+            }
+            if (password.length < 6) {
+                showToast('⚠️ Password must be at least 6 characters');
+                return;
+            }
+
+            try {
+                const response = await fetch(AUTH_REGISTER_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, phone, password, role: 'patient' })
+                });
+
+                let data = {};
+                try { data = await response.json(); } catch (e) { /* ignore */ }
+
+                if (response.ok) {
+                    showToast('✅ Account created! Please sign in.');
+                    document.getElementById('registerForm').style.display = 'none';
+                    document.getElementById('login-email').value = email;
+                    document.getElementById('login-password').value = '';
+                } else {
+                    showToast('❌ ' + (data.message || data.error || 'Registration failed.'));
+                }
+            } catch (err) {
+                console.error('Registration error:', err);
+                showToast('❌ Network error. Please try again.');
+            }
+        }
+
+        // ---- REAL INSTITUTION REGISTER: calls backend API ----
+        async function registerInstitution() {
+            const name = document.getElementById('inst-name').value.trim();
+            const type = document.getElementById('inst-type').value;
+            const license = document.getElementById('inst-license').value.trim();
+            const email = document.getElementById('inst-email').value.trim();
+            const phone = document.getElementById('inst-phone').value.trim();
+            const address = document.getElementById('inst-address').value.trim();
+            const state = document.getElementById('inst-state').value;
+            const password = document.getElementById('inst-password').value;
+            const password2 = document.getElementById('inst-password2').value;
+
+            if (!name || !email || !license || !password) {
+                showToast('⚠️ Please fill in all required fields');
+                return;
+            }
+            if (password !== password2) {
+                showToast('⚠️ Passwords do not match');
+                return;
+            }
+            if (password.length < 6) {
+                showToast('⚠️ Password must be at least 6 characters');
+                return;
+            }
+
+            try {
+                const response = await fetch(AUTH_REGISTER_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name, email, phone, address,
+                        licenseNumber: license,
+                        institutionType: type,
+                        state,
+                        password,
+                        role: 'institution'
+                    })
+                });
+
+                let data = {};
+                try { data = await response.json(); } catch (e) { /* ignore */ }
+
+                if (response.ok) {
+                    showToast('✅ Institution registered! Verification in progress.');
+                    document.getElementById('institution-register-form').style.display = 'none';
+                    document.getElementById('login-email').value = email;
+                    setTimeout(() => {
+                        navigateTo('auth');
+                    }, 1500);
+                } else {
+                    showToast('❌ ' + (data.message || 'Registration failed.'));
+                }
+            } catch (err) {
+                console.error('Institution registration error:', err);
+                showToast('❌ Network error. Please try again.');
+            }
+        }
+
+        function applyUserToUI(user) {
+            if (!user) return;
+            const name = user.name || (user.email ? user.email.split('@')[0] : 'User');
+            const email = user.email || '';
+            const welcomeEl = document.getElementById('patient-welcome-name');
+            const profileNameEl = document.getElementById('profile-name');
+            const profileEmailEl = document.getElementById('profile-email');
+            if (welcomeEl) welcomeEl.textContent = name.split(' ')[0];
+            if (profileNameEl) profileNameEl.textContent = name;
+            if (profileEmailEl) profileEmailEl.textContent = email;
         }
 
         function logout() {
             if (confirm('Logout?')) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                currentUser = null;
                 navigateTo('auth');
                 showToast('Logged out');
             }
@@ -2689,26 +2857,6 @@
 
         function showRegister() {
             document.getElementById('registerForm').style.display = 'block';
-        }
-
-        function registerUser() {
-            showToast('✅ Account created!');
-            document.getElementById('registerForm').style.display = 'none';
-        }
-
-        function registerInstitution() {
-            const name = document.getElementById('inst-name').value;
-            const email = document.getElementById('inst-email').value;
-            const license = document.getElementById('inst-license').value;
-            if (!name || !email || !license) {
-                showToast('⚠️ Please fill in all required fields');
-                return;
-            }
-            showToast('✅ Institution registered! Verification in progress.');
-            document.getElementById('institution-register-form').style.display = 'none';
-            setTimeout(() => {
-                navigateTo('institution-home');
-            }, 1500);
         }
 
         // ================================================
@@ -2845,9 +2993,9 @@
             }
         }
 
-        function selectTimeSlot(time) {
+        function selectTimeSlot(time, evt) {
             document.querySelectorAll('.slot').forEach(s => s.classList.remove('selected'));
-            event.target.classList.add('selected');
+            if (evt && evt.target) evt.target.classList.add('selected');
             selectedTime = time;
             document.getElementById('appointment-time').textContent = time;
         }
@@ -2970,15 +3118,33 @@
         // INIT
         // ================================================
         document.addEventListener('DOMContentLoaded', function() {
+            // If already logged in (token exists), skip splash and go to dashboard
+            const token = localStorage.getItem('token');
+            const storedUser = localStorage.getItem('user');
+
             navigateTo('splash');
-            setTimeout(() => navigateTo('auth'), 2500);
+
+            setTimeout(() => {
+                if (token && storedUser) {
+                    try {
+                        currentUser = JSON.parse(storedUser);
+                    } catch (e) { currentUser = null; }
+
+                    const role = (currentUser && currentUser.role) ? currentUser.role : 'patient';
+                    applyUserToUI(currentUser);
+
+                    if (role === 'patient') navigateTo('patient-home');
+                    else if (role === 'doctor') navigateTo('doctor-home');
+                    else if (role === 'pharmacy') navigateTo('pharmacy-home');
+                    else if (role === 'institution') navigateTo('institution-home');
+                    else navigateTo('patient-home');
+                } else {
+                    navigateTo('auth');
+                }
+            }, 2500);
+
             checkNetwork();
-            console.log('🏥 N-Health Complete Mockup Loaded!');
-            console.log('📱 All Roles: Patient, Doctor, Pharmacy, Institution');
-            console.log('🏥 Institution Dashboard: Staff, Departments, Scheduling');
-            console.log('💊 Pharmacy: Inventory, POS, Orders, Customers');
-            console.log('👨‍⚕️ Doctor: Requests, Patients, Messages');
-            console.log('⌨️ Esc: Close modals');
+            console.log('🏥 N-Health Loaded! Connected to backend at:', API_BASE_URL);
         });
 
         // Periodic network check
