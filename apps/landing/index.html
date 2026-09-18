@@ -237,7 +237,7 @@
         .payment-method:hover { border-color: var(--primary); }
         .payment-method.selected { border-color: var(--primary); background: var(--primary-light); }
         .payment-method.disabled { opacity: 0.5; cursor: not-allowed; filter: blur(2px); position: relative; }
-        .payment-method.disabled::after { content: 'ðŸ”’ Coming Soon'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 4px 12px; border-radius: 12px; font-size: 10px; font-weight: 600; }
+        .payment-method.disabled::after { content: '🔒 Coming Soon'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 4px 12px; border-radius: 12px; font-size: 10px; font-weight: 600; }
         .payment-method .icon { font-size: 28px; display: block; margin-bottom: 4px; }
         .payment-method .name { font-size: 13px; font-weight: 500; }
         .payment-method .desc { font-size: 10px; color: var(--text-secondary); }
@@ -344,7 +344,7 @@
 
             <div id="splash" class="screen active">
                 <div class="splash-screen">
-                    <div class="logo">ðŸ¥</div>
+                    <div class="logo">🏥</div>
                     <h1>N-Health</h1>
                     <p>Complete Health Ecosystem</p>
                     <div class="loading-dots"><span></span><span></span><span></span></div>
@@ -354,28 +354,28 @@
             <div id="auth" class="screen">
                 <div class="auth-screen">
                     <div class="auth-header">
-                        <div class="icon">ðŸ¥</div>
+                        <div class="icon">🏥</div>
                         <h2>Welcome to N-Health</h2>
                         <p>Sign in or create an account</p>
                     </div>
 
                     <div class="auth-role-selector">
-                        <div class="role-card selected" onclick="selectRole('patient')" id="role-patient"><div class="icon">ðŸ‘¤</div><div class="name">Patient</div><div class="desc">Access healthcare services</div></div>
-                        <div class="role-card" onclick="selectRole('doctor')" id="role-doctor"><div class="icon">ðŸ‘¨â€âš•ï¸</div><div class="name">Doctor</div><div class="desc">Manage practice & patients</div></div>
-                        <div class="role-card" onclick="selectRole('pharmacy')" id="role-pharmacy"><div class="icon">ðŸ’Š</div><div class="name">Pharmacy</div><div class="desc">Inventory & POS management</div></div>
-                        <div class="role-card" onclick="selectRole('lab')" id="role-lab"><div class="icon">ðŸ”¬</div><div class="name">Lab</div><div class="desc">Diagnostic services</div></div>
-                        <div class="role-card" onclick="selectRole('ambulance')" id="role-ambulance"><div class="icon">ðŸš‘</div><div class="name">Ambulance</div><div class="desc">Emergency transport</div></div>
-                        <div class="role-card" onclick="selectRole('nurse')" id="role-nurse"><div class="icon">ðŸ‘©â€âš•ï¸</div><div class="name">Nurse</div><div class="desc">Patient care</div></div>
-                        <div class="role-card institution-card" onclick="selectRole('institution')" id="role-institution"><div class="icon">ðŸ¥</div><div class="name">Institution</div><div class="desc">Clinic/Hospital/Facility</div></div>
+                        <div class="role-card selected" onclick="selectRole('patient')" id="role-patient"><div class="icon">👤</div><div class="name">Patient</div><div class="desc">Access healthcare services</div></div>
+                        <div class="role-card" onclick="selectRole('doctor')" id="role-doctor"><div class="icon">👨‍⚕️</div><div class="name">Doctor</div><div class="desc">Manage practice & patients</div></div>
+                        <div class="role-card" onclick="selectRole('pharmacy')" id="role-pharmacy"><div class="icon">💊</div><div class="name">Pharmacy</div><div class="desc">Inventory & POS management</div></div>
+                        <div class="role-card" onclick="selectRole('lab')" id="role-lab"><div class="icon">🔬</div><div class="name">Lab</div><div class="desc">Diagnostic services</div></div>
+                        <div class="role-card" onclick="selectRole('ambulance')" id="role-ambulance"><div class="icon">🚑</div><div class="name">Ambulance</div><div class="desc">Emergency transport</div></div>
+                        <div class="role-card" onclick="selectRole('nurse')" id="role-nurse"><div class="icon">👩‍⚕️</div><div class="name">Nurse</div><div class="desc">Patient care</div></div>
+                        <div class="role-card institution-card" onclick="selectRole('institution')" id="role-institution"><div class="icon">🏥</div><div class="name">Institution</div><div class="desc">Clinic/Hospital/Facility</div></div>
                     </div>
 
                     <div id="provider-type-section" style="display:none;">
                         <div class="provider-type-selector">
-                            <div class="type-card selected" onclick="selectProviderType('doctor')" id="ptype-doctor"><div class="icon">ðŸ‘¨â€âš•ï¸</div><div class="label">Doctor</div></div>
-                            <div class="type-card" onclick="selectProviderType('pharmacist')" id="ptype-pharmacist"><div class="icon">ðŸ’Š</div><div class="label">Pharmacy</div></div>
-                            <div class="type-card" onclick="selectProviderType('lab')" id="ptype-lab"><div class="icon">ðŸ”¬</div><div class="label">Lab</div></div>
-                            <div class="type-card" onclick="selectProviderType('ambulance')" id="ptype-ambulance"><div class="icon">ðŸš‘</div><div class="label">Ambulance</div></div>
-                            <div class="type-card" onclick="selectProviderType('nurse')" id="ptype-nurse"><div class="icon">ðŸ‘©â€âš•ï¸</div><div class="label">Nurse</div></div>
+                            <div class="type-card selected" onclick="selectProviderType('doctor')" id="ptype-doctor"><div class="icon">👨‍⚕️</div><div class="label">Doctor</div></div>
+                            <div class="type-card" onclick="selectProviderType('pharmacist')" id="ptype-pharmacist"><div class="icon">💊</div><div class="label">Pharmacy</div></div>
+                            <div class="type-card" onclick="selectProviderType('lab')" id="ptype-lab"><div class="icon">🔬</div><div class="label">Lab</div></div>
+                            <div class="type-card" onclick="selectProviderType('ambulance')" id="ptype-ambulance"><div class="icon">🚑</div><div class="label">Ambulance</div></div>
+                            <div class="type-card" onclick="selectProviderType('nurse')" id="ptype-nurse"><div class="icon">👩‍⚕️</div><div class="label">Nurse</div></div>
                         </div>
                     </div>
 
@@ -384,12 +384,12 @@
                             <div class="form-group"><label>Institution Name <span style="color:var(--error);">*</span></label><input type="text" placeholder="Lagos University Teaching Hospital" id="inst-name"></div>
                             <div class="form-group"><label>Institution Type <span style="color:var(--error);">*</span></label>
                                 <select id="inst-type">
-                                    <option value="hospital">ðŸ¥ Hospital</option>
-                                    <option value="clinic">ðŸ¥ Clinic</option>
-                                    <option value="diagnostic">ðŸ”¬ Diagnostic Center</option>
-                                    <option value="pharmacy">ðŸ’Š Pharmacy Chain</option>
-                                    <option value="maternity">ðŸ‘¶ Maternity Home</option>
-                                    <option value="specialist">ðŸ¥ Specialist Center</option>
+                                    <option value="hospital">🏥 Hospital</option>
+                                    <option value="clinic">🏥 Clinic</option>
+                                    <option value="diagnostic">🔬 Diagnostic Center</option>
+                                    <option value="pharmacy">💊 Pharmacy Chain</option>
+                                    <option value="maternity">👶 Maternity Home</option>
+                                    <option value="specialist">🏥 Specialist Center</option>
                                 </select>
                             </div>
                             <div class="form-group"><label>License Number <span style="color:var(--error);">*</span></label><input type="text" placeholder="MOH-2024-001234" id="inst-license"></div>
@@ -406,7 +406,7 @@
                             <div class="form-group"><label>Password <span style="color:var(--error);">*</span></label><input type="password" placeholder="Min 8 characters" id="inst-password"></div>
                             <div class="form-group"><label>Confirm Password <span style="color:var(--error);">*</span></label><input type="password" placeholder="Re-enter password" id="inst-password2"></div>
                         </div>
-                        <button class="btn btn-institution btn-block" onclick="registerInstitution()" style="margin-top:12px;">ðŸ¥ Register Institution</button>
+                        <button class="btn btn-institution btn-block" onclick="registerInstitution()" style="margin-top:12px;">🏥 Register Institution</button>
                     </div>
 
                     <div class="form-group" style="margin-top:12px;">
@@ -415,7 +415,7 @@
                     </div>
                     <div class="form-group">
                         <label>Password</label>
-                        <input type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value="password123" id="login-password">
+                        <input type="password" placeholder="••••••••" value="password123" id="login-password">
                     </div>
                     <button class="btn btn-primary btn-block" onclick="login()" id="login-btn">Sign In</button>
 
@@ -435,64 +435,64 @@
             </div>
 
             <div id="patient-home" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
                     <div class="title">N-<span>Health</span></div>
                     <div class="app-bar-actions">
-                        <button onclick="navigateTo('patient-notifications')">ðŸ”” <span class="badge" style="position:relative; top:-8px; right:-4px; font-size:7px; padding:1px 5px;">3</span></button>
-                        <button onclick="navigateTo('patient-profile')">ðŸ‘¤</button>
+                        <button onclick="navigateTo('patient-notifications')">🔔 <span class="badge" style="position:relative; top:-8px; right:-4px; font-size:7px; padding:1px 5px;">3</span></button>
+                        <button onclick="navigateTo('patient-profile')">👤</button>
                     </div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
-                    <div class="welcome-text">Hello, ðŸ‘‹ <span id="patient-welcome-name">User</span></div>
+                    <div class="welcome-text">Hello, 👋 <span id="patient-welcome-name">User</span></div>
                     <div class="welcome-sub">Your complete health companion</div>
                     <div class="balance-card">
                         <div class="balance-label">Wallet Balance</div>
-                        <div class="balance-amount">â‚¦245,750.00</div>
-                        <div style="font-size:11px; opacity:0.7; margin-top:2px;"><span class="badge badge-success" style="background:rgba(255,255,255,0.2); color:white;">âœ“ NHIS Active</span></div>
+                        <div class="balance-amount">₦245,750.00</div>
+                        <div style="font-size:11px; opacity:0.7; margin-top:2px;"><span class="badge badge-success" style="background:rgba(255,255,255,0.2); color:white;">✓ NHIS Active</span></div>
                         <div class="balance-actions">
-                            <button class="btn-primary" onclick="navigateTo('patient-wallet')">ðŸ’° Fund</button>
-                            <button class="btn-outline" onclick="navigateTo('patient-wallet')">ðŸ“Š History</button>
+                            <button class="btn-primary" onclick="navigateTo('patient-wallet')">💰 Fund</button>
+                            <button class="btn-outline" onclick="navigateTo('patient-wallet')">📊 History</button>
                         </div>
                     </div>
                     <div class="quick-actions">
-                        <div class="quick-action emergency" onclick="navigateTo('patient-emergency')"><span class="icon">ðŸš¨</span><span class="label">Emergency</span></div>
-                        <div class="quick-action" onclick="navigateTo('patient-appointments')"><span class="icon">ðŸ“…</span><span class="label">Appointments</span></div>
-                        <div class="quick-action pharmacy-action" onclick="navigateTo('patient-pharmacy')"><span class="icon">ðŸ’Š</span><span class="label">Pharmacy</span></div>
-                        <div class="quick-action lab-action" onclick="navigateTo('patient-labs')"><span class="icon">ðŸ”¬</span><span class="label">Labs</span></div>
-                        <div class="quick-action" onclick="navigateTo('patient-providers')"><span class="icon">ðŸ¥</span><span class="label">Providers</span></div>
-                        <div class="quick-action" onclick="navigateTo('patient-donations')"><span class="icon">â¤ï¸</span><span class="label">Donate</span></div>
-                        <div class="quick-action" onclick="navigateTo('patient-insurance')"><span class="icon">ðŸ›¡ï¸</span><span class="label">Insurance</span></div>
-                        <div class="quick-action" onclick="navigateTo('patient-messages')"><span class="icon">ðŸ’¬</span><span class="label">Messages</span></div>
+                        <div class="quick-action emergency" onclick="navigateTo('patient-emergency')"><span class="icon">🚨</span><span class="label">Emergency</span></div>
+                        <div class="quick-action" onclick="navigateTo('patient-appointments')"><span class="icon">📅</span><span class="label">Appointments</span></div>
+                        <div class="quick-action pharmacy-action" onclick="navigateTo('patient-pharmacy')"><span class="icon">💊</span><span class="label">Pharmacy</span></div>
+                        <div class="quick-action lab-action" onclick="navigateTo('patient-labs')"><span class="icon">🔬</span><span class="label">Labs</span></div>
+                        <div class="quick-action" onclick="navigateTo('patient-providers')"><span class="icon">🏥</span><span class="label">Providers</span></div>
+                        <div class="quick-action" onclick="navigateTo('patient-donations')"><span class="icon">❤️</span><span class="label">Donate</span></div>
+                        <div class="quick-action" onclick="navigateTo('patient-insurance')"><span class="icon">🛡️</span><span class="label">Insurance</span></div>
+                        <div class="quick-action" onclick="navigateTo('patient-messages')"><span class="icon">💬</span><span class="label">Messages</span></div>
                     </div>
                     <div class="card">
-                        <div class="card-header"><span class="card-title">ðŸ“‹ Upcoming</span><a href="#" onclick="navigateTo('patient-appointments')" style="font-size:11px; color:var(--primary); text-decoration:none;">See All</a></div>
+                        <div class="card-header"><span class="card-title">📋 Upcoming</span><a href="#" onclick="navigateTo('patient-appointments')" style="font-size:11px; color:var(--primary); text-decoration:none;">See All</a></div>
                         <div id="upcoming-appointments-list">
                             <div class="list-item" style="border-bottom:1px solid #E8ECF1;">
-                                <div class="avatar doctor-avatar">ðŸ‘¨â€âš•ï¸</div>
-                                <div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology â€¢ Today, 10:00 AM</div></div>
+                                <div class="avatar doctor-avatar">👨‍⚕️</div>
+                                <div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology • Today, 10:00 AM</div></div>
                                 <div class="trailing"><span class="badge badge-primary">Today</span></div>
                             </div>
                             <div class="list-item">
-                                <div class="avatar nurse-avatar">ðŸ‘©â€âš•ï¸</div>
-                                <div class="content"><div class="title">Nurse Funmi Adeyemi</div><div class="subtitle">Pediatric â€¢ Tomorrow, 2:00 PM</div></div>
+                                <div class="avatar nurse-avatar">👩‍⚕️</div>
+                                <div class="content"><div class="title">Nurse Funmi Adeyemi</div><div class="subtitle">Pediatric • Tomorrow, 2:00 PM</div></div>
                                 <div class="trailing"><span class="badge badge-warning">Tomorrow</span></div>
                             </div>
                         </div>
                     </div>
                     <div class="card" style="border:2px solid var(--pharmacy-color);">
-                        <div class="card-header"><span class="card-title">ðŸ’Š Pharmacy</span><a href="#" onclick="navigateTo('patient-pharmacy')" style="font-size:11px; color:var(--pharmacy-color); text-decoration:none;">Order</a></div>
+                        <div class="card-header"><span class="card-title">💊 Pharmacy</span><a href="#" onclick="navigateTo('patient-pharmacy')" style="font-size:11px; color:var(--pharmacy-color); text-decoration:none;">Order</a></div>
                         <div class="list-item" onclick="navigateTo('patient-pharmacy')">
-                            <div class="avatar pharmacy-avatar">ðŸ’Š</div>
-                            <div class="content"><div class="title">Artemisinin Therapy</div><div class="subtitle">â‚¦2,500 â€¢ HealthPlus Pharmacy â€¢ 1.2 km</div></div>
+                            <div class="avatar pharmacy-avatar">💊</div>
+                            <div class="content"><div class="title">Artemisinin Therapy</div><div class="subtitle">₦2,500 • HealthPlus Pharmacy • 1.2 km</div></div>
                             <div class="trailing"><span class="badge badge-instock">In Stock</span></div>
                         </div>
                     </div>
                     <div class="card" style="border:2px solid var(--institution-color);">
-                        <div class="card-header"><span class="card-title">ðŸ¥ Find Facility</span><a href="#" onclick="navigateTo('patient-institutions')" style="font-size:11px; color:var(--institution-color); text-decoration:none;">Search</a></div>
+                        <div class="card-header"><span class="card-title">🏥 Find Facility</span><a href="#" onclick="navigateTo('patient-institutions')" style="font-size:11px; color:var(--institution-color); text-decoration:none;">Search</a></div>
                         <div class="list-item" onclick="navigateTo('patient-institutions')">
-                            <div class="avatar institution-avatar">ðŸ¥</div>
-                            <div class="content"><div class="title">Lagos University Teaching Hospital</div><div class="subtitle">ðŸ“ 2.3 km â€¢ ðŸ¥ 4.5 â­</div></div>
+                            <div class="avatar institution-avatar">🏥</div>
+                            <div class="content"><div class="title">Lagos University Teaching Hospital</div><div class="subtitle">📍 2.3 km • 🏥 4.5 ⭐</div></div>
                             <div class="trailing"><span class="badge badge-institution">Verified</span></div>
                         </div>
                     </div>
@@ -500,60 +500,60 @@
             </div>
 
             <div id="patient-wallet" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">ðŸ’° Wallet</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">💰 Wallet</div>
                     <div style="width:36px;"></div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
-                    <div class="balance-card"><div class="balance-label">Available Balance</div><div class="balance-amount">â‚¦245,750.00</div></div>
+                    <div class="balance-card"><div class="balance-label">Available Balance</div><div class="balance-amount">₦245,750.00</div></div>
                     <div class="card">
                         <div class="card-title" style="font-size:14px; margin-bottom:8px;">Fund Wallet</div>
-                        <div class="form-group"><label>Amount (â‚¦)</label><input type="number" placeholder="e.g. 5000" id="fund-amount"></div>
+                        <div class="form-group"><label>Amount (₦)</label><input type="number" placeholder="e.g. 5000" id="fund-amount"></div>
                         <div class="payment-options">
-                            <div class="payment-option selected" onclick="selectPaymentOption(this)"><div class="icon">ðŸ’³</div><div class="label">Card</div></div>
-                            <div class="payment-option" onclick="selectPaymentOption(this)"><div class="icon">ðŸ¦</div><div class="label">Transfer</div></div>
-                            <div class="payment-option" onclick="selectPaymentOption(this)"><div class="icon">ðŸ“±</div><div class="label">USSD</div></div>
+                            <div class="payment-option selected" onclick="selectPaymentOption(this)"><div class="icon">💳</div><div class="label">Card</div></div>
+                            <div class="payment-option" onclick="selectPaymentOption(this)"><div class="icon">🏦</div><div class="label">Transfer</div></div>
+                            <div class="payment-option" onclick="selectPaymentOption(this)"><div class="icon">📱</div><div class="label">USSD</div></div>
                         </div>
-                        <button class="btn btn-primary btn-block" onclick="showToast('ðŸ’³ Payment gateway opening...')">Proceed to Pay</button>
+                        <button class="btn btn-primary btn-block" onclick="showToast('💳 Payment gateway opening...')">Proceed to Pay</button>
                     </div>
                     <div class="card">
-                        <div class="card-title" style="font-size:14px; margin-bottom:6px;">ðŸ“Š Transaction History</div>
-                        <div class="list-item"><div class="avatar" style="background:#E6F4EA; color:var(--success);">ðŸ“¥</div><div class="content"><div class="title">Wallet Funded</div><div class="subtitle">Today, 9:30 AM</div></div><div class="trailing" style="color:var(--success); font-weight:600;">+â‚¦5,000</div></div>
-                        <div class="list-item"><div class="avatar" style="background:#FCE8E6; color:var(--error);">ðŸ“¤</div><div class="content"><div class="title">Consultation Fee</div><div class="subtitle">Yesterday, 2:15 PM</div></div><div class="trailing" style="color:var(--error); font-weight:600;">-â‚¦15,000</div></div>
+                        <div class="card-title" style="font-size:14px; margin-bottom:6px;">📊 Transaction History</div>
+                        <div class="list-item"><div class="avatar" style="background:#E6F4EA; color:var(--success);">📥</div><div class="content"><div class="title">Wallet Funded</div><div class="subtitle">Today, 9:30 AM</div></div><div class="trailing" style="color:var(--success); font-weight:600;">+₦5,000</div></div>
+                        <div class="list-item"><div class="avatar" style="background:#FCE8E6; color:var(--error);">📤</div><div class="content"><div class="title">Consultation Fee</div><div class="subtitle">Yesterday, 2:15 PM</div></div><div class="trailing" style="color:var(--error); font-weight:600;">-₦15,000</div></div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-emergency" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar" style="background:var(--emergency-red); color:white;">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; color:white; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title" style="color:white;">ðŸš¨ Emergency</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; color:white; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title" style="color:white;">🚨 Emergency</div>
                     <div style="width:36px;"></div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="card" style="border:2px solid var(--emergency-red); background:#FFF5F5;">
-                        <div style="text-align:center; font-size:40px;">ðŸš¨</div>
+                        <div style="text-align:center; font-size:40px;">🚨</div>
                         <h3 style="text-align:center; color:var(--emergency-red); font-size:16px;">Emergency Service</h3>
-                        <p style="text-align:center; color:var(--text-secondary); font-size:12px;">Minimum balance of â‚¦5,000 required</p>
-                        <button class="btn btn-danger btn-block" onclick="requestEmergency()" style="font-size:14px; padding:14px;">ðŸš¨ Request Emergency Help</button>
+                        <p style="text-align:center; color:var(--text-secondary); font-size:12px;">Minimum balance of ₦5,000 required</p>
+                        <button class="btn btn-danger btn-block" onclick="requestEmergency()" style="font-size:14px; padding:14px;">🚨 Request Emergency Help</button>
                     </div>
                     <div id="emergencyStatus" style="display:none;"></div>
                     <div class="card">
-                        <div class="card-title" style="font-size:14px; margin-bottom:8px;">ðŸ“ž Emergency Contacts</div>
-                        <div class="list-item" onclick="callEmergency('112')"><div style="font-size:20px; margin-right:10px;">ðŸ“ž</div><div class="content"><div class="title">National Emergency</div><div class="subtitle">112 - Toll Free</div></div><div class="trailing" style="color:var(--primary);">Call</div></div>
-                        <div class="list-item" onclick="callEmergency('767')"><div style="font-size:20px; margin-right:10px;">ðŸ“ž</div><div class="content"><div class="title">N-Health Emergency</div><div class="subtitle">767 - 24/7 Support</div></div><div class="trailing" style="color:var(--primary);">Call</div></div>
+                        <div class="card-title" style="font-size:14px; margin-bottom:8px;">📞 Emergency Contacts</div>
+                        <div class="list-item" onclick="callEmergency('112')"><div style="font-size:20px; margin-right:10px;">📞</div><div class="content"><div class="title">National Emergency</div><div class="subtitle">112 - Toll Free</div></div><div class="trailing" style="color:var(--primary);">Call</div></div>
+                        <div class="list-item" onclick="callEmergency('767')"><div style="font-size:20px; margin-right:10px;">📞</div><div class="content"><div class="title">N-Health Emergency</div><div class="subtitle">767 - 24/7 Support</div></div><div class="trailing" style="color:var(--primary);">Call</div></div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-appointments" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">ðŸ“… Appointments</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">📅 Appointments</div>
                     <button onclick="showBookAppointment()" style="background:none; border:none; font-size:13px; cursor:pointer; color:var(--primary); font-weight:600;">+ New</button>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
@@ -565,34 +565,34 @@
                     <div id="p-upcoming">
                         <div class="card">
                             <div class="list-item" style="border-bottom:1px solid #E8ECF1;">
-                                <div class="avatar doctor-avatar">ðŸ‘¨â€âš•ï¸</div>
-                                <div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology â€¢ Today, 10:00 AM</div></div>
+                                <div class="avatar doctor-avatar">👨‍⚕️</div>
+                                <div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology • Today, 10:00 AM</div></div>
                                 <div class="trailing"><span class="badge badge-primary">Today</span></div>
                             </div>
                             <div style="display:flex; gap:6px; margin-top:6px;">
-                                <button class="btn btn-success btn-sm" onclick="showToast('âœ… Appointment accepted!')">âœ“ Accept</button>
-                                <button class="btn btn-danger btn-sm" onclick="showToast('âœ• Appointment cancelled.')">âœ• Cancel</button>
+                                <button class="btn btn-success btn-sm" onclick="showToast('✅ Appointment accepted!')">✓ Accept</button>
+                                <button class="btn btn-danger btn-sm" onclick="showToast('✕ Appointment cancelled.')">✕ Cancel</button>
                             </div>
                         </div>
                     </div>
                     <div id="p-book" style="display:none;">
                         <div class="card">
-                            <div class="card-title" style="font-size:14px; margin-bottom:6px;">ðŸ“ Find a Provider</div>
-                            <div class="form-group"><input type="text" placeholder="ðŸ” Search by name, specialty..." style="padding:8px 12px; font-size:13px;"></div>
+                            <div class="card-title" style="font-size:14px; margin-bottom:6px;">📍 Find a Provider</div>
+                            <div class="form-group"><input type="text" placeholder="🔍 Search by name, specialty..." style="padding:8px 12px; font-size:13px;"></div>
                             <div class="list-item" onclick="showCalendar('Dr. Adebayo Ogunlesi', 'Cardiology')">
-                                <div class="avatar doctor-avatar">ðŸ‘¨â€âš•ï¸</div>
-                                <div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology â€¢ â‚¦15,000 â€¢ â­ 4.8</div></div>
+                                <div class="avatar doctor-avatar">👨‍⚕️</div>
+                                <div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology • ₦15,000 • ⭐ 4.8</div></div>
                                 <div class="trailing"><span class="badge badge-verified">Verified</span></div>
                             </div>
                             <div class="list-item" onclick="showCalendar('Nurse Funmi Adeyemi', 'Pediatric')">
-                                <div class="avatar nurse-avatar">ðŸ‘©â€âš•ï¸</div>
-                                <div class="content"><div class="title">Nurse Funmi Adeyemi</div><div class="subtitle">Pediatric â€¢ â‚¦10,000 â€¢ â­ 4.6</div></div>
+                                <div class="avatar nurse-avatar">👩‍⚕️</div>
+                                <div class="content"><div class="title">Nurse Funmi Adeyemi</div><div class="subtitle">Pediatric • ₦10,000 • ⭐ 4.6</div></div>
                                 <div class="trailing"><span class="badge badge-verified">Verified</span></div>
                             </div>
                         </div>
                         <div id="calendar-view" style="display:none;">
                             <div class="card">
-                                <div class="card-header"><span class="card-title">ðŸ“… Select Date</span><button onclick="closeCalendar()" style="background:none; border:none; font-size:16px; cursor:pointer;">âœ•</button></div>
+                                <div class="card-header"><span class="card-title">📅 Select Date</span><button onclick="closeCalendar()" style="background:none; border:none; font-size:16px; cursor:pointer;">✕</button></div>
                                 <div id="selected-provider" style="font-weight:600; font-size:14px; margin-bottom:8px;"></div>
                                 <div class="calendar-grid" id="calendar-grid">
                                     <div class="day-header">Sun</div><div class="day-header">Mon</div><div class="day-header">Tue</div><div class="day-header">Wed</div><div class="day-header">Thu</div><div class="day-header">Fri</div><div class="day-header">Sat</div>
@@ -623,24 +623,24 @@
                     </div>
                     <div id="p-history" style="display:none;">
                         <div class="card">
-                            <div class="card-title" style="font-size:14px; margin-bottom:6px;">ðŸ“‹ Appointment Reports</div>
-                            <div class="list-item"><div class="avatar" style="background:#E6F4EA; color:var(--success);">ðŸ“„</div><div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology Report â€¢ Jan 15, 2024</div></div><div class="trailing"><button class="btn btn-primary btn-sm" onclick="showToast('ðŸ“„ Report downloaded')">View</button></div></div>
+                            <div class="card-title" style="font-size:14px; margin-bottom:6px;">📋 Appointment Reports</div>
+                            <div class="list-item"><div class="avatar" style="background:#E6F4EA; color:var(--success);">📄</div><div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Cardiology Report • Jan 15, 2024</div></div><div class="trailing"><button class="btn btn-primary btn-sm" onclick="showToast('📄 Report downloaded')">View</button></div></div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-pharmacy" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title pharmacy-title">ðŸ’Š <span>Pharmacy</span></div>
-                    <button onclick="showToast('ðŸ›’ Cart opened')" style="background:none; border:none; font-size:16px; cursor:pointer;">ðŸ›’</button>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title pharmacy-title">💊 <span>Pharmacy</span></div>
+                    <button onclick="showToast('🛒 Cart opened')" style="background:none; border:none; font-size:16px; cursor:pointer;">🛒</button>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="form-group" style="position:relative;">
-                        <input type="text" placeholder="ðŸ” Search for drugs..." id="drug-search" oninput="searchDrugs(this.value)" style="padding:10px 12px 10px 38px;">
-                        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:16px;">ðŸ”</span>
+                        <input type="text" placeholder="🔍 Search for drugs..." id="drug-search" oninput="searchDrugs(this.value)" style="padding:10px 12px 10px 38px;">
+                        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:16px;">🔍</span>
                     </div>
                     <div class="product-detail-card">
                         <div class="product-name">Artemisinin Combination Therapy</div>
@@ -652,8 +652,8 @@
                             <span><span class="label">Form:</span> Tablet</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-                            <div><div class="product-price">â‚¦2,500</div><div class="product-stock"><span class="badge badge-instock">âœ“ In Stock</span></div></div>
-                            <button class="btn btn-pharmacy btn-sm" onclick="showToast('ðŸ’Š Product details opened')">View Details</button>
+                            <div><div class="product-price">₦2,500</div><div class="product-stock"><span class="badge badge-instock">✓ In Stock</span></div></div>
+                            <button class="btn btn-pharmacy btn-sm" onclick="showToast('💊 Product details opened')">View Details</button>
                         </div>
                     </div>
                     <div class="product-detail-card">
@@ -666,45 +666,45 @@
                             <span><span class="label">Form:</span> Tablet</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-                            <div><div class="product-price">â‚¦1,200</div><div class="product-stock"><span class="badge badge-lowstock">âš ï¸ Low Stock</span></div></div>
-                            <button class="btn btn-pharmacy btn-sm" onclick="showToast('ðŸ’Š Product details opened')">View Details</button>
+                            <div><div class="product-price">₦1,200</div><div class="product-stock"><span class="badge badge-lowstock">⚠️ Low Stock</span></div></div>
+                            <button class="btn btn-pharmacy btn-sm" onclick="showToast('💊 Product details opened')">View Details</button>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-labs" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title lab-title">ðŸ”¬ <span>Labs</span></div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title lab-title">🔬 <span>Labs</span></div>
                     <div style="width:36px;"></div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="form-group" style="position:relative;">
-                        <input type="text" placeholder="ðŸ” Search tests..." style="padding:10px 12px 10px 38px;">
-                        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:16px;">ðŸ”</span>
+                        <input type="text" placeholder="🔍 Search tests..." style="padding:10px 12px 10px 38px;">
+                        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:16px;">🔍</span>
                     </div>
                     <div class="card">
-                        <div class="list-item"><div class="avatar lab-avatar">ðŸ©¸</div><div class="content"><div class="title">Complete Blood Count (CBC)</div><div class="subtitle">â‚¦5,000 â€¢ Results in 4 hrs</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('ðŸ”¬ Test added to cart')">Book</button></div></div>
-                        <div class="list-item"><div class="avatar lab-avatar">ðŸ§ª</div><div class="content"><div class="title">Malaria Parasite Test</div><div class="subtitle">â‚¦2,500 â€¢ Results in 1 hr</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('ðŸ”¬ Test added to cart')">Book</button></div></div>
-                        <div class="list-item"><div class="avatar lab-avatar">ðŸ§¬</div><div class="content"><div class="title">Lipid Profile</div><div class="subtitle">â‚¦8,000 â€¢ Results in 6 hrs</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('ðŸ”¬ Test added to cart')">Book</button></div></div>
-                        <div class="list-item"><div class="avatar lab-avatar">ðŸ§ª</div><div class="content"><div class="title">Liver Function Test</div><div class="subtitle">â‚¦12,000 â€¢ Results in 8 hrs</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('ðŸ”¬ Test added to cart')">Book</button></div></div>
+                        <div class="list-item"><div class="avatar lab-avatar">🩸</div><div class="content"><div class="title">Complete Blood Count (CBC)</div><div class="subtitle">₦5,000 • Results in 4 hrs</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div></div>
+                        <div class="list-item"><div class="avatar lab-avatar">🧪</div><div class="content"><div class="title">Malaria Parasite Test</div><div class="subtitle">₦2,500 • Results in 1 hr</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div></div>
+                        <div class="list-item"><div class="avatar lab-avatar">🧬</div><div class="content"><div class="title">Lipid Profile</div><div class="subtitle">₦8,000 • Results in 6 hrs</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div></div>
+                        <div class="list-item"><div class="avatar lab-avatar">🧪</div><div class="content"><div class="title">Liver Function Test</div><div class="subtitle">₦12,000 • Results in 8 hrs</div></div><div class="trailing"><button class="btn btn-lab btn-sm" onclick="showToast('🔬 Test added to cart')">Book</button></div></div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-providers" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">ðŸ¥ Providers</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">🏥 Providers</div>
                     <div style="width:36px;"></div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="provider-detail-card">
                         <div style="display:flex; align-items:center; gap:12px;">
-                            <div class="avatar doctor-avatar" style="width:50px; height:50px; font-size:24px;">ðŸ‘¨â€âš•ï¸</div>
+                            <div class="avatar doctor-avatar" style="width:50px; height:50px; font-size:24px;">👨‍⚕️</div>
                             <div><div class="provider-name">Dr. Adebayo Ogunlesi</div><div class="provider-specialty">Cardiology Specialist</div></div>
                             <span class="badge badge-verified" style="margin-left:auto;">Verified</span>
                         </div>
@@ -713,61 +713,61 @@
                             <span><span class="label">Experience:</span> 12 years</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-                            <div><div class="provider-rating">â­ 4.8 <span style="font-size:12px; color:var(--text-secondary);">(24 reviews)</span></div><div class="provider-fee">â‚¦15,000 <span style="font-size:12px; color:var(--text-secondary);">per consultation</span></div></div>
-                            <button class="btn btn-primary btn-sm" onclick="showToast('ðŸ“‹ Provider profile opened')">View Profile</button>
+                            <div><div class="provider-rating">⭐ 4.8 <span style="font-size:12px; color:var(--text-secondary);">(24 reviews)</span></div><div class="provider-fee">₦15,000 <span style="font-size:12px; color:var(--text-secondary);">per consultation</span></div></div>
+                            <button class="btn btn-primary btn-sm" onclick="showToast('📋 Provider profile opened')">View Profile</button>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-institutions" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title institution-title">ðŸ¥ <span>Facilities</span></div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title institution-title">🏥 <span>Facilities</span></div>
                     <div style="width:36px;"></div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
-                    <div class="form-group"><input type="text" placeholder="ðŸ” Search hospitals, clinics, labs..." style="padding:8px 12px; font-size:13px;"></div>
-                    <div class="facility-card" onclick="showToast('ðŸ¥ Facility details opened')">
+                    <div class="form-group"><input type="text" placeholder="🔍 Search hospitals, clinics, labs..." style="padding:8px 12px; font-size:13px;"></div>
+                    <div class="facility-card" onclick="showToast('🏥 Facility details opened')">
                         <div class="facility-header"><span class="facility-name">Lagos University Teaching Hospital</span><span class="badge badge-institution">Verified</span></div>
-                        <div style="font-size:13px; color:var(--text-secondary);">ðŸ“ Idi-Araba, Lagos â€¢ ðŸ¥ 4.5 â­</div>
-                        <div class="facility-stats"><span>ðŸ‘¨â€âš•ï¸ 120 Doctors</span><span>ðŸ›ï¸ 500 Beds</span><span>ðŸš‘ 24/7 Emergency</span></div>
-                        <div class="facility-status" style="margin-top:6px;"><span class="badge badge-success">Open Now</span><span style="margin-left:8px; font-size:11px; color:var(--text-secondary);">ðŸ“ž +234 800 111 2222</span></div>
+                        <div style="font-size:13px; color:var(--text-secondary);">📍 Idi-Araba, Lagos • 🏥 4.5 ⭐</div>
+                        <div class="facility-stats"><span>👨‍⚕️ 120 Doctors</span><span>🛏️ 500 Beds</span><span>🚑 24/7 Emergency</span></div>
+                        <div class="facility-status" style="margin-top:6px;"><span class="badge badge-success">Open Now</span><span style="margin-left:8px; font-size:11px; color:var(--text-secondary);">📞 +234 800 111 2222</span></div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-donations" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">â¤ï¸ Donations</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">❤️ Donations</div>
                     <div style="width:36px;"></div>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="tab-container">
-                        <div class="tab active" onclick="switchTab(this, 'donate-blood')">ðŸ©¸ Blood</div>
-                        <div class="tab" onclick="switchTab(this, 'donate-organ')">â¤ï¸ Organs</div>
-                        <div class="tab" onclick="switchTab(this, 'donate-fund')">ðŸ’° Funds</div>
-                        <div class="tab" onclick="switchTab(this, 'donate-patient')">ðŸ‘¤ Patients</div>
+                        <div class="tab active" onclick="switchTab(this, 'donate-blood')">🩸 Blood</div>
+                        <div class="tab" onclick="switchTab(this, 'donate-organ')">❤️ Organs</div>
+                        <div class="tab" onclick="switchTab(this, 'donate-fund')">💰 Funds</div>
+                        <div class="tab" onclick="switchTab(this, 'donate-patient')">👤 Patients</div>
                     </div>
                     <div id="donate-fund" style="display:none;">
                         <div class="card">
                             <div style="padding:12px; background:var(--surface); border-radius:var(--radius-sm); margin-bottom:6px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                     <span style="font-weight:500;">Sickle Cell Treatment Fund</span>
-                                    <span style="font-weight:600; color:var(--primary);">â‚¦2.45M</span>
+                                    <span style="font-weight:600; color:var(--primary);">₦2.45M</span>
                                 </div>
                                 <div style="font-size:12px; color:var(--text-secondary);">Support 50 children with sickle cell anemia</div>
                                 <div class="progress-bar"><div class="fill success" style="width:49%;"></div></div>
-                                <button class="btn btn-success btn-sm btn-block" style="margin-top:4px;" onclick="showToast('â¤ï¸ Donation options opened')">â¤ï¸ Donate Now</button>
+                                <button class="btn btn-success btn-sm btn-block" style="margin-top:4px;" onclick="showToast('❤️ Donation options opened')">❤️ Donate Now</button>
                             </div>
                         </div>
                     </div>
                     <div id="donate-blood">
                         <div class="card" style="background:linear-gradient(135deg, #FFEBEE, #FFCDD2); border:2px solid var(--emergency-red);">
-                            <div style="text-align:center; font-size:32px;">ðŸ©¸</div>
+                            <div style="text-align:center; font-size:32px;">🩸</div>
                             <h3 style="text-align:center; color:var(--emergency-red); font-size:16px;">Donate Blood, Save Lives</h3>
                             <button class="btn btn-danger btn-block" onclick="checkBloodEligibility()">Check Eligibility & Find Locations</button>
                         </div>
@@ -775,37 +775,37 @@
                     </div>
                     <div id="donate-organ" style="display:none;">
                         <div class="card" style="background:linear-gradient(135deg, #E8F0FE, #BBDEFB); border:2px solid var(--doctor-color);">
-                            <div style="text-align:center; font-size:32px;">â¤ï¸</div>
+                            <div style="text-align:center; font-size:32px;">❤️</div>
                             <h3 style="text-align:center; color:var(--doctor-color); font-size:16px;">Organ Donation Registry</h3>
                             <p style="text-align:center; color:var(--text-secondary); font-size:12px;">Your gift can save up to 8 lives.</p>
-                            <button class="btn btn-primary btn-block" onclick="showToast('ðŸ“ Organ donation form opened')">Register as Donor</button>
+                            <button class="btn btn-primary btn-block" onclick="showToast('📝 Organ donation form opened')">Register as Donor</button>
                         </div>
                         <div class="card">
-                            <div class="card-title" style="font-size:13px; margin-bottom:6px;">ðŸ“‹ Information</div>
-                            <div class="list-item"><div class="avatar">ðŸ“–</div><div class="content"><div class="title">Learn about Organ Donation</div><div class="subtitle">Understand the process and myths</div></div></div>
-                            <div class="list-item"><div class="avatar">ðŸ¥</div><div class="content"><div class="title">Accredited Centers</div><div class="subtitle">Hospitals authorized for transplants</div></div></div>
+                            <div class="card-title" style="font-size:13px; margin-bottom:6px;">📋 Information</div>
+                            <div class="list-item"><div class="avatar">📖</div><div class="content"><div class="title">Learn about Organ Donation</div><div class="subtitle">Understand the process and myths</div></div></div>
+                            <div class="list-item"><div class="avatar">🏥</div><div class="content"><div class="title">Accredited Centers</div><div class="subtitle">Hospitals authorized for transplants</div></div></div>
                         </div>
                     </div>
                     <div id="donate-patient" style="display:none;">
                         <div class="card" style="border:2px solid var(--warning);">
-                            <div style="text-align:center; font-size:32px;">ðŸ‘¤</div>
+                            <div style="text-align:center; font-size:32px;">👤</div>
                             <h3 style="text-align:center; color:var(--warning); font-size:16px;">Support a Patient</h3>
                             <p style="text-align:center; color:var(--text-secondary); font-size:12px;">Help cover medical bills for vulnerable children.</p>
-                            <button class="btn btn-warning btn-block" onclick="showToast('ðŸ“ Patient sponsorship form opened')">Sponsor a Patient</button>
+                            <button class="btn btn-warning btn-block" onclick="showToast('📝 Patient sponsorship form opened')">Sponsor a Patient</button>
                         </div>
                         <div class="card">
-                            <div class="card-title" style="font-size:13px; margin-bottom:6px;">ðŸ” Urgent Cases</div>
+                            <div class="card-title" style="font-size:13px; margin-bottom:6px;">🔍 Urgent Cases</div>
                             <div class="blood-request-item">
-                                <div class="header"><span class="patient-name">Baby Chidi</span><span class="blood-type">â‚¦150,000 needed</span></div>
-                                <div style="font-size:12px; color:var(--text-secondary);">Heart Surgery â€¢ 2 years old</div>
+                                <div class="header"><span class="patient-name">Baby Chidi</span><span class="blood-type">₦150,000 needed</span></div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Heart Surgery • 2 years old</div>
                                 <div class="progress-bar"><div class="fill warning" style="width:30%;"></div></div>
-                                <button class="btn btn-outline btn-sm btn-block" style="margin-top:4px; border-color:var(--warning); color:var(--warning);" onclick="showToast('â¤ï¸ Donation options opened')">Donate</button>
+                                <button class="btn btn-outline btn-sm btn-block" style="margin-top:4px; border-color:var(--warning); color:var(--warning);" onclick="showToast('❤️ Donation options opened')">Donate</button>
                             </div>
                             <div class="blood-request-item">
-                                <div class="header"><span class="patient-name">Amina Suleiman</span><span class="blood-type">â‚¦80,000 needed</span></div>
-                                <div style="font-size:12px; color:var(--text-secondary);">Cancer Treatment â€¢ 8 years old</div>
+                                <div class="header"><span class="patient-name">Amina Suleiman</span><span class="blood-type">₦80,000 needed</span></div>
+                                <div style="font-size:12px; color:var(--text-secondary);">Cancer Treatment • 8 years old</div>
                                 <div class="progress-bar"><div class="fill warning" style="width:60%;"></div></div>
-                                <button class="btn btn-outline btn-sm btn-block" style="margin-top:4px; border-color:var(--warning); color:var(--warning);" onclick="showToast('â¤ï¸ Donation options opened')">Donate</button>
+                                <button class="btn btn-outline btn-sm btn-block" style="margin-top:4px; border-color:var(--warning); color:var(--warning);" onclick="showToast('❤️ Donation options opened')">Donate</button>
                             </div>
                         </div>
                     </div>
@@ -813,78 +813,78 @@
             </div>
 
             <div id="patient-insurance" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">ðŸ›¡ï¸ Insurance</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">🛡️ Insurance</div>
                     <button onclick="viewInsuranceClaims()" style="background:none; border:none; font-size:12px; cursor:pointer; color:var(--primary); font-weight:600;">Claims</button>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="card" style="border:2px solid var(--success);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div><div style="font-weight:600; font-size:14px;">National Health Insurance Scheme</div><div style="font-size:12px; color:var(--text-secondary);">NHIS: NHIS-2024-001234</div></div>
-                            <span class="badge badge-success">âœ“ Active</span>
+                            <span class="badge badge-success">✓ Active</span>
                         </div>
                     </div>
                     <div class="card">
-                        <div class="card-title" style="font-size:14px; margin-bottom:6px;">ðŸ“‹ Available Schemes</div>
-                        <div class="list-item"><div class="avatar">ðŸ›ï¸</div><div class="content"><div class="title">Lagos State Health Scheme</div><div class="subtitle">â‚¦15,000/yr â€¢ 500,000 coverage</div></div><div class="trailing"><button class="btn btn-primary btn-sm" onclick="showToast('ðŸ“‹ Enrollment started')">Enroll & Pay</button></div></div>
-                        <div class="list-item"><div class="avatar">ðŸ¢</div><div class="content"><div class="title">Axa Mansard EasyCare</div><div class="subtitle">â‚¦20,000/yr â€¢ 250,000 coverage</div></div><div class="trailing"><button class="btn btn-primary btn-sm" onclick="showToast('ðŸ“‹ Enrollment started')">Enroll & Pay</button></div></div>
+                        <div class="card-title" style="font-size:14px; margin-bottom:6px;">📋 Available Schemes</div>
+                        <div class="list-item"><div class="avatar">🏛️</div><div class="content"><div class="title">Lagos State Health Scheme</div><div class="subtitle">₦15,000/yr • 500,000 coverage</div></div><div class="trailing"><button class="btn btn-primary btn-sm" onclick="showToast('📋 Enrollment started')">Enroll & Pay</button></div></div>
+                        <div class="list-item"><div class="avatar">🏢</div><div class="content"><div class="title">Axa Mansard EasyCare</div><div class="subtitle">₦20,000/yr • 250,000 coverage</div></div><div class="trailing"><button class="btn btn-primary btn-sm" onclick="showToast('📋 Enrollment started')">Enroll & Pay</button></div></div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-messages" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">ðŸ’¬ Messages</div>
-                    <button onclick="showToast('ðŸ“ New message composer opened')" style="background:none; border:none; font-size:16px; cursor:pointer; color:var(--primary); font-weight:600;">+ New</button>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">💬 Messages</div>
+                    <button onclick="showToast('📝 New message composer opened')" style="background:none; border:none; font-size:16px; cursor:pointer; color:var(--primary); font-weight:600;">+ New</button>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="card">
-                        <div class="list-item"><div class="avatar doctor-avatar">ðŸ‘¨â€âš•ï¸</div><div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Last: Your test results are ready â€¢ 2:30 PM</div></div><div class="trailing"><span class="badge badge-primary">2</span></div></div>
+                        <div class="list-item"><div class="avatar doctor-avatar">👨‍⚕️</div><div class="content"><div class="title">Dr. Adebayo Ogunlesi</div><div class="subtitle">Last: Your test results are ready • 2:30 PM</div></div><div class="trailing"><span class="badge badge-primary">2</span></div></div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-notifications" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">ðŸ”” Notifications</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">🔔 Notifications</div>
                     <button onclick="showToast('All marked as read')" style="background:none; border:none; font-size:12px; cursor:pointer; color:var(--primary); font-weight:600;">Mark all read</button>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="card">
-                        <div class="list-item" style="border-bottom:1px solid #E8ECF1;"><div class="avatar" style="background:var(--primary-light); color:var(--primary);">ðŸ’³</div><div class="content"><div class="title">Payment Received</div><div class="subtitle">â‚¦5,000 from John Doe</div></div><div class="trailing" style="font-size:10px;">2m ago</div></div>
-                        <div class="list-item" style="border-bottom:1px solid #E8ECF1;"><div class="avatar" style="background:var(--warning); color:white;">ðŸ“¦</div><div class="content"><div class="title">Low Stock Alert</div><div class="subtitle">Metformin 500mg is running low</div></div><div class="trailing" style="font-size:10px;">1h ago</div></div>
-                        <div class="list-item"><div class="avatar" style="background:var(--success); color:white;">ðŸ“‹</div><div class="content"><div class="title">Appointment Confirmed</div><div class="subtitle">Dr. Adebayo Ogunlesi â€¢ Today, 10:00 AM</div></div><div class="trailing" style="font-size:10px;">3h ago</div></div>
+                        <div class="list-item" style="border-bottom:1px solid #E8ECF1;"><div class="avatar" style="background:var(--primary-light); color:var(--primary);">💳</div><div class="content"><div class="title">Payment Received</div><div class="subtitle">₦5,000 from John Doe</div></div><div class="trailing" style="font-size:10px;">2m ago</div></div>
+                        <div class="list-item" style="border-bottom:1px solid #E8ECF1;"><div class="avatar" style="background:var(--warning); color:white;">📦</div><div class="content"><div class="title">Low Stock Alert</div><div class="subtitle">Metformin 500mg is running low</div></div><div class="trailing" style="font-size:10px;">1h ago</div></div>
+                        <div class="list-item"><div class="avatar" style="background:var(--success); color:white;">📋</div><div class="content"><div class="title">Appointment Confirmed</div><div class="subtitle">Dr. Adebayo Ogunlesi • Today, 10:00 AM</div></div><div class="trailing" style="font-size:10px;">3h ago</div></div>
                     </div>
                 </div>
             </div>
 
             <div id="patient-profile" class="screen">
-                <div class="status-bar"><span>9:41</span><span>ðŸ“¶ ðŸ”‹ 87%</span></div>
+                <div class="status-bar"><span>9:41</span><span>📶 🔋 87%</span></div>
                 <div class="app-bar">
-                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">â†</button>
-                    <div class="title">ðŸ‘¤ Profile</div>
+                    <button onclick="navigateTo('patient-home')" style="background:none; border:none; font-size:18px; cursor:pointer;">←</button>
+                    <div class="title">👤 Profile</div>
                     <button onclick="logout()" style="background:none; border:none; font-size:12px; cursor:pointer; color:var(--error); font-weight:600;">Logout</button>
                 </div>
                 <div style="padding:0 16px 80px 16px;">
                     <div class="card" style="text-align:center; padding:20px;">
                         <div class="avatar" id="profile-avatar-container" style="width:70px; height:70px; margin:0 auto 8px; font-size:28px; background:var(--primary-light); color:var(--primary); cursor:pointer; overflow:hidden; position:relative;" onclick="triggerAvatarUpload()">
                             <img id="profile-avatar-img" src="" style="width:100%; height:100%; object-fit:cover; display:none;">
-                            <span id="profile-avatar-placeholder">ðŸ‘¤</span>
+                            <span id="profile-avatar-placeholder">👤</span>
                         </div>
                         <input type="file" id="avatar-input" accept="image/*" style="display:none;" onchange="handleAvatarUpload(event)">
                         <h3 style="font-size:18px;" id="profile-name">User</h3>
                         <div style="color:var(--text-secondary); font-size:13px;" id="profile-email">user@example.com</div>
-                        <div style="display:flex; justify-content:center; gap:6px; margin-top:6px; flex-wrap:wrap;"><span class="badge badge-primary">Patient</span><span class="badge badge-success">âœ“ NHIS Active</span></div>
-                        <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="triggerAvatarUpload()">ðŸ“· Change Photo</button>
+                        <div style="display:flex; justify-content:center; gap:6px; margin-top:6px; flex-wrap:wrap;"><span class="badge badge-primary">Patient</span><span class="badge badge-success">✓ NHIS Active</span></div>
+                        <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="triggerAvatarUpload()">📷 Change Photo</button>
                     </div>
                     <div class="card">
-                        <div class="card-title" style="font-size:14px; margin-bottom:6px;">ðŸ“‹ Personal Information</div>
+                        <div class="card-title" style="font-size:14px; margin-bottom:6px;">📋 Personal Information</div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px;">
                             <div><div style="font-size:10px; color:var(--text-light);">Blood Group</div><div style="font-weight:500;">A+</div></div>
                             <div><div style="font-size:10px; color:var(--text-light);">Genotype</div><div style="font-weight:500;">AA</div></div>
@@ -896,12 +896,12 @@
             </div>
 
             <div class="bottom-nav" id="patient-nav">
-                <button class="active" onclick="navigateTo('patient-home')" data-screen="patient-home"><span class="nav-icon">ðŸ </span><span class="nav-label">Home</span></button>
-                <button onclick="navigateTo('patient-emergency')" data-screen="patient-emergency"><span class="nav-icon">ðŸš¨</span><span class="nav-label">Emergency</span><span class="badge">!</span></button>
-                <button onclick="navigateTo('patient-appointments')" data-screen="patient-appointments"><span class="nav-icon">ðŸ“…</span><span class="nav-label">Bookings</span></button>
-                <button onclick="navigateTo('patient-pharmacy')" data-screen="patient-pharmacy"><span class="nav-icon">ðŸ’Š</span><span class="nav-label">Pharmacy</span></button>
-                <button onclick="navigateTo('patient-providers')" data-screen="patient-providers"><span class="nav-icon">ðŸ¥</span><span class="nav-label">Providers</span></button>
-                <button onclick="navigateTo('patient-profile')" data-screen="patient-profile"><span class="nav-icon">ðŸ‘¤</span><span class="nav-label">Profile</span></button>
+                <button class="active" onclick="navigateTo('patient-home')" data-screen="patient-home"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></button>
+                <button onclick="navigateTo('patient-emergency')" data-screen="patient-emergency"><span class="nav-icon">🚨</span><span class="nav-label">Emergency</span><span class="badge">!</span></button>
+                <button onclick="navigateTo('patient-appointments')" data-screen="patient-appointments"><span class="nav-icon">📅</span><span class="nav-label">Bookings</span></button>
+                <button onclick="navigateTo('patient-pharmacy')" data-screen="patient-pharmacy"><span class="nav-icon">💊</span><span class="nav-label">Pharmacy</span></button>
+                <button onclick="navigateTo('patient-providers')" data-screen="patient-providers"><span class="nav-icon">🏥</span><span class="nav-label">Providers</span></button>
+                <button onclick="navigateTo('patient-profile')" data-screen="patient-profile"><span class="nav-icon">👤</span><span class="nav-label">Profile</span></button>
             </div>
 
         </div>
@@ -925,7 +925,7 @@
             const status = navigator.onLine;
             if (status !== isOnline) {
                 isOnline = status;
-                if (!isOnline) showToast('ðŸ“¶ You are offline. Changes will sync when connected.');
+                if (!isOnline) showToast('📶 You are offline. Changes will sync when connected.');
             }
         }
         window.addEventListener('online', checkNetwork);
@@ -972,7 +972,7 @@
         async function login() {
             const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value;
-            if (!email || !password) { showToast('âš ï¸ Please enter your email and password'); return; }
+            if (!email || !password) { showToast('⚠️ Please enter your email and password'); return; }
 
             const btn = document.getElementById('login-btn');
             const originalText = btn.textContent;
@@ -989,8 +989,8 @@
                 let data = {};
                 try { data = await response.json(); } catch (e) {}
 
-                // ðŸ” DEBUG LOG - watch for this in console
-                console.log('ðŸ” BACKEND LOGIN RESPONSE:', data);
+                // 🔍 DEBUG LOG - watch for this in console
+                console.log('🔍 BACKEND LOGIN RESPONSE:', data);
 
                 if (response.ok) {
                     if (data.token) localStorage.setItem('token', data.token);
@@ -998,20 +998,20 @@
                     else { currentUser = { email }; localStorage.setItem('user', JSON.stringify(currentUser)); }
                     applyUserToUI(currentUser);
 
-                    // ðŸ”‘ Convert role to lowercase for comparison (backend sends UPPERCASE)
+                    // 🔑 Convert role to lowercase for comparison (backend sends UPPERCASE)
                     const role = ((currentUser && currentUser.role) ? currentUser.role : userRole).toLowerCase();
                     if (role === 'patient') navigateTo('patient-home');
                     else if (role === 'doctor') navigateTo('doctor-home');
                     else if (role === 'pharmacy') navigateTo('pharmacy-home');
                     else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
                     else navigateTo('patient-home');
-                    showToast('Welcome back! ðŸ‘‹');
+                    showToast('Welcome back! 👋');
                 } else {
-                    showToast('âŒ ' + (data.message || data.error || 'Login failed. Check your credentials.'));
+                    showToast('❌ ' + (data.message || data.error || 'Login failed. Check your credentials.'));
                 }
             } catch (err) {
                 console.error('Login error:', err);
-                showToast('âŒ Network error. Please try again.');
+                showToast('❌ Network error. Please try again.');
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
@@ -1027,25 +1027,25 @@
             const password2 = document.getElementById('reg-password2').value;
 
             // Validation
-            if (!name || !email || !password) { showToast('âš ï¸ Please fill in all required fields'); return; }
-            if (password.length < 8) { showToast('âš ï¸ Password must be at least 8 characters'); return; }
-            if (password !== password2) { showToast('âš ï¸ Passwords do not match'); return; }
+            if (!name || !email || !password) { showToast('⚠️ Please fill in all required fields'); return; }
+            if (password.length < 8) { showToast('⚠️ Password must be at least 8 characters'); return; }
+            if (password !== password2) { showToast('⚠️ Passwords do not match'); return; }
 
             try {
                 const response = await fetch(AUTH_REGISTER_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // âš ï¸ Role must be UPPERCASE to match backend enum
+                    // ⚠️ Role must be UPPERCASE to match backend enum
                     body: JSON.stringify({ name, email, phone, password, role: 'PATIENT' })
                 });
 
                 let data = {};
                 try { data = await response.json(); } catch (e) {}
 
-                console.log('ðŸ” BACKEND REGISTER RESPONSE:', data);
+                console.log('🔍 BACKEND REGISTER RESPONSE:', data);
 
                 if (response.ok) {
-                    showToast('âœ… Account created! Please sign in.');
+                    showToast('✅ Account created! Please sign in.');
                     document.getElementById('registerForm').style.display = 'none';
                     document.getElementById('login-email').value = email;
                     document.getElementById('login-password').value = '';
@@ -1056,11 +1056,11 @@
                     document.getElementById('reg-password').value = '';
                     document.getElementById('reg-password2').value = '';
                 } else {
-                    showToast('âŒ ' + (data.message || data.error || 'Registration failed.'));
+                    showToast('❌ ' + (data.message || data.error || 'Registration failed.'));
                 }
             } catch (err) {
                 console.error('Registration error:', err);
-                showToast('âŒ Network error. Please try again.');
+                showToast('❌ Network error. Please try again.');
             }
         }
 
@@ -1077,9 +1077,9 @@
             const password2 = document.getElementById('inst-password2').value;
 
             // Validation
-            if (!name || !email || !license || !password) { showToast('âš ï¸ Please fill in all required fields'); return; }
-            if (password.length < 8) { showToast('âš ï¸ Password must be at least 8 characters'); return; }
-            if (password !== password2) { showToast('âš ï¸ Passwords do not match'); return; }
+            if (!name || !email || !license || !password) { showToast('⚠️ Please fill in all required fields'); return; }
+            if (password.length < 8) { showToast('⚠️ Password must be at least 8 characters'); return; }
+            if (password !== password2) { showToast('⚠️ Passwords do not match'); return; }
 
             try {
                 const response = await fetch(AUTH_REGISTER_ENDPOINT, {
@@ -1091,26 +1091,26 @@
                         institutionType: type,
                         state,
                         password,
-                        role: 'ADMIN' // âš ï¸ Uppercase to match backend enum
+                        role: 'ADMIN' // ⚠️ Uppercase to match backend enum
                     })
                 });
 
                 let data = {};
                 try { data = await response.json(); } catch (e) {}
 
-                console.log('ðŸ” BACKEND INSTITUTION REGISTER RESPONSE:', data);
+                console.log('🔍 BACKEND INSTITUTION REGISTER RESPONSE:', data);
 
                 if (response.ok) {
-                    showToast('âœ… Institution registered! Verification in progress.');
+                    showToast('✅ Institution registered! Verification in progress.');
                     document.getElementById('institution-register-form').style.display = 'none';
                     document.getElementById('login-email').value = email;
                     setTimeout(() => navigateTo('auth'), 1500);
                 } else {
-                    showToast('âŒ ' + (data.message || data.error || 'Registration failed.'));
+                    showToast('❌ ' + (data.message || data.error || 'Registration failed.'));
                 }
             } catch (err) {
                 console.error('Institution registration error:', err);
-                showToast('âŒ Network error. Please try again.');
+                showToast('❌ Network error. Please try again.');
             }
         }
 
@@ -1170,9 +1170,9 @@
             if (statusDiv) {
                 statusDiv.style.display = 'block';
                 statusDiv.scrollIntoView({ behavior: 'smooth' });
-                statusDiv.innerHTML = `<div class="card" style="border:2px solid var(--success);"><div style="display:flex; align-items:center; gap:10px;"><div style="font-size:28px;">âœ…</div><div><div style="font-weight:600; font-size:14px;">Emergency Requested!</div><div style="font-size:12px; color:var(--text-secondary);">ðŸš‘ Ambulance: AMB-2024-001</div><div style="font-size:12px; color:var(--text-secondary);">ðŸ‘¨â€âš•ï¸ Doctor: Dr. Adebayo</div><div style="font-size:12px; color:var(--text-secondary);">â±ï¸ ETA: 8 minutes</div></div></div><button class="btn btn-outline btn-block" onclick="cancelEmergency()" style="margin-top:8px; border-color:var(--error); color:var(--error); font-size:12px; padding:8px;">Cancel Emergency</button></div>`;
+                statusDiv.innerHTML = `<div class="card" style="border:2px solid var(--success);"><div style="display:flex; align-items:center; gap:10px;"><div style="font-size:28px;">✅</div><div><div style="font-weight:600; font-size:14px;">Emergency Requested!</div><div style="font-size:12px; color:var(--text-secondary);">🚑 Ambulance: AMB-2024-001</div><div style="font-size:12px; color:var(--text-secondary);">👨‍⚕️ Doctor: Dr. Adebayo</div><div style="font-size:12px; color:var(--text-secondary);">⏱️ ETA: 8 minutes</div></div></div><button class="btn btn-outline btn-block" onclick="cancelEmergency()" style="margin-top:8px; border-color:var(--error); color:var(--error); font-size:12px; padding:8px;">Cancel Emergency</button></div>`;
             }
-            showToast('ðŸš¨ Emergency request sent! Help is on the way.');
+            showToast('🚨 Emergency request sent! Help is on the way.');
         }
         function cancelEmergency() { if (confirm('Cancel emergency?')) { document.getElementById('emergencyStatus').style.display = 'none'; showToast('Emergency cancelled'); } }
         function callEmergency(num) { alert('Calling ' + num + '...'); }
@@ -1186,9 +1186,9 @@
             generateCalendar();
             document.getElementById('appointment-provider').textContent = providerName;
             document.getElementById('appointment-specialty').textContent = specialty;
-            document.getElementById('appointment-fee').textContent = 'â‚¦15,000';
-            document.getElementById('appointment-service-fee').textContent = 'â‚¦750';
-            document.getElementById('appointment-total').textContent = 'â‚¦15,750';
+            document.getElementById('appointment-fee').textContent = '₦15,000';
+            document.getElementById('appointment-service-fee').textContent = '₦750';
+            document.getElementById('appointment-total').textContent = '₦15,750';
         }
         function generateCalendar() {
             const grid = document.getElementById('calendar-grid');
@@ -1223,8 +1223,8 @@
         }
         function closeCalendar() { document.getElementById('calendar-view').style.display = 'none'; }
         function bookAppointment() {
-            if (!selectedProviderName || !selectedDate || !selectedTime) { showToast('âš ï¸ Complete all selections'); return; }
-            showToast('âœ… Appointment booked with ' + selectedProviderName + ' on ' + selectedDate + ' at ' + selectedTime);
+            if (!selectedProviderName || !selectedDate || !selectedTime) { showToast('⚠️ Complete all selections'); return; }
+            showToast('✅ Appointment booked with ' + selectedProviderName + ' on ' + selectedDate + ' at ' + selectedTime);
             closeCalendar();
         }
 
@@ -1234,10 +1234,10 @@
         function checkBloodEligibility() {
             const resultDiv = document.getElementById('blood-eligibility-result');
             resultDiv.style.display = 'block';
-            resultDiv.innerHTML = `<div class="eligibility-result success"><div class="icon">âœ…</div><div class="title">You are eligible to donate blood!</div><div class="details">Your blood type A+ (Genotype AA) is in high demand.</div></div><div class="card" style="margin-top:6px;"><div class="card-title" style="font-size:13px; margin-bottom:4px;">ðŸ“ Nearest Donation Centers</div><div class="donation-location"><div class="name">ðŸ¥ National Blood Service Center</div><div class="address">Lagos Island, Lagos</div><div class="distance">ðŸ“ 2.3 km</div></div><div class="donation-location"><div class="name">ðŸ¥ Red Cross Blood Bank</div><div class="address">Surulere, Lagos</div><div class="distance">ðŸ“ 4.1 km</div></div></div>`;
+            resultDiv.innerHTML = `<div class="eligibility-result success"><div class="icon">✅</div><div class="title">You are eligible to donate blood!</div><div class="details">Your blood type A+ (Genotype AA) is in high demand.</div></div><div class="card" style="margin-top:6px;"><div class="card-title" style="font-size:13px; margin-bottom:4px;">📍 Nearest Donation Centers</div><div class="donation-location"><div class="name">🏥 National Blood Service Center</div><div class="address">Lagos Island, Lagos</div><div class="distance">📍 2.3 km</div></div><div class="donation-location"><div class="name">🏥 Red Cross Blood Bank</div><div class="address">Surulere, Lagos</div><div class="distance">📍 4.1 km</div></div></div>`;
         }
 
-        function viewInsuranceClaims() { alert('ðŸ“„ Insurance Claims\n\n1. LUTH - Cardiology Visit\n   Claimed: â‚¦35,000\n   Status: Approved âœ…\n\n2. Reddington - Lab Tests\n   Claimed: â‚¦12,500\n   Status: Pending â³'); }
+        function viewInsuranceClaims() { alert('📄 Insurance Claims\n\n1. LUTH - Cardiology Visit\n   Claimed: ₦35,000\n   Status: Approved ✅\n\n2. Reddington - Lab Tests\n   Claimed: ₦12,500\n   Status: Pending ⏳'); }
 
         function showToast(msg) {
             const existing = document.querySelector('.toast-notification');
@@ -1263,7 +1263,7 @@
             setTimeout(() => {
                 if (token && storedUser) {
                     try { currentUser = JSON.parse(storedUser); } catch (e) { currentUser = null; }
-                    // ðŸ”‘ Convert role to lowercase for comparison (backend sends UPPERCASE)
+                    // 🔑 Convert role to lowercase for comparison (backend sends UPPERCASE)
                     const role = ((currentUser && currentUser.role) ? currentUser.role : 'patient').toLowerCase();
                     applyUserToUI(currentUser);
                     if (role === 'patient') navigateTo('patient-home');
@@ -1276,7 +1276,7 @@
                 }
             }, 2500);
             checkNetwork();
-            console.log('ðŸ¥ N-Health Loaded! Connected to backend at:', API_BASE_URL);
+            console.log('🏥 N-Health Loaded! Connected to backend at:', API_BASE_URL);
         });
 
         setInterval(checkNetwork, 10000);
