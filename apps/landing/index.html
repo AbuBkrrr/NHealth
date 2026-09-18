@@ -2921,15 +2921,15 @@
                     // Update profile display
                     applyUserToUI(currentUser);
 
-                    // Route to the correct dashboard based on role
-                    const role = (currentUser && currentUser.role) ? currentUser.role : userRole;
+                                        // Route to the correct dashboard based on role (backend sends UPPERCASE)
+                    const role = ((currentUser && currentUser.role) ? currentUser.role : userRole).toLowerCase();
                     if (role === 'patient') {
                         navigateTo('patient-home');
                     } else if (role === 'doctor') {
                         navigateTo('doctor-home');
                     } else if (role === 'pharmacy') {
                         navigateTo('pharmacy-home');
-                    } else if (role === 'institution') {
+                    } else if (role === 'institution' || role === 'admin') {
                         navigateTo('institution-home');
                     } else {
                         navigateTo('patient-home');
@@ -2958,8 +2958,8 @@
                 showToast('⚠️ Please fill in all required fields');
                 return;
             }
-            if (password.length < 6) {
-                showToast('⚠️ Password must be at least 6 characters');
+                        if (password.length < 8) {
+                showToast('⚠️ Password must be at least 8 characters');
                 return;
             }
 
@@ -2967,7 +2967,7 @@
                 const response = await fetch(AUTH_REGISTER_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, email, phone, password, role: 'patient' })
+                    body: JSON.stringify({ name, email, phone, password, role: 'PATIENT' })
                 });
 
                 let data = {};
@@ -3007,8 +3007,8 @@
                 showToast('⚠️ Passwords do not match');
                 return;
             }
-            if (password.length < 6) {
-                showToast('⚠️ Password must be at least 6 characters');
+                        if (password.length < 8) {
+                showToast('⚠️ Password must be at least 8 characters');
                 return;
             }
 
@@ -3022,7 +3022,7 @@
                         institutionType: type,
                         state,
                         password,
-                        role: 'institution'
+                        role: 'ADMIN'
                     })
                 });
 
@@ -3381,13 +3381,13 @@
                         currentUser = JSON.parse(storedUser);
                     } catch (e) { currentUser = null; }
 
-                    const role = (currentUser && currentUser.role) ? currentUser.role : 'patient';
+                                        const role = ((currentUser && currentUser.role) ? currentUser.role : 'patient').toLowerCase();
                     applyUserToUI(currentUser);
 
                     if (role === 'patient') navigateTo('patient-home');
                     else if (role === 'doctor') navigateTo('doctor-home');
                     else if (role === 'pharmacy') navigateTo('pharmacy-home');
-                    else if (role === 'institution') navigateTo('institution-home');
+                    else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
                     else navigateTo('patient-home');
                 } else {
                     navigateTo('auth');
