@@ -3,8 +3,8 @@
     "version":  "1.0.0",
     "private":  true,
     "scripts":  {
-                    "build":  "vite build",
-                    "start":  "serve -s dist -l tcp://0.0.0.0:${PORT:-3000}"
+                    "build":  "vite build \u0026\u0026 echo ok \u003e dist/health",
+                    "start":  "serve -s dist -l tcp://0.0.0.0:$PORT"
                 },
     "dependencies":  {
                          "serve":  "^14.2.6"
