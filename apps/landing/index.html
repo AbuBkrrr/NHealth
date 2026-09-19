@@ -421,14 +421,14 @@
                         <button class="btn btn-outline btn-sm" style="grid-column: span 2; margin-top: 4px;" onclick="showInitialRoleView()">← Back</button>
                     </div>
 
-                    <div id="provider-type-section" style="display:none !important;">
-                        <div class="provider-type-selector">
-                            <div class="type-card selected" onclick="selectProviderType('doctor')" id="ptype-doctor"><div class="icon">👨‍⚕️</div><div class="label">Doctor</div></div>
-                            <div class="type-card" onclick="selectProviderType('pharmacist')" id="ptype-pharmacist"><div class="icon">💊</div><div class="label">Pharmacy</div></div>
-                            <div class="type-card" onclick="selectProviderType('lab')" id="ptype-lab"><div class="icon">🔬</div><div class="label">Lab</div></div>
-                            <div class="type-card" onclick="selectProviderType('ambulance')" id="ptype-ambulance"><div class="icon">🚑</div><div class="label">Ambulance</div></div>
-                            <div class="type-card" onclick="selectProviderType('nurse')" id="ptype-nurse"><div class="icon">👩‍⚕️</div><div class="label">Nurse</div></div>
+                    <div id="provider-type-section" style="display:none;">
+                        <div class="form-group">
+                            <label id="specialty-label">Select Specialty <span style="color:var(--error);">*</span></label>
+                            <select id="specialty-select" onchange="onSpecialtyChange(this.value)">
+                                <option value="">-- Choose your specialty --</option>
+                            </select>
                         </div>
+                    </div>
                     </div>
 
                     <div id="institution-register-form" style="display:none;">
@@ -1029,12 +1029,92 @@
             document.getElementById('institution-register-form').style.display = 'none';
         }
 
+        
+        // ================================================
+        // PROVIDER SPECIALTIES
+        // ================================================
+        const SPECIALTIES = {
+            doctor: [
+                'Family Medicine', 'Internal Medicine', 'Pediatrics',
+                'Allergy & Immunology', 'Cardiology', 'Dermatology', 'Neurology', 'Psychiatry', 'Oncology',
+                'General Surgery', 'Orthopedic Surgery', 'Neurosurgery', 'Plastic Surgery',
+                'Anesthesiology', 'Emergency Medicine', 'Radiology', 'Pathology',
+                'Obstetrics & Gynecology (OB/GYN)', 'Ophthalmology', 'Otolaryngology (ENT)', 'Urology'
+            ],
+            nurse: [
+                'Licensed Practical/Vocational Nurse (LPN/LVN)',
+                'Registered Nurse (RN)',
+                'Nurse Practitioner (NP)',
+                'Clinical Nurse Specialist (CNS)',
+                'Certified Registered Nurse Anesthetist (CRNA)',
+                'Certified Nurse-Midwife (CNM)'
+            ],
+            pharmacy: [
+                'Pharmacist',
+                'Pharmacy Technician',
+                'Pharmacy Support Staff',
+                'Oncology Pharmacist',
+                'Pediatric Pharmacist',
+                'Critical Care Pharmacist',
+                'Industry Pharmacist'
+            ],
+            lab: [
+                'Phlebotomist',
+                'Medical Laboratory Technician (MLT)',
+                'Medical Laboratory Scientist / Technologist (MLS/MT)',
+                'Histotechnician / Histotechnologist',
+                'Cytotechnologist',
+                'Clinical Assistant',
+                "Pathologists' Assistant"
+            ],
+            ambulance: [
+                'Emergency Care Assistant / Support Worker',
+                'Emergency Medical Technician (EMT)',
+                'Paramedic',
+                'Advanced Paramedic Practitioner / Critical Care Paramedic',
+                'Emergency Medical Dispatcher'
+            ]
+        };
+
+        let selectedSpecialty = '';
+
+        function populateSpecialties(role) {
+            const select = document.getElementById('specialty-select');
+            const label = document.getElementById('specialty-label');
+            const section = document.getElementById('provider-type-section');
+            if (!select || !label || !section) return;
+
+            const list = SPECIALTIES[role];
+            if (!list) {
+                section.style.display = 'none';
+                return;
+            }
+
+            // Reset options
+            select.innerHTML = '<option value="">-- Choose your specialty --</option>';
+            list.forEach(function(s) {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                select.appendChild(opt);
+            });
+
+            // Set label to role name
+            const roleName = role.charAt(0).toUpperCase() + role.slice(1);
+            label.innerHTML = 'Select ' + roleName + ' Specialty <span style="color:var(--error);">*</span>';
+            section.style.display = 'block';
+        }
+
+        function onSpecialtyChange(value) {
+            selectedSpecialty = value;
+        }
+
         function selectRole(role) {
             userRole = role;
             document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
             document.getElementById('role-' + role).classList.add('selected');
             const providerTypes = ['doctor', 'pharmacy', 'lab', 'ambulance', 'nurse'];
-            document.getElementById('provider-type-section').style.display = providerTypes.includes(role) ? 'block' : 'none';
+            if (providerTypes.includes(role)) { populateSpecialties(role); } else { const s = document.getElementById('provider-type-section'); if (s) s.style.display = 'none'; }
             document.getElementById('institution-register-form').style.display = role === 'institution' ? 'block' : 'none';
             // Clear institution form when switching roles
             const btn = document.getElementById('login-btn');
@@ -1116,7 +1196,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     // ⚠️ Role must be UPPERCASE to match backend enum
-                    body: JSON.stringify({ name, email, phone, password, role: 'PATIENT' })
+                    body: JSON.stringify({ name, email, phone, password, role: (providerType ? providerType.toUpperCase() : 'PATIENT'), profile: selectedSpecialty ? { specialty: selectedSpecialty } : undefined })
                 });
 
                 let data = {};
