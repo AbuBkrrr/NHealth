@@ -242,8 +242,8 @@ export async function googleAuth(req: Request, res: Response) {
         data: {
           email,
           name: name || email.split('@')[0],
-          passwordHash: 'GOOGLE_OAUTH_',
-      avatarUrl: picture + Math.random().toString(36), // Random, can't be used for login
+          passwordHash: 'GOOGLE_OAUTH_' + Math.random().toString(36),
+      avatarUrl: picture,
           role: role as any,
         }
       });
@@ -255,7 +255,8 @@ export async function googleAuth(req: Request, res: Response) {
       }
     }
 
-    const token = signToken({ userId: user.id, role: user.role });
+    const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin }, env.jwtSecret, env.jwtExpiresIn);
+
     return res.json({
       token,
       user: { id: user.id, email: user.email, name: user.name, role: user.role }
