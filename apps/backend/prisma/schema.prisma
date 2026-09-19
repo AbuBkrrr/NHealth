@@ -168,6 +168,10 @@ model PatientProfile {
   donations         Donation[]
   insurancePolicies InsurancePolicy[]
   nurseRequests     NurseRequest[]
+  height           Float?
+  weight           Float?
+  bloodTypeChanges Int      @default(0)
+  genotypeChanges  Int      @default(0)
 }
 
 model DoctorProfile {
