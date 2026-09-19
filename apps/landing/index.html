@@ -1378,6 +1378,19 @@
                     </div>
 
                     
+                    <div id="signin-role-selector" class="auth-role-selector" style="margin-bottom: 16px;">
+                        <div class="role-card selected" data-signin-role="PATIENT" onclick="window.selectSigninRole('PATIENT')">
+                            <div class="icon">👤</div>
+                            <div class="name">Patient</div>
+                            <div class="desc">Access healthcare services</div>
+                        </div>
+                        <div class="role-card" data-signin-role="PROVIDER" onclick="window.selectSigninRole('PROVIDER')">
+                            <div class="icon">🏥</div>
+                            <div class="name">Provider</div>
+                            <div class="desc">Doctor, Pharmacy, Lab & more</div>
+                        </div>
+                    </div>
+
                     <div style="margin-bottom: 16px;">
                         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
                             <div style="flex: 1; height: 1px; background: #E8ECF1;"></div>
@@ -2898,7 +2911,7 @@
                 const response = await fetch(AUTH_LOGIN_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ email, password, role: (window.selectedProviderRole || 'PATIENT').toUpperCase() })
                 });
 
                 let data = {};
@@ -3616,5 +3629,6 @@
     <script src="google-auth.js"></script>
     <script src="provider-flow.js"></script>
     <script src="auth-clean.js"></script>
+    <script src="final-override.js"></script>
 </body>
 </html>
