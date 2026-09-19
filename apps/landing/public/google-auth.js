@@ -1,14 +1,34 @@
 // ================================================
 // N-Health Google Sign-In (external module)
+// Supports all roles: patient, doctor, pharmacy, lab, ambulance, nurse, institution
 // ================================================
 var GOOGLE_CLIENT_ID = '753267520396-ucmfbovnvhu42mbc4elgdufl3k52m1fc.apps.googleusercontent.com';
 
-// Called when user clicks "Continue with Google"
+// ================================================
+// SHARED ROUTING HELPER
+// ================================================
+function routeToDashboard(role) {
+  var r = String(role || 'PATIENT').toLowerCase();
+  console.log('🔍 GOOGLE ROUTING to:', r);
+  if (r === 'doctor') navigateTo('doctor-home');
+  else if (r === 'pharmacy') navigateTo('pharmacy-home');
+  else if (r === 'lab') navigateTo('lab-home');
+  else if (r === 'ambulance') navigateTo('ambulance-home');
+  else if (r === 'nurse') navigateTo('nurse-home');
+  else if (r === 'institution' || r === 'admin') navigateTo('institution-home');
+  else navigateTo('patient-home');
+}
+
+// ================================================
+// Called when user clicks the fallback Google button
+// ================================================
 function signInWithGoogleFallback() {
   if (typeof google === 'undefined' || !google.accounts) {
     showToast('Google is still loading. Please try again.');
     return;
   }
+
+  var requestedRole = (window.selectedProviderRole || 'PATIENT').toUpperCase();
 
   // Try One Tap prompt first
   try {
@@ -40,7 +60,6 @@ function signInWithGoogleFallback() {
         .then(function(r) { return r.json(); })
         .then(function(userInfo) {
           console.log('Google user info:', userInfo);
-          // Send userInfo to backend
           return fetch(API_BASE_URL + '/api/auth/google-userinfo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -48,7 +67,7 @@ function signInWithGoogleFallback() {
               email: userInfo.email,
               name: userInfo.name,
               picture: userInfo.picture,
-              role: 'PATIENT'
+              role: (window.selectedProviderRole || 'PATIENT').toUpperCase()
             })
           });
         })
@@ -61,11 +80,7 @@ function signInWithGoogleFallback() {
             currentUser = data.user;
             if (typeof applyUserToUI === 'function') applyUserToUI(currentUser);
             showToast('Welcome, ' + (data.user.name || data.user.email) + '!');
-            var role = ((data.user && data.user.role) ? data.user.role : 'PATIENT').toLowerCase();
-            if (role === 'doctor') navigateTo('doctor-home');
-            else if (role === 'pharmacy') navigateTo('pharmacy-home');
-            else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
-            else navigateTo('patient-home');
+            routeToDashboard(data.user.role);
           } else {
             showToast((data && (data.message || data.error)) || 'Google sign-in failed');
           }
@@ -76,14 +91,16 @@ function signInWithGoogleFallback() {
         });
       }
     });
-    client.requestAccessToken();
+    client.requestToken();
   } catch (err) {
     console.error('Google fallback error:', err);
     showToast('Google Sign-In unavailable');
   }
 }
 
-// Handles the credential from One Tap
+// ================================================
+// Handles the credential from Google's renderButton (primary path)
+// ================================================
 async function handleGoogleCredential(response) {
   if (!response || !response.credential) {
     showToast('Google Sign-In cancelled');
@@ -91,10 +108,11 @@ async function handleGoogleCredential(response) {
   }
   showToast('Verifying with Google...');
   try {
+    var requestedRole = (window.selectedProviderRole || 'PATIENT').toUpperCase();
     var res = await fetch(API_BASE_URL + '/api/auth/google', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: response.credential, role: 'PATIENT' })
+      body: JSON.stringify({ credential: response.credential, role: requestedRole })
     });
     var data = await res.json();
     console.log('GOOGLE AUTH RESPONSE:', data);
@@ -106,11 +124,7 @@ async function handleGoogleCredential(response) {
       }
       if (typeof applyUserToUI === 'function') applyUserToUI(currentUser);
       showToast('Welcome, ' + (currentUser.name || currentUser.email) + '!');
-      var role = ((currentUser && currentUser.role) ? currentUser.role : 'PATIENT').toLowerCase();
-      if (role === 'doctor') navigateTo('doctor-home');
-      else if (role === 'pharmacy') navigateTo('pharmacy-home');
-      else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
-      else navigateTo('patient-home');
+      routeToDashboard(currentUser.role);
     } else {
       showToast(data.message || data.error || 'Google sign-in failed');
     }
@@ -120,7 +134,9 @@ async function handleGoogleCredential(response) {
   }
 }
 
+// ================================================
 // Auto-render Google button in the container when page loads
+// ================================================
 function initGoogleSignIn() {
   if (typeof google === 'undefined' || !google.accounts) {
     setTimeout(initGoogleSignIn, 500);
@@ -145,7 +161,6 @@ function initGoogleSignIn() {
       width: 340,
     });
     console.log('✅ Google Sign-In button rendered');
-    // Hide the fallback button since Google's button is now in place
     var fb = document.getElementById('btn-google-fallback');
     if (fb) fb.style.display = 'none';
   } catch (err) {
