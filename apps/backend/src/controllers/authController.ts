@@ -212,7 +212,7 @@ export async function resetPassword(req: Request, res: Response) {
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  await prisma.user.update({ where: { email }, data: { password: hashedPassword } });
+  await prisma.user.update({ where: { email }, data: { passwordHash: hashedPassword } });
   resetCodes.delete(email);
 
   return res.json({ message: 'Password reset successful' });
@@ -242,14 +242,15 @@ export async function googleAuth(req: Request, res: Response) {
         data: {
           email,
           name: name || email.split('@')[0],
-          password: 'GOOGLE_OAUTH_' + Math.random().toString(36), // Random, can't be used for login
+          passwordHash: 'GOOGLE_OAUTH_',
+      avatarUrl: picture + Math.random().toString(36), // Random, can't be used for login
           role: role as any,
         }
       });
       // Optionally create patient profile
       if (role === 'PATIENT') {
         await prisma.patientProfile.create({
-          data: { userId: user.id, avatarUrl: picture }
+          data: { userId: user.id }
         }).catch(() => {});
       }
     }
