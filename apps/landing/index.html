@@ -1159,12 +1159,24 @@
                     applyUserToUI(currentUser);
 
                     // 🔑 Convert role to lowercase for comparison (backend sends UPPERCASE)
-                    const role = ((currentUser && currentUser.role) ? currentUser.role : userRole).toLowerCase();
-                    if (role === 'patient') navigateTo('patient-home');
-                    else if (role === 'doctor') navigateTo('doctor-home');
-                    else if (role === 'pharmacy') navigateTo('pharmacy-home');
-                    else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
-                    else navigateTo('patient-home');
+                    applyUserToUI(currentUser);
+
+// Route based on role(s)
+const roles = (currentUser && currentUser.roles && currentUser.roles.length)
+  ? currentUser.roles
+  : [(currentUser && currentUser.role) ? currentUser.role : 'PATIENT'];
+
+if (roles.length > 1) {
+  // Show chooser
+  showRoleChooser(roles, currentUser);
+} else {
+  // Single role — go straight to dashboard
+  const role = roles[0].toLowerCase();
+  if (role === 'doctor') navigateTo('doctor-home');
+  else if (role === 'pharmacy') navigateTo('pharmacy-home');
+  else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
+  else navigateTo('patient-home');
+}
                     showToast('Welcome back! 👋');
                 } else {
                     showToast('❌ ' + (data.message || data.error || 'Login failed. Check your credentials.'));
@@ -1424,13 +1436,21 @@
                 if (token && storedUser) {
                     try { currentUser = JSON.parse(storedUser); } catch (e) { currentUser = null; }
                     // 🔑 Convert role to lowercase for comparison (backend sends UPPERCASE)
-                    const role = ((currentUser && currentUser.role) ? currentUser.role : 'patient').toLowerCase();
-                    applyUserToUI(currentUser);
-                    if (role === 'patient') navigateTo('patient-home');
-                    else if (role === 'doctor') navigateTo('doctor-home');
-                    else if (role === 'pharmacy') navigateTo('pharmacy-home');
-                    else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
-                    else navigateTo('patient-home');
+                    const roles = (currentUser && currentUser.roles && currentUser.roles.length)
+  ? currentUser.roles
+  : [(currentUser && currentUser.role) ? currentUser.role : 'PATIENT'];
+
+if (roles.length > 1) {
+  // Show chooser
+  showRoleChooser(roles, currentUser);
+} else {
+  // Single role — go straight to dashboard
+  const role = roles[0].toLowerCase();
+  if (role === 'doctor') navigateTo('doctor-home');
+  else if (role === 'pharmacy') navigateTo('pharmacy-home');
+  else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
+  else navigateTo('patient-home');
+}
                 } else {
                     navigateTo('auth');
                 }
@@ -1444,10 +1464,10 @@
         // GOOGLE SIGN-IN
         // ================================================
         // TODO: Replace with your actual Google Client ID from console.cloud.google.com
-        const GOOGLE_CLIENT_ID =753267520396-ucmfbovnvhu42mbc4elgdufl3k52m1fc.apps.googleusercontent.com;
+        const GOOGLE_CLIENT_ID ='753267520396-ucmfbovnvhu42mbc4elgdufl3k52m1fc.apps.googleusercontent.com';
 
         function signInWithGoogle() {
-            if (GOOGLE_CLIENT_ID === 753267520396-ucmfbovnvhu42mbc4elgdufl3k52m1fc.apps.googleusercontent.com) {
+            if (GOOGLE_CLIENT_ID === '753267520396-ucmfbovnvhu42mbc4elgdufl3k52m1fc.apps.googleusercontent.com') {
                 showToast('⚠️ Google Sign-In not configured. Add your Client ID.');
                 return;
             }
