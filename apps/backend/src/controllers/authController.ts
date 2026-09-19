@@ -16,13 +16,13 @@ const registerSchema = z.object({
   name: z.string().min(1),
   phone: z.string().optional(),
   role: z.nativeEnum(Role),
-  // Role-specific fields, validated loosely here and used to create the profile row.
   profile: z.record(z.any()).optional(),
 });
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
+  role: z.nativeEnum(Role).optional(),
 });
 
 /** Creates the role-specific profile row for a freshly registered user. */
@@ -47,7 +47,6 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
         data: {
           userId,
           specialty: profile.specialty ?? 'General Practice',
-          
           licenseNumber: profile.licenseNumber ?? '',
           hospital: profile.hospital,
           bio: profile.bio,
@@ -94,12 +93,10 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
           userId,
           licenseNumber: profile.licenseNumber ?? '',
           specialty: profile.specialty,
-          
           hourlyRate: profile.hourlyRate ?? 0,
         },
       });
     case 'ADMIN':
-      // Admins have no role-specific profile table - just the User row itself.
       return undefined;
   }
 }
@@ -132,6 +129,9 @@ async function getUserWithProfiles(where: any) {
   });
 }
 
+// ============================================================
+// REGISTER
+// ============================================================
 export async function register(req: Request, res: Response) {
   const data = registerSchema.parse(req.body);
 
@@ -144,13 +144,11 @@ export async function register(req: Request, res: Response) {
   let user;
 
   if (existing) {
-    // Email exists — verify password first
     const valid = await bcrypt.compare(String(data.password), existing.passwordHash);
     if (!valid) {
       throw ApiError.conflict('This email is registered. Sign in instead, or use a different email.');
     }
 
-    // Check if the requested role profile already exists
     const requestedProfile =
       data.role === 'PATIENT' ? existing.patientProfile :
       data.role === 'DOCTOR' ? existing.doctorProfile :
@@ -163,7 +161,6 @@ export async function register(req: Request, res: Response) {
       throw ApiError.conflict('You already have a ' + data.role.toLowerCase() + ' account with this email.');
     }
 
-    // Business rule: patient + 1 provider per email
     const hasPatient = !!existing.patientProfile;
     const hasProvider = !!(
       existing.doctorProfile || existing.pharmacyProfile ||
@@ -176,15 +173,10 @@ export async function register(req: Request, res: Response) {
     if (data.role !== 'PATIENT' && hasProvider) {
       throw ApiError.conflict('You already have a provider profile. Only one provider role allowed per email.');
     }
-    if (data.role !== 'PATIENT' && !hasPatient) {
-      // Optional: enforce patient-first, or just allow. Currently allowed.
-    }
 
-    // Attach the new profile to the existing user
     await createRoleProfile(existing.id, data.role, data.profile ?? {});
     user = existing;
   } else {
-    // New email — create fresh user
     const passwordHash = await bcrypt.hash(String(data.password), 12);
     user = await prisma.user.create({
       data: {
@@ -198,7 +190,6 @@ export async function register(req: Request, res: Response) {
     await createRoleProfile(user.id, data.role, data.profile ?? {});
   }
 
-  // Refetch with all profiles to build roles array
   const fullUser = await getUserWithProfiles({ id: user.id });
   const roles = buildRolesArray(fullUser!);
 
@@ -223,6 +214,9 @@ export async function register(req: Request, res: Response) {
   });
 }
 
+// ============================================================
+// LOGIN
+// ============================================================
 export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
 
@@ -236,8 +230,16 @@ export async function login(req: Request, res: Response) {
 
   const roles = buildRolesArray(user);
 
+  // Use the role the client requested (if they have that profile), else fall back to their primary
+  let activeRole = user.role;
+  if (data.role && roles.includes(data.role)) {
+    activeRole = data.role as any;
+  } else if (roles.length > 0 && !roles.includes(user.role)) {
+    activeRole = roles[0] as any;
+  }
+
   const token = signToken(
-    { userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin },
+    { userId: user.id, role: activeRole, isSuperAdmin: user.isSuperAdmin },
     env.jwtSecret,
     env.jwtExpiresIn
   );
@@ -248,7 +250,7 @@ export async function login(req: Request, res: Response) {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      role: activeRole,
       roles,
       isSuperAdmin: user.isSuperAdmin,
       avatarUrl: user.avatarUrl,
@@ -257,6 +259,9 @@ export async function login(req: Request, res: Response) {
   });
 }
 
+// ============================================================
+// ME
+// ============================================================
 export async function me(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
@@ -275,7 +280,9 @@ export async function me(req: Request, res: Response) {
   res.json({ ...safeUser, roles });
 }
 
-/** Switch active role for the current user (returns a new token). */
+// ============================================================
+// SWITCH ROLE
+// ============================================================
 export async function switchRole(req: Request, res: Response) {
   const userId = req.user!.userId;
   const { role } = req.body;
@@ -310,11 +317,9 @@ export async function switchRole(req: Request, res: Response) {
   });
 }
 
-
 // ============================================================
 // PASSWORD RESET
 // ============================================================
-// Store OTPs in memory (use Redis in production)
 const resetCodes = new Map<string, { code: string; expiresAt: number }>();
 
 export async function forgotPassword(req: Request, res: Response) {
@@ -323,7 +328,6 @@ export async function forgotPassword(req: Request, res: Response) {
 
   const user = await prisma.user.findUnique({ where: { email } });
 
-  // Always return 200 to prevent user enumeration
   if (!user) {
     return res.json({ message: 'If that email exists, a code has been sent.' });
   }
@@ -331,7 +335,6 @@ export async function forgotPassword(req: Request, res: Response) {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   resetCodes.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
 
-  // TODO: Send email with the code
   console.log('\u{1F4E7} Password reset code for ' + email + ': ' + code);
 
   return res.json({ message: 'If that email exists, a code has been sent.' });
@@ -366,7 +369,6 @@ export async function resetPassword(req: Request, res: Response) {
   return res.json({ message: 'Password reset successful' });
 }
 
-
 // ============================================================
 // GOOGLE SIGN-IN
 // ============================================================
@@ -389,7 +391,6 @@ export async function googleAuth(req: Request, res: Response) {
     let user = await getUserWithProfiles({ email });
 
     if (!user) {
-      // Auto-register with Google
       const createdUser = await prisma.user.create({
         data: {
           email,
@@ -400,7 +401,6 @@ export async function googleAuth(req: Request, res: Response) {
         },
       });
 
-      // Create the corresponding profile
       await createRoleProfile(createdUser.id, role as any, {}).catch(() => {});
 
       user = await getUserWithProfiles({ id: createdUser.id });
