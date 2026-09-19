@@ -94,7 +94,7 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
           userId,
           licenseNumber: profile.licenseNumber ?? '',
           specialty: profile.specialty,
-          specialtyId: profile.specialtyId,   
+          specialtyId: profile.specialtyId,
           hourlyRate: profile.hourlyRate ?? 0,
         },
       });
@@ -104,6 +104,34 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
   }
 }
 
+/** Returns a list of role strings the user actually has profiles for. */
+function buildRolesArray(u: any): string[] {
+  const roles: string[] = [];
+  if (u.patientProfile) roles.push('PATIENT');
+  if (u.doctorProfile) roles.push('DOCTOR');
+  if (u.pharmacyProfile) roles.push('PHARMACY');
+  if (u.labProfile) roles.push('LAB');
+  if (u.ambulanceProfile) roles.push('AMBULANCE');
+  if (u.nurseProfile) roles.push('NURSE');
+  if (u.isSuperAdmin || u.role === 'ADMIN') roles.push('ADMIN');
+  return roles;
+}
+
+/** Helper: fetch a user with all role profiles attached. */
+async function getUserWithProfiles(where: any) {
+  return prisma.user.findUnique({
+    where,
+    include: {
+      patientProfile: true,
+      doctorProfile: true,
+      pharmacyProfile: true,
+      labProfile: true,
+      ambulanceProfile: true,
+      nurseProfile: true,
+    },
+  });
+}
+
 export async function register(req: Request, res: Response) {
   const data = registerSchema.parse(req.body);
 
@@ -111,34 +139,94 @@ export async function register(req: Request, res: Response) {
     throw ApiError.forbidden('Admin accounts cannot self-register - ask a super admin to create one.');
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: data.email } });
-  if (existing) throw ApiError.conflict('Email already registered. Please login to continue.');
+  const existing = await getUserWithProfiles({ email: data.email });
 
-  const passwordHash = await bcrypt.hash(String(data.password), 12);
+  let user;
 
-  const user = await prisma.user.create({
-    data: {
-      email: data.email,
-      passwordHash,
-      name: data.name,
-      phone: data.phone,
-      role: data.role,
-    },
-  });
+  if (existing) {
+    // Email exists — verify password first
+    const valid = await bcrypt.compare(String(data.password), existing.passwordHash);
+    if (!valid) {
+      throw ApiError.conflict('This email is registered. Sign in instead, or use a different email.');
+    }
 
-  await createRoleProfile(user.id, data.role, data.profile ?? {});
+    // Check if the requested role profile already exists
+    const requestedProfile =
+      data.role === 'PATIENT' ? existing.patientProfile :
+      data.role === 'DOCTOR' ? existing.doctorProfile :
+      data.role === 'PHARMACY' ? existing.pharmacyProfile :
+      data.role === 'LAB' ? existing.labProfile :
+      data.role === 'AMBULANCE' ? existing.ambulanceProfile :
+      data.role === 'NURSE' ? existing.nurseProfile : null;
 
-  const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin }, env.jwtSecret, env.jwtExpiresIn);
+    if (requestedProfile) {
+      throw ApiError.conflict('You already have a ' + data.role.toLowerCase() + ' account with this email.');
+    }
+
+    // Business rule: patient + 1 provider per email
+    const hasPatient = !!existing.patientProfile;
+    const hasProvider = !!(
+      existing.doctorProfile || existing.pharmacyProfile ||
+      existing.labProfile || existing.ambulanceProfile || existing.nurseProfile
+    );
+
+    if (data.role === 'PATIENT' && hasPatient) {
+      throw ApiError.conflict('Patient profile already exists for this email.');
+    }
+    if (data.role !== 'PATIENT' && hasProvider) {
+      throw ApiError.conflict('You already have a provider profile. Only one provider role allowed per email.');
+    }
+    if (data.role !== 'PATIENT' && !hasPatient) {
+      // Optional: enforce patient-first, or just allow. Currently allowed.
+    }
+
+    // Attach the new profile to the existing user
+    await createRoleProfile(existing.id, data.role, data.profile ?? {});
+    user = existing;
+  } else {
+    // New email — create fresh user
+    const passwordHash = await bcrypt.hash(String(data.password), 12);
+    user = await prisma.user.create({
+      data: {
+        email: data.email,
+        passwordHash,
+        name: data.name,
+        phone: data.phone,
+        role: data.role,
+      },
+    });
+    await createRoleProfile(user.id, data.role, data.profile ?? {});
+  }
+
+  // Refetch with all profiles to build roles array
+  const fullUser = await getUserWithProfiles({ id: user.id });
+  const roles = buildRolesArray(fullUser!);
+
+  const token = signToken(
+    { userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin },
+    env.jwtSecret,
+    env.jwtExpiresIn
+  );
+
   res.status(201).json({
     token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      roles,
+      isSuperAdmin: user.isSuperAdmin,
+      avatarUrl: user.avatarUrl,
+      phone: user.phone,
+    },
   });
 }
 
 export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
 
-  const user = await prisma.user.findUnique({ where: { email: data.email } });
+  const user = await getUserWithProfiles({ email: data.email });
   if (!user) throw ApiError.unauthorized('Invalid email or password');
 
   const valid = await bcrypt.compare(String(data.password), user.passwordHash);
@@ -146,10 +234,26 @@ export async function login(req: Request, res: Response) {
 
   if (!user.isActive) throw ApiError.forbidden('This account has been deactivated');
 
-  const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin }, env.jwtSecret, env.jwtExpiresIn);
+  const roles = buildRolesArray(user);
+
+  const token = signToken(
+    { userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin },
+    env.jwtSecret,
+    env.jwtExpiresIn
+  );
+
   res.json({
     token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, isSuperAdmin: user.isSuperAdmin, avatarUrl: user.avatarUrl, phone: user.phone },
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      roles,
+      isSuperAdmin: user.isSuperAdmin,
+      avatarUrl: user.avatarUrl,
+      phone: user.phone,
+    },
   });
 }
 
@@ -158,14 +262,58 @@ export async function me(req: Request, res: Response) {
     where: { id: req.user!.userId },
     include: {
       patientProfile: true,
+      doctorProfile: true,
+      pharmacyProfile: true,
+      labProfile: true,
+      ambulanceProfile: true,
+      nurseProfile: true,
     },
   });
   if (!user) throw ApiError.notFound('User not found');
   const { passwordHash, ...safeUser } = user;
-  res.json(safeUser);
+  const roles = buildRolesArray(user);
+  res.json({ ...safeUser, roles });
+}
+
+/** Switch active role for the current user (returns a new token). */
+export async function switchRole(req: Request, res: Response) {
+  const userId = req.user!.userId;
+  const { role } = req.body;
+  if (!role) return res.status(400).json({ error: 'Role is required' });
+
+  const user = await getUserWithProfiles({ id: userId });
+  if (!user) throw ApiError.notFound('User not found');
+
+  const roles = buildRolesArray(user);
+  if (!roles.includes(role)) {
+    return res.status(403).json({ error: 'You do not have a ' + role.toLowerCase() + ' profile.' });
+  }
+
+  const token = signToken(
+    { userId: user.id, role: role as any, isSuperAdmin: user.isSuperAdmin },
+    env.jwtSecret,
+    env.jwtExpiresIn
+  );
+
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role,
+      roles,
+      isSuperAdmin: user.isSuperAdmin,
+      avatarUrl: user.avatarUrl,
+      phone: user.phone,
+    },
+  });
 }
 
 
+// ============================================================
+// PASSWORD RESET
+// ============================================================
 // Store OTPs in memory (use Redis in production)
 const resetCodes = new Map<string, { code: string; expiresAt: number }>();
 
@@ -184,7 +332,7 @@ export async function forgotPassword(req: Request, res: Response) {
   resetCodes.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
 
   // TODO: Send email with the code
-  console.log(`\u{1F4E7} Password reset code for ${email}: ${code}`);
+  console.log('\u{1F4E7} Password reset code for ' + email + ': ' + code);
 
   return res.json({ message: 'If that email exists, a code has been sent.' });
 }
@@ -218,6 +366,10 @@ export async function resetPassword(req: Request, res: Response) {
   return res.json({ message: 'Password reset successful' });
 }
 
+
+// ============================================================
+// GOOGLE SIGN-IN
+// ============================================================
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export async function googleAuth(req: Request, res: Response) {
@@ -234,32 +386,45 @@ export async function googleAuth(req: Request, res: Response) {
 
     const { email, name, picture } = payload;
 
-    let user = await prisma.user.findUnique({ where: { email } });
+    let user = await getUserWithProfiles({ email });
 
     if (!user) {
       // Auto-register with Google
-      user = await prisma.user.create({
+      const createdUser = await prisma.user.create({
         data: {
           email,
           name: name || email.split('@')[0],
           passwordHash: 'GOOGLE_OAUTH_' + Math.random().toString(36),
-      avatarUrl: picture,
+          avatarUrl: picture,
           role: role as any,
-        }
+        },
       });
-      // Optionally create patient profile
-      if (role === 'PATIENT') {
-        await prisma.patientProfile.create({
-          data: { userId: user.id }
-        }).catch(() => {});
-      }
+
+      // Create the corresponding profile
+      await createRoleProfile(createdUser.id, role as any, {}).catch(() => {});
+
+      user = await getUserWithProfiles({ id: createdUser.id });
     }
 
-    const token = signToken({ userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin }, env.jwtSecret, env.jwtExpiresIn);
+    const roles = buildRolesArray(user!);
+    const token = signToken(
+      { userId: user!.id, role: user!.role, isSuperAdmin: user!.isSuperAdmin },
+      env.jwtSecret,
+      env.jwtExpiresIn
+    );
 
     return res.json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role }
+      user: {
+        id: user!.id,
+        email: user!.email,
+        name: user!.name,
+        role: user!.role,
+        roles,
+        isSuperAdmin: user!.isSuperAdmin,
+        avatarUrl: user!.avatarUrl,
+        phone: user!.phone,
+      },
     });
   } catch (err) {
     console.error('Google auth error:', err);
