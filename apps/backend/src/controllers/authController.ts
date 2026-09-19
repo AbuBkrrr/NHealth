@@ -7,6 +7,7 @@ import { signToken } from '../utils/jwt';
 import { ApiError } from '../utils/ApiError';
 import { Role } from '@nhealth/shared-types';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 
 
 const registerSchema = z.object({
@@ -215,4 +216,51 @@ export async function resetPassword(req: Request, res: Response) {
   resetCodes.delete(email);
 
   return res.json({ message: 'Password reset successful' });
+}
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+export async function googleAuth(req: Request, res: Response) {
+  const { credential, role = 'PATIENT' } = req.body;
+  if (!credential) return res.status(400).json({ error: 'Missing credential' });
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) return res.status(400).json({ error: 'Invalid token' });
+
+    const { email, name, picture } = payload;
+
+    let user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      // Auto-register with Google
+      user = await prisma.user.create({
+        data: {
+          email,
+          name: name || email.split('@')[0],
+          password: 'GOOGLE_OAUTH_' + Math.random().toString(36), // Random, can't be used for login
+          role: role as any,
+        }
+      });
+      // Optionally create patient profile
+      if (role === 'PATIENT') {
+        await prisma.patientProfile.create({
+          data: { userId: user.id, avatarUrl: picture }
+        }).catch(() => {});
+      }
+    }
+
+    const token = signToken({ userId: user.id, role: user.role });
+    return res.json({
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role }
+    });
+  } catch (err) {
+    console.error('Google auth error:', err);
+    return res.status(401).json({ error: 'Google authentication failed' });
+  }
 }
