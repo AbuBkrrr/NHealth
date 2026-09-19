@@ -1509,7 +1509,8 @@ if (roles.length > 1) {
                     }
                     applyUserToUI(currentUser);
                     showToast('✅ Welcome, ' + (currentUser.name || currentUser.email) + '!');
-                    const role = ((currentUser && currentUser.role) ? currentUser.role : 'patient').toLowerCase();
+                    var userRoles = (currentUser && currentUser.roles && currentUser.roles.length) ? currentUser.roles : [(currentUser && currentUser.role) ? currentUser.role : 'PATIENT'];
+                    var role = String(userRoles[0]).toLowerCase();
                     if (role === 'doctor') navigateTo('doctor-home');
                     else if (role === 'pharmacy') navigateTo('pharmacy-home');
                     else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
@@ -1527,5 +1528,6 @@ if (roles.length > 1) {
     </script>
     <script src="ui-fixes.js"></script>
     <script src="forgot-password.js"></script>
+    <script src="role-chooser.js"></script>
 </body>
 </html>
