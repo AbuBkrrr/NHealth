@@ -2990,7 +2990,7 @@
                 const response = await fetch(AUTH_REGISTER_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, email, phone, password, role: 'patient' })
+                    body: JSON.stringify({ name, email, phone, password, role: (window.selectedProviderRole || 'PATIENT').toUpperCase(), profile: window.selectedSpecialty ? { specialty: window.selectedSpecialty } : undefined })
                 });
 
                 let data = {};
