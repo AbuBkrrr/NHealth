@@ -22,7 +22,7 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
-  role: z.nativeEnum(Role).optional(),
+  role: z.string().optional(),
 });
 
 /** Creates the role-specific profile row for a freshly registered user. */
@@ -230,10 +230,23 @@ export async function login(req: Request, res: Response) {
 
   const roles = buildRolesArray(user);
 
-  // Use the role the client requested (if they have that profile), else fall back to their primary
+  // Resolve the requested login role
   let activeRole = user.role;
-  if (data.role && roles.includes(data.role)) {
-    activeRole = data.role as any;
+  if (data.role) {
+    const requested = String(data.role).toUpperCase();
+
+    if (requested === 'PROVIDER') {
+      // Pick the user's first provider role (DOCTOR, PHARMACY, LAB, AMBULANCE, NURSE)
+      const providerRoles = ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE'];
+      const found = roles.find(r => providerRoles.includes(r));
+      if (found) {
+        activeRole = found as any;
+      } else {
+        throw ApiError.forbidden('This account has no provider profile. Please sign up as a provider first.');
+      }
+    } else if (roles.includes(requested)) {
+      activeRole = requested as any;
+    }
   } else if (roles.length > 0 && !roles.includes(user.role)) {
     activeRole = roles[0] as any;
   }
@@ -391,24 +404,40 @@ export async function googleAuth(req: Request, res: Response) {
     let user = await getUserWithProfiles({ email });
 
     if (!user) {
+      // Auto-register with Google — only supports PATIENT self-registration.
+      // Provider signups must go through email registration to collect license/specialty.
+      const finalRole = (role === 'PROVIDER') ? 'PATIENT' : role;
+
       const createdUser = await prisma.user.create({
         data: {
           email,
           name: name || email.split('@')[0],
           passwordHash: 'GOOGLE_OAUTH_' + Math.random().toString(36),
           avatarUrl: picture,
-          role: role as any,
+          role: finalRole as any,
         },
       });
 
-      await createRoleProfile(createdUser.id, role as any, {}).catch(() => {});
+      await createRoleProfile(createdUser.id, finalRole as any, {}).catch(() => {});
 
       user = await getUserWithProfiles({ id: createdUser.id });
     }
 
     const roles = buildRolesArray(user!);
+
+    // If user picked "PROVIDER" and has a provider profile, use it
+    let activeRole = user!.role;
+    const requestedRole = String(role).toUpperCase();
+    if (requestedRole === 'PROVIDER') {
+      const providerRoles = ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE'];
+      const found = roles.find(r => providerRoles.includes(r));
+      if (found) activeRole = found as any;
+    } else if (roles.includes(requestedRole)) {
+      activeRole = requestedRole as any;
+    }
+
     const token = signToken(
-      { userId: user!.id, role: user!.role, isSuperAdmin: user!.isSuperAdmin },
+      { userId: user!.id, role: activeRole, isSuperAdmin: user!.isSuperAdmin },
       env.jwtSecret,
       env.jwtExpiresIn
     );
@@ -419,7 +448,7 @@ export async function googleAuth(req: Request, res: Response) {
         id: user!.id,
         email: user!.email,
         name: user!.name,
-        role: user!.role,
+        role: activeRole,
         roles,
         isSuperAdmin: user!.isSuperAdmin,
         avatarUrl: user!.avatarUrl,
