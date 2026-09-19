@@ -1384,10 +1384,7 @@
                             <span style="font-size: 11px; color: var(--text-light); font-weight: 500;">OR CONTINUE WITH</span>
                             <div style="flex: 1; height: 1px; background: #E8ECF1;"></div>
                         </div>
-                        <button type="button" id="btn-google-signin" onclick="signInWithGoogle()" style="width: 100%; padding: 12px; background: white; border: 1px solid #DADCE0; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-                            Continue with Google
-                        </button>
+                        <div id="google-btn-container" style="display:flex;justify-content:center;margin-bottom:8px;"></div>
                     </div>
 
                     <div class="form-group">
@@ -3485,6 +3482,78 @@
 
     <script src="ui-fixes.js"></script>
     <script src="forgot-password.js"></script>
-    <script src="role-chooser.js"></script>
+    <script src="role-chooser.js">
+        // ============ GOOGLE SIGN-IN v2 ============
+        var GOOGLE_CLIENT_ID = '753267520396-ucmfbovnvhu42mbc4elgdufl3k52m1fc.apps.googleusercontent.com';
+
+        function initGoogleSignIn() {
+            if (typeof google === 'undefined' || !google.accounts) {
+                setTimeout(initGoogleSignIn, 500);
+                return;
+            }
+            var container = document.getElementById('google-btn-container');
+            if (!container) return;
+            try {
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleCredential,
+                    auto_select: false,
+                    cancel_on_tap_outside: true
+                });
+                google.accounts.id.renderButton(container, {
+                    type: 'standard', theme: 'outline', size: 'large',
+                    text: 'continue_with', shape: 'rectangular',
+                    logo_alignment: 'left', width: 340
+                });
+                console.log('Google Sign-In button rendered');
+            } catch (err) {
+                console.error('Google init error:', err);
+            }
+        }
+
+        async function handleGoogleCredential(response) {
+            if (!response || !response.credential) {
+                showToast('Google Sign-In cancelled');
+                return;
+            }
+            showToast('Verifying with Google...');
+            try {
+                var res = await fetch(API_BASE_URL + '/api/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ credential: response.credential, role: 'PATIENT' })
+                });
+                var data = await res.json();
+                console.log('GOOGLE AUTH RESPONSE:', data);
+                if (res.ok) {
+                    if (data.token) localStorage.setItem('token', data.token);
+                    if (data.user) {
+                        localStorage.setItem('user', JSON.stringify(data.user));
+                        currentUser = data.user;
+                    }
+                    applyUserToUI(currentUser);
+                    showToast('Welcome, ' + (currentUser.name || currentUser.email) + '!');
+                    var role = ((currentUser && currentUser.role) ? currentUser.role : 'PATIENT').toLowerCase();
+                    if (role === 'doctor') navigateTo('doctor-home');
+                    else if (role === 'pharmacy') navigateTo('pharmacy-home');
+                    else if (role === 'institution' || role === 'admin') navigateTo('institution-home');
+                    else navigateTo('patient-home');
+                } else {
+                    showToast(data.message || data.error || 'Google sign-in failed');
+                }
+            } catch (err) {
+                console.error('Google auth error:', err);
+                showToast('Network error. Please try again.');
+            }
+        }
+
+        // Auto-init when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function(){ setTimeout(initGoogleSignIn, 200); });
+        } else {
+            setTimeout(initGoogleSignIn, 200);
+        }
+
+    </script>
 </body>
 </html>
