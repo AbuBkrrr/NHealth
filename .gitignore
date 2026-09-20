@@ -20,3 +20,6 @@ mobile/.expo/
 # Editors
 .vscode/
 .idea/
+
+# One-time helper scripts
+*.cjs
