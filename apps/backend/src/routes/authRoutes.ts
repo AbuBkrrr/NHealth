@@ -22,5 +22,6 @@ router.post('/forgot-password', asyncHandler(forgotPassword));
 router.post('/verify-reset-code', asyncHandler(verifyResetCode));
 router.post('/reset-password', asyncHandler(resetPassword));
 router.post('/switch-role', requireAuth, asyncHandler(switchRole));
+router.patch('/profile', requireAuth, asyncHandler(updateProfile));
 
 export default router;
