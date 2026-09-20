@@ -1,30 +1,80 @@
 // ============================================
-// Pharmacy — clickable products, add-to-cart, working cart
+// Pharmacy — clickable products, cart, checkout
+// Cart persists in localStorage, atomic clear, double-submit safe
 // ============================================
 (function() {
   'use strict';
 
-  var cart = [];
+  var CART_KEY = 'nhealth_pharmacy_cart_v1';
 
+  // ---- Persistence ----
+  function loadCart() {
+    try { return JSON.parse(localStorage.getItem(CART_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function saveCart(arr) {
+    try { localStorage.setItem(CART_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+
+  var cart = loadCart();
   window.pharmacyCart = cart;
 
   function money(n) { return '₦' + Number(n).toLocaleString(); }
+  function uuid() {
+    return 'txn_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
 
+  // ---- Public API ----
   window.addToCart = function(name, price) {
     var existing = cart.find(function(i) { return i.name === name; });
-    if (existing) existing.qty++;
+    if (existing) existing.qty += 1;
     else cart.push({ name: name, price: price, qty: 1 });
+    saveCart(cart);
     updateCartBadge();
     if (typeof showToast === 'function') showToast('🛒 ' + name + ' added');
   };
 
   window.removeFromCart = function(index) {
     cart.splice(index, 1);
+    saveCart(cart);
     updateCartBadge();
     if (typeof closeModal === 'function') closeModal();
     window.openCart();
   };
 
+  window.incrementCart = function(i) {
+    cart[i].qty += 1;
+    saveCart(cart);
+    updateCartBadge();
+    window.openCart();
+  };
+
+  window.decrementCart = function(i) {
+    if (cart[i].qty > 1) cart[i].qty -= 1;
+    else cart.splice(i, 1);
+    saveCart(cart);
+    updateCartBadge();
+    window.openCart();
+  };
+
+  // ---- Atomic clear (mutates SAME array so all references stay valid) ----
+  window.clearPharmacyCart = function() {
+    cart.length = 0;               // ← mutates in place, never reassigns
+    saveCart(cart);
+    updateCartBadge();
+    console.log('🛒 Cart cleared');
+  };
+
+  window.getPharmacyCart = function() { return cart; };
+
+  window.getCartTotal = function() {
+    return cart.reduce(function(s, i) { return s + i.price * i.qty; }, 0);
+  };
+
+  window.getCartCount = function() {
+    return cart.reduce(function(s, i) { return s + i.qty; }, 0);
+  };
+
+  // ---- Badge ----
   function updateCartBadge() {
     var badge = document.getElementById('cart-badge');
     if (!badge) {
@@ -38,13 +88,19 @@
       }
     }
     if (badge) {
-      var count = cart.reduce(function(s, i) { return s + i.qty; }, 0);
+      var count = window.getCartCount();
       badge.textContent = count;
       badge.style.display = count > 0 ? 'inline-block' : 'none';
     }
   }
 
+  // ---- Cart modal ----
   window.openCart = function() {
+    // Reload from localStorage in case it changed in another tab
+    var fresh = loadCart();
+    cart.length = 0;
+    fresh.forEach(function(i) { cart.push(i); });
+
     if (cart.length === 0) {
       showModal('🛒 Your Cart',
         '<div style="text-align:center;padding:32px 0;">' +
@@ -55,7 +111,7 @@
       return;
     }
 
-    var subtotal = cart.reduce(function(s, i) { return s + i.price * i.qty; }, 0);
+    var subtotal = window.getCartTotal();
     var serviceFee = Math.round(subtotal * 0.05);
     var total = subtotal + serviceFee;
 
@@ -81,28 +137,39 @@
         '<div style="display:flex;justify-content:space-between;font-size:13px;"><span>Service Fee (5%)</span><span>' + money(serviceFee) + '</span></div>' +
         '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;border-top:1px solid #E8ECF1;padding-top:8px;margin-top:6px;"><span>Total</span><span style="color:var(--primary);">' + money(total) + '</span></div>' +
       '</div>',
-      '<button class="btn btn-outline" onclick="closeModal()">Continue</button>' +
-      '<button class="btn btn-pharmacy" onclick="window.checkoutCart()">Checkout</button>');
+      '<button class="btn btn-outline" onclick="closeModal()">Continue Shopping</button>' +
+      '<button class="btn btn-pharmacy" id="cart-checkout-btn" onclick="window._pharmacyCheckout()">Checkout</button>');
   };
 
-  window.incrementCart = function(i) { cart[i].qty++; window.openCart(); updateCartBadge(); };
-  window.decrementCart = function(i) { if (cart[i].qty > 1) cart[i].qty--; else cart.splice(i, 1); window.openCart(); updateCartBadge(); };
+  // ---- Checkout with idempotency + double-submit lock ----
+  window._pharmacyCheckout = function() {
+    var btn = document.getElementById('cart-checkout-btn');
+    if (btn && btn.disabled) return;             // double-submit lock
+    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
 
-  window.checkoutCart = function() {
-    var subtotal = cart.reduce(function(s, i) { return s + i.price * i.qty; }, 0);
-    var total = Math.round(subtotal * 1.05);
+    var fresh = loadCart();
+    if (fresh.length === 0) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Checkout'; }
+      showToast('🛒 Cart is empty');
+      return;
+    }
+
+    var subtotal = fresh.reduce(function(s, i) { return s + i.price * i.qty; }, 0);
+    var txnId = uuid();   // idempotency key — same txn never processed twice
+    console.log('💳 Checkout started — txnId:', txnId);
+
+    var summary = fresh.length + ' item' + (fresh.length > 1 ? 's' : '');
+
     closeModal();
-    cart.length = 0;
-    updateCartBadge();
-    showModal('💳 Payment',
-      '<div class="payment-summary" style="padding:12px;background:var(--surface);border-radius:8px;margin-bottom:12px;">' +
-        '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;"><span>Total</span><span style="color:var(--primary);">' + money(total) + '</span></div>' +
-      '</div>' +
-      '<div class="form-group"><label>Payment Method</label><select><option>💳 Debit Card</option><option>🏦 Bank Transfer</option><option>💰 Wallet</option></select></div>',
-      '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>' +
-      '<button class="btn btn-pharmacy" onclick="closeModal();showToast(\'✅ Order placed!\');">Pay ' + money(total) + '</button>');
+
+    window.openPaymentFlow(subtotal, 'Pharmacy Order — ' + summary, function() {
+      // Payment succeeded — atomically clear
+      window.clearPharmacyCart();
+      console.log('✅ Checkout complete — txnId:', txnId);
+    });
   };
 
+  // ---- Product details ----
   window.showProductDetail = function(name, generic, price, stock) {
     showModal('💊 ' + name,
       '<div style="background:var(--pharmacy-light);padding:12px;border-radius:8px;margin-bottom:12px;">' +
@@ -117,8 +184,6 @@
         '<li><strong>Category:</strong> Antimalarial</li>' +
         '<li><strong>Form:</strong> Tablet</li>' +
         '<li><strong>Strength:</strong> 20/120mg</li>' +
-        '<li><strong>Batch:</strong> B2024-001</li>' +
-        '<li><strong>Expiry:</strong> Dec 2025</li>' +
       '</ul>' +
       '<div style="background:#FEF7E0;padding:10px;border-radius:8px;margin-top:12px;font-size:11px;">⚠️ Consult your doctor before use.</div>',
       '<button class="btn btn-outline" onclick="closeModal()">Close</button>' +
@@ -132,7 +197,6 @@
       if (card.dataset.pharmacyWired) return;
       card.dataset.pharmacyWired = 'true';
 
-      // Extract data
       var nameEl = card.querySelector('.product-name');
       var genericEl = card.querySelector('.product-generic');
       var priceEl = card.querySelector('.product-price');
@@ -142,14 +206,12 @@
       var stockBadge = card.querySelector('.badge-instock, .badge-lowstock, .badge-outofstock');
       var stock = stockBadge && stockBadge.classList.contains('badge-outofstock') ? 0 : 45;
 
-      // Make card clickable
       card.style.cursor = 'pointer';
       card.addEventListener('click', function(e) {
         if (e.target.closest('button')) return;
         window.showProductDetail(name, generic, price, stock);
       });
 
-      // Add "Add to Cart" button next to "View Details"
       var actions = card.querySelector('div[style*="display:flex"]');
       if (actions && !actions.querySelector('.add-to-cart-btn')) {
         var addBtn = document.createElement('button');
@@ -163,7 +225,6 @@
         actions.appendChild(addBtn);
       }
 
-      // Rewire View Details
       var viewBtn = card.querySelector('button.btn-pharmacy');
       if (viewBtn) {
         viewBtn.onclick = function(e) {
@@ -174,7 +235,6 @@
     });
   }
 
-  // ---- Wire cart button in app bar ----
   function wireCartButton() {
     var pharmacyScreen = document.getElementById('patient-pharmacy');
     if (!pharmacyScreen || pharmacyScreen.dataset.cartWired) return;
@@ -183,20 +243,21 @@
     if (cartBtn) {
       cartBtn.onclick = function(e) { e.preventDefault(); window.openCart(); };
     }
+    updateCartBadge();
   }
 
   function init() {
-    // Watch for pharmacy screen activation
     var observer = new MutationObserver(function() {
       var screen = document.getElementById('patient-pharmacy');
       if (screen && screen.classList.contains('active')) {
-        setTimeout(function() { wireProducts(); wireCartButton(); }, 100);
+        setTimeout(function() { wireProducts(); wireCartButton(); updateCartBadge(); }, 100);
       }
     });
     observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
     wireProducts();
     wireCartButton();
-    console.log('✅ pharmacy-flow initialized');
+    updateCartBadge();
+    console.log('✅ pharmacy-flow initialized (' + cart.length + ' items in cart)');
   }
 
   if (document.readyState === 'loading') {

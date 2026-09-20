@@ -4,9 +4,6 @@
 (function() {
   'use strict';
 
-  var currentBooking = { provider: '', specialty: '', date: '', time: '', fee: 0, notes: '' };
-
-  // ---- Reschedule ----
   window.rescheduleAppointment = function(providerName, oldDate, oldTime) {
     var html = ''
       + '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:12px;">'
@@ -27,14 +24,13 @@
   };
 
   window.confirmReschedule = function(providerName) {
-    var d = document.getElementById('rs-date').value;
-    var t = document.getElementById('rs-time').value;
+    var d = (document.getElementById('rs-date') || {}).value;
+    var t = (document.getElementById('rs-time') || {}).value;
     if (!d) { showToast('⚠️ Please pick a new date'); return; }
     closeModal();
     showToast('✅ Rescheduled with ' + providerName + ' to ' + d + ' at ' + t);
   };
 
-  // ---- Cancel with reason + no refunds note ----
   window.cancelAppointment = function(providerName) {
     var html = ''
       + '<div style="background:#FFF5F5;border:1px solid var(--error);padding:10px;border-radius:8px;margin-bottom:12px;">'
@@ -60,48 +56,17 @@
   };
 
   window.confirmCancel = function(providerName) {
-    var reason = document.getElementById('cn-reason').value;
+    var reason = (document.getElementById('cn-reason') || {}).value;
     if (!reason) { showToast('⚠️ Please select a reason'); return; }
     closeModal();
     showToast('Appointment cancelled (No refund)');
     setTimeout(function() {
-      var target = document.querySelector('.screen.active');
-      if (target) {
-        var homeBtn = document.querySelector('#patient-nav button[data-screen="patient-home"]');
-        if (homeBtn) homeBtn.click();
-      }
+      var homeBtn = document.querySelector('#patient-nav button[data-screen="patient-home"]');
+      if (homeBtn) homeBtn.click();
     }, 900);
   };
 
-  // ---- Add notes to booking (before payment) ----
-  window.proceedToPayment = function(amount, description) {
-    var html = ''
-      + '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:12px;">'
-      +   '<div style="font-weight:600;">' + description + '</div>'
-      +   '<div style="font-size:18px;font-weight:700;color:var(--primary);margin-top:4px;">₦' + Number(amount).toLocaleString() + '</div>'
-      + '</div>'
-      + '<div class="form-group"><label>Describe your problem/issue *</label>'
-      +   '<textarea rows="4" id="booking-notes" required style="padding:8px 12px;font-size:13px;font-family:inherit;width:100%;" placeholder="E.g., Persistent headache for 3 days, fever, cough..."></textarea>'
-      +   '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">This helps your doctor prepare for your visit.</div>'
-      + '</div>'
-      + '<div class="form-group"><label>Payment Method</label>'
-      +   '<select><option>💳 Debit Card</option><option>🏦 Bank Transfer</option><option>💰 Wallet</option></select></div>';
-
-    showModal('📋 Booking Details', html,
-      '<button class="btn btn-outline" onclick="closeModal()">Back</button>' +
-      '<button class="btn btn-primary" onclick="window.confirmBookingPayment(' + amount + ')">Proceed to Payment</button>');
-  };
-
-  window.confirmBookingPayment = function(amount) {
-    var notes = (document.getElementById('booking-notes') || {}).value || '';
-    if (!notes.trim()) { showToast('⚠️ Please describe your problem'); return; }
-    closeModal();
-    showToast('✅ Booking confirmed. Doctor will see your notes.');
-  };
-
-  // ---- Add Reschedule to existing appointment buttons ----
   function enhanceAppointments() {
-    // Find the "Accept / Cancel" button rows in upcoming appointments
     document.querySelectorAll('#p-upcoming .card').forEach(function(card) {
       if (card.dataset.enhanced) return;
       card.dataset.enhanced = 'true';
@@ -110,7 +75,6 @@
       var actions = card.querySelector('div[style*="display:flex"]');
       if (!actions) return;
 
-      // Rewire Accept
       var acceptBtn = actions.querySelector('.btn-success');
       if (acceptBtn) {
         acceptBtn.onclick = function() {
@@ -122,13 +86,11 @@
         };
       }
 
-      // Rewire Cancel
       var cancelBtn = actions.querySelector('.btn-danger');
       if (cancelBtn) {
         cancelBtn.onclick = function() { window.cancelAppointment(providerName); };
       }
 
-      // Add Reschedule button if not there
       if (!actions.querySelector('.reschedule-btn')) {
         var rsBtn = document.createElement('button');
         rsBtn.className = 'btn btn-primary btn-sm reschedule-btn';

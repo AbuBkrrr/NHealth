@@ -1,6 +1,6 @@
 // ============================================
 // Universal Payment Gateway
-// Card (saved + new) | Transfer (banks + receipt) | Wallet
+// Card | Transfer | Wallet — with idempotency + double-submit lock
 // ============================================
 (function() {
   'use strict';
@@ -17,7 +17,10 @@
     accountNumber: '0123456789',
   };
 
+  var _submitting = false;   // global double-submit lock
+
   function money(n) { return '₦' + Number(n).toLocaleString(); }
+  function uuid() { return 'txn_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10); }
 
   function getWalletBalance() {
     var b = localStorage.getItem('walletBalance');
@@ -39,15 +42,18 @@
   // MAIN ENTRY
   // ================================================
   window.openPaymentFlow = function(amount, description, onSuccess) {
+    _submitting = false;
     var total = Math.round(Number(amount));
     var fee = Math.round(total * 0.05);
     var grandTotal = total + fee;
+    var txnId = uuid();
 
     showModal('💳 Payment',
       '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:14px;">' +
         '<div style="display:flex;justify-content:space-between;font-size:13px;"><span>' + description + '</span><span>' + money(total) + '</span></div>' +
         '<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-secondary);"><span>Service Fee (5%)</span><span>' + money(fee) + '</span></div>' +
         '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;border-top:1px solid #E8ECF1;padding-top:8px;margin-top:6px;"><span>Total</span><span style="color:var(--primary);">' + money(grandTotal) + '</span></div>' +
+        '<div style="font-size:10px;color:var(--text-light);text-align:right;margin-top:4px;">Ref: ' + txnId + '</div>' +
       '</div>' +
       '<div style="font-size:12px;font-weight:600;margin-bottom:8px;">Choose Payment Method</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">' +
@@ -62,7 +68,7 @@
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>' +
       '<button class="btn btn-primary" id="pm-submit" disabled onclick="window._pmSubmit()">Continue</button>');
 
-    window._pendingPayment = { total: grandTotal, description: description, method: null, onSuccess: onSuccess };
+    window._pendingPayment = { total: grandTotal, description: description, method: null, onSuccess: onSuccess, txnId: txnId };
   };
 
   // ================================================
@@ -75,7 +81,7 @@
     el.style.borderColor = 'var(--primary)';
     el.style.background = 'var(--primary-light)';
 
-    if (!window._pendingPayment) window._pendingPayment = {};
+    if (!window._pendingPayment) return;
     window._pendingPayment.method = method;
 
     var detail = document.getElementById('pay-method-detail');
@@ -148,12 +154,14 @@
   };
 
   // ================================================
-  // SUBMIT
+  // SUBMIT — idempotent, double-submit locked
   // ================================================
   window._pmSubmit = function() {
+    if (_submitting) { console.log('⚠️ Already submitting — ignoring'); return; }
     var p = window._pendingPayment;
     if (!p || !p.method) { showToast('⚠️ Choose a payment method'); return; }
 
+    // Validation
     if (p.method === 'card') {
       var savedRadio = document.querySelector('input[name="saved-card"]:checked');
       if (!savedRadio) {
@@ -165,8 +173,6 @@
         if (!/^\d{2}\/\d{2}$/.test(exp)) { showToast('⚠️ Enter expiry as MM/YY'); return; }
         if (cvv.length < 3) { showToast('⚠️ Enter CVV'); return; }
         if (!name.trim()) { showToast('⚠️ Enter name on card'); return; }
-        var save = document.getElementById('card-save');
-        if (save && save.checked) saveCard({ brand: 'Card', last4: num.replace(/\s/g, '').slice(-4), expiry: exp });
       }
     } else if (p.method === 'transfer') {
       var bank = (document.getElementById('transfer-bank') || {}).value;
@@ -176,55 +182,83 @@
     } else if (p.method === 'wallet') {
       var bal = getWalletBalance();
       if (bal < p.total) { showToast('⚠️ Insufficient balance'); return; }
-      setWalletBalance(bal - p.total);
     }
 
-    closeModal();
-    showToast('✅ Payment successful — ' + money(p.total));
-    if (typeof p.onSuccess === 'function') p.onSuccess();
-    window._pendingPayment = null;
+    // Lock
+    _submitting = true;
+    var btn = document.getElementById('pm-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+
+    // Simulate async processing (would be fetch() in real app)
+    setTimeout(function() {
+      try {
+        // Deduct wallet after validation
+        if (p.method === 'wallet') {
+          setWalletBalance(getWalletBalance() - p.total);
+        }
+        if (p.method === 'card') {
+          var save = document.getElementById('card-save');
+          var savedRadio = document.querySelector('input[name="saved-card"]:checked');
+          if (!savedRadio && save && save.checked) {
+            var num = (document.getElementById('card-number') || {}).value || '';
+            var exp = (document.getElementById('card-expiry') || {}).value || '';
+            saveCard({ brand: 'Card', last4: num.replace(/\s/g, '').slice(-4), expiry: exp });
+          }
+        }
+
+        console.log('✅ Payment processed — txnId:', p.txnId);
+        closeModal();
+        showToast('✅ Payment successful — ' + money(p.total));
+
+        if (typeof p.onSuccess === 'function') p.onSuccess();
+        window._pendingPayment = null;
+      } catch (err) {
+        console.error('Payment error:', err);
+        showToast('❌ Payment failed');
+      } finally {
+        _submitting = false;
+      }
+    }, 600);
   };
 
   // ================================================
-  // OVERRIDE MODULE PAYMENTS TO USE THIS GATEWAY
+  // MODULE OVERRIDES
   // ================================================
 
-  // Pharmacy checkout
+  // Pharmacy checkout — uses atomic clear
   window.checkoutCart = function() {
-    var cart = window.pharmacyCart || [];
-    if (!cart.length) { showToast('🛒 Cart empty'); return; }
-    var subtotal = cart.reduce(function(s, i) { return s + i.price * i.qty; }, 0);
-    closeModal();
-    window.openPaymentFlow(subtotal, 'Pharmacy Order (' + cart.length + ' items)', function() {
-      window.pharmacyCart = [];
-      var badge = document.getElementById('cart-badge');
-      if (badge) badge.style.display = 'none';
-    });
+    window._pharmacyCheckout();
   };
 
-  // Appointment booking (pre-payment notes)
-  window.bookAppointment = function() {
-    var fee = 15000;
+  // Appointment booking with notes
+  window.bookAppointment = function(providerName, specialty, fee) {
+    var amount = fee || 15000;
+    var label = providerName || 'Doctor Consultation';
+    var spec = specialty || '';
+
     closeModal();
     showModal('📋 Booking Notes',
+      '<div style="background:var(--surface);padding:12px;border-radius:8px;margin-bottom:12px;">' +
+        '<div style="font-weight:600;">' + label + (spec ? ' — ' + spec : '') + '</div>' +
+        '<div style="font-size:18px;font-weight:700;color:var(--primary);margin-top:4px;">' + money(amount) + '</div>' +
+      '</div>' +
       '<div class="form-group"><label>Describe your problem/issue *</label>' +
         '<textarea rows="4" id="bk-notes" placeholder="E.g., Persistent headache for 3 days, fever, cough..." style="width:100%;padding:8px 12px;font-family:inherit;font-size:13px;"></textarea>' +
-        '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Your doctor will see this before your visit.</div>' +
+        '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Your provider will see this before your visit.</div>' +
       '</div>',
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>' +
-      '<button class="btn btn-primary" onclick="window._bookApptContinue(' + fee + ')">Continue to Payment</button>');
+      '<button class="btn btn-primary" onclick="window._bookApptContinue(' + amount + ',\'' + label.replace(/'/g, '') + '\')">Continue to Payment</button>');
   };
 
-  window._bookApptContinue = function(fee) {
+  window._bookApptContinue = function(fee, label) {
     var notes = (document.getElementById('bk-notes') || {}).value || '';
     if (!notes.trim()) { showToast('⚠️ Please describe your problem'); return; }
     closeModal();
-    window.openPaymentFlow(fee, 'Doctor Consultation', function() {
+    window.openPaymentFlow(fee, label + ' — Consultation', function() {
       showToast('✅ Appointment booked!');
     });
   };
 
-  // Generic "proceed to payment" for labs and others
   window.openGenericPayment = function(amount, description) {
     window.openPaymentFlow(amount, description, function() {});
   };
