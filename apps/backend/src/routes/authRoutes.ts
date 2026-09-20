@@ -8,6 +8,7 @@ import {
   verifyResetCode,
   resetPassword,
   switchRole,
+  updateProfile,
 } from '../controllers/authController';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireAuth } from '../middleware/auth';

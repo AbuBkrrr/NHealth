@@ -460,3 +460,77 @@ export async function googleAuth(req: Request, res: Response) {
     return res.status(401).json({ error: 'Google authentication failed' });
   }
 }
+
+
+// ============================================================
+// UPDATE PROFILE
+// ============================================================
+export async function updateProfile(req: Request, res: Response) {
+  const userId = req.user!.userId;
+  const { name, phone, address, height, weight, bloodType, genotype } = req.body;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { patientProfile: true },
+  });
+  if (!user) throw ApiError.notFound('User not found');
+
+  // Update User table (name, phone)
+  const userUpdate: any = {};
+  if (name) userUpdate.name = name;
+  if (phone) userUpdate.phone = phone;
+  if (Object.keys(userUpdate).length > 0) {
+    await prisma.user.update({ where: { id: userId }, data: userUpdate });
+  }
+
+  // Update PatientProfile
+  if (user.patientProfile) {
+    const profileUpdate: any = {};
+    if (address !== undefined) profileUpdate.address = address;
+    if (height !== undefined) profileUpdate.height = height;
+    if (weight !== undefined) profileUpdate.weight = weight;
+
+    // Blood group change limit (2 max)
+    if (bloodType && bloodType !== user.patientProfile.bloodType) {
+      const changesUsed = (user.patientProfile as any).bloodTypeChanges || 0;
+      if (changesUsed >= 2) {
+        return res.status(403).json({ error: 'Blood group change limit reached (2 changes allowed)' });
+      }
+      profileUpdate.bloodType = bloodType;
+      profileUpdate.bloodTypeChanges = changesUsed + 1;
+    }
+
+    // Genotype change limit (2 max)
+    if (genotype && genotype !== user.patientProfile.genotype) {
+      const changesUsed = (user.patientProfile as any).genotypeChanges || 0;
+      if (changesUsed >= 2) {
+        return res.status(403).json({ error: 'Genotype change limit reached (2 changes allowed)' });
+      }
+      profileUpdate.genotype = genotype;
+      profileUpdate.genotypeChanges = changesUsed + 1;
+    }
+
+    if (Object.keys(profileUpdate).length > 0) {
+      await prisma.patientProfile.update({
+        where: { userId },
+        data: profileUpdate,
+      });
+    }
+  }
+
+  // Return updated user
+  const updated = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      patientProfile: true,
+      doctorProfile: true,
+      pharmacyProfile: true,
+      labProfile: true,
+      ambulanceProfile: true,
+      nurseProfile: true,
+    },
+  });
+
+  const { passwordHash, ...safe } = updated!;
+  res.json(safe);
+}
