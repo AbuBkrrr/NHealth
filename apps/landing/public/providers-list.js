@@ -68,6 +68,8 @@
       ? '<span class="badge badge-success">● Online — Available now</span>'
       : '<span class="badge badge-warning">○ Offline — Usually responds within 24h</span>';
 
+    var actionLabel = (p.type === 'PHARMACY') ? '🛒 Explore' : '📅 Book Now';
+
     showModal(p.icon + ' ' + p.name,
       '<div style="text-align:center;padding:8px 0 12px;">' +
         '<div style="font-size:56px;">' + p.icon + '</div>' +
@@ -83,9 +85,64 @@
         (p.fee > 0 ? '<div style="grid-column:span 2;"><div style="color:var(--text-light);font-size:10px;">Consultation Fee</div><div style="font-weight:700;color:var(--primary);font-size:14px;">₦' + p.fee.toLocaleString() + '</div></div>' : '') +
       '</div>',
       '<button class="btn btn-outline" onclick="closeModal()">Close</button>' +
-      '<button class="btn btn-primary" onclick="closeModal();showToast(\'Opening booking...\');">📅 Book Now</button>');
+      '<button class="btn btn-primary" onclick="window._bookProviderById(\'' + p.id + '\')">' + actionLabel + '</button>');
   }
 
+  // ================================================
+  // ROLE-BASED ROUTING
+  // ================================================
+  function routeBooking(p) {
+    closeModal();
+    var type = p.type;
+
+    if (type === 'DOCTOR' || type === 'NURSE' || type === 'AMBULANCE') {
+      // Appointment booking flow (with notes + payment)
+      showToast('📅 Opening booking for ' + p.name);
+      setTimeout(function() {
+        var apptBtn = document.querySelector('#patient-nav button[data-screen="patient-appointments"]');
+        if (apptBtn) apptBtn.click();
+        setTimeout(function() {
+          if (typeof window.bookAppointment === 'function') {
+            window.bookAppointment(p.name, p.specialty, p.fee);
+          } else {
+            showToast('⚠️ Booking module loading...');
+          }
+        }, 400);
+      }, 300);
+
+    } else if (type === 'PHARMACY') {
+      // Explore pharmacy inventory
+      showToast('💊 ' + p.name + ' inventory');
+      setTimeout(function() {
+        var pharmBtn = document.querySelector('#patient-nav button[data-screen="patient-pharmacy"]');
+        if (pharmBtn) pharmBtn.click();
+        setTimeout(function() {
+          var titleEl = document.querySelector('#patient-pharmacy .app-bar .title');
+          if (titleEl) titleEl.innerHTML = '💊 <span>' + p.name + '</span>';
+        }, 200);
+      }, 200);
+
+    } else if (type === 'LAB') {
+      // Lab booking with services list
+      if (typeof window.openLabBooking === 'function') {
+        window.openLabBooking(p);
+      } else {
+        showToast('🔬 Lab booking loading...');
+      }
+
+    } else {
+      showToast('Opening ' + p.name);
+    }
+  }
+
+  window._bookProviderById = function(id) {
+    var p = PROVIDERS.find(function(x) { return x.id === id; });
+    if (p) routeBooking(p);
+  };
+
+  // ================================================
+  // INJECT DIRECTORY INTO PROVIDERS SCREEN
+  // ================================================
   function injectDirectory() {
     var screen = document.getElementById('patient-providers');
     if (!screen || screen.dataset.dirInjected) return;
@@ -94,7 +151,6 @@
     var padding = screen.querySelector('div[style*="padding"]');
     if (!padding) return;
 
-    // Build filters bar + list container
     var filtersHTML =
       '<div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0;margin-bottom:10px;">' +
         ['ALL','DOCTOR','PHARMACY','LAB','NURSE','AMBULANCE'].map(function(t) {
@@ -117,7 +173,6 @@
     var container = document.getElementById('providers-list-container');
     renderList(container);
 
-    // Wire filters
     document.querySelectorAll('.filter-chip').forEach(function(chip) {
       if (chip.dataset.filter === 'ALL') {
         chip.style.background = 'var(--primary)';
