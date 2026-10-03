@@ -207,4 +207,75 @@
   } else {
     init();
   }
+
+  // Override setText with fallback (added by fix script)
+  var _origSetText = setText;
+  setText = function(id, text) {
+    var el = document.getElementById(id);
+    if (el) { el.textContent = text; return; }
+    var labelMap = {
+      'profile-blood-group': 'Blood Group',
+      'profile-genotype': 'Genotype',
+      'profile-location': 'Location',
+      'profile-nhis': 'NHIS Number',
+      'profile-height': 'Height',
+      'profile-weight': 'Weight',
+    };
+    var label = labelMap[id];
+    if (!label) return;
+    var grid = document.querySelector('#patient-profile .card:last-child');
+    if (!grid) return;
+    var nodes = grid.querySelectorAll('div[style*="font-size:10px"]');
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].textContent.trim() === label) {
+        var t = nodes[i].nextElementSibling;
+        if (t) { t.textContent = text; t.id = id; return; }
+      }
+    }
+  };
+
+  // NHIS badge — reflect real connection status
+  (function() {
+    function updateNhisBadge() {
+      var badge = document.getElementById('nhis-badge');
+      if (!badge) return;
+      var profile = null;
+      try { profile = JSON.parse(localStorage.getItem('fullProfile') || 'null'); } catch (e) {}
+      var pp = (profile && profile.patientProfile) || {};
+      var hasNhis = !!(pp.nhisNumber && String(pp.nhisNumber).trim());
+      var verified = !!pp.nhisVerified;
+
+      if (!hasNhis) {
+        badge.textContent = 'NHIS Not Connected';
+        badge.className = 'badge';
+        badge.style.background = '#F5F7FA';
+        badge.style.color = 'var(--text-secondary)';
+      } else if (!verified) {
+        badge.textContent = 'NHIS Pending Verification';
+        badge.className = 'badge badge-warning';
+        badge.style.background = '';
+        badge.style.color = '';
+      } else {
+        badge.textContent = '✓ NHIS Active';
+        badge.className = 'badge badge-success';
+        badge.style.background = '';
+        badge.style.color = '';
+      }
+    }
+
+    // Run on profile screen activation
+    var obs = new MutationObserver(function() {
+      var screen = document.getElementById('patient-profile');
+      if (screen && screen.classList.contains('active')) {
+        setTimeout(updateNhisBadge, 150);
+      }
+    });
+    obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+
+    // Also run after profile loads
+    setInterval(updateNhisBadge, 2000);
+
+    console.log('✅ NHIS badge logic initialized');
+  })();
+
 })();
