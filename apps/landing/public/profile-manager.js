@@ -56,10 +56,34 @@
     }
   }
 
-  function setText(id, text) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = text;
+ function setText(id, text) {
+  var el = document.getElementById(id);
+  if (el) { el.textContent = text; return; }
+  // Fallback: try to find by label in the Personal Information grid
+  var labels = {
+    'profile-blood-group': 'Blood Group',
+    'profile-genotype': 'Genotype',
+    'profile-location': 'Location',
+    'profile-nhis': 'NHIS Number',
+    'profile-height': 'Height',
+    'profile-weight': 'Weight',
+  };
+  var label = labels[id];
+  if (!label) return;
+  var grid = document.querySelector('#patient-profile .card:last-child');
+  if (!grid) return;
+  var labelNodes = grid.querySelectorAll('div[style*="font-size:10px"]');
+  for (var i = 0; i < labelNodes.length; i++) {
+    if (labelNodes[i].textContent.trim() === label) {
+      var target = labelNodes[i].nextElementSibling;
+      if (target) {
+        target.textContent = text;
+        target.id = id;
+        return;
+      }
+    }
   }
+}
 
   // ---- Add "Edit Profile" button to profile screen ----
   function injectEditButton() {
