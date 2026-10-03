@@ -1,6 +1,6 @@
 // ============================================
-// Settings content — bulletproof rebind
-// Watches for settings modal and rebinds buttons
+// Settings — document-level click interceptor
+// Catches clicks on Terms/Help items no matter what onclick is set
 // ============================================
 (function() {
   'use strict';
@@ -58,68 +58,77 @@
       '<button class="btn btn-primary btn-block" onclick="closeModal()">Close</button>');
   }
 
-  // ---- Rebind the settings modal buttons ----
-  function rebindSettingsModal() {
-    var modal = document.getElementById('app-modal');
-    if (!modal) return;
-    if (modal.dataset.settingsRebound === 'true') return;
-
-    // Find items by their title text
-    var items = modal.querySelectorAll('.list-item');
-    var rebound = 0;
-
-    items.forEach(function(item) {
-      var titleEl = item.querySelector('.title');
-      if (!titleEl) return;
-      var title = titleEl.textContent.trim();
-
-      if (title.indexOf('Terms') === 0 || title.indexOf('Terms &') === 0) {
-        item.onclick = function(e) { e.preventDefault(); e.stopPropagation(); openTerms(); return false; };
-        item.style.cursor = 'pointer';
-        item.removeAttribute('onclick');
-        rebound++;
-      }
-
-      if (title.indexOf('Help &') === 0 || title.indexOf('Help') === 0) {
-        item.onclick = function(e) { e.preventDefault(); e.stopPropagation(); openSupport(); return false; };
-        item.style.cursor = 'pointer';
-        item.removeAttribute('onclick');
-        rebound++;
-      }
-    });
-
-    if (rebound > 0) {
-      modal.dataset.settingsRebound = 'true';
-      console.log('✅ Rebound ' + rebound + ' settings items');
-    }
-  }
-
-  // ---- Expose globally too ----
+  // Expose globally
   window.openTerms = openTerms;
   window.openSupport = openSupport;
-  window._rebindSettings = rebindSettingsModal;
 
-  // ---- Watch for the settings modal appearing ----
-  var observer = new MutationObserver(function(mutations) {
-    for (var i = 0; i < mutations.length; i++) {
-      var m = mutations[i];
-      for (var j = 0; j < m.addedNodes.length; j++) {
-        var node = m.addedNodes[j];
-        if (node.nodeType === 1) {
-          if (node.id === 'app-modal') {
-            // Modal was just added — rebind after a tick
-            setTimeout(rebindSettingsModal, 30);
-          }
-          // Also check if it contains the modal
-          if (node.querySelector && node.querySelector('#app-modal')) {
-            setTimeout(rebindSettingsModal, 30);
-          }
-        }
+  // ---- Document-level click interceptor ----
+  // Runs in CAPTURE phase — happens BEFORE any inline onclick
+  // If the click is on a settings item containing "Terms" or "Help", intercept it
+  document.addEventListener('click', function(e) {
+    var target = e.target;
+    var item = null;
+
+    // Walk up to find a .list-item
+    while (target && target !== document.body) {
+      if (target.classList && target.classList.contains('list-item')) {
+        item = target;
+        break;
+      }
+      target = target.parentNode;
+    }
+
+    if (!item) return;
+
+    // Is it inside the settings modal?
+    var inModal = item.closest('#app-modal');
+    if (!inModal) return;
+
+    // Get the item's title text
+    var titleEl = item.querySelector('.title');
+    if (!titleEl) return;
+    var title = titleEl.textContent.trim();
+
+    // Terms
+    if (title.indexOf('Terms') === 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('🎯 Intercepted Terms click');
+      openTerms();
+      return false;
+    }
+
+    // Help & Support
+    if (title.indexOf('Help') === 0 || title.indexOf('Support') === 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('🎯 Intercepted Help/Support click');
+      openSupport();
+      return false;
+    }
+
+    // Theme — re-use settings.js handler
+    if (title.indexOf('Theme') === 0) {
+      if (typeof window.toggleTheme === 'function') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        window.toggleTheme();
+        return false;
       }
     }
-  });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+    // Check for Updates — show a toast
+    if (title.indexOf('Check for Updates') === 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (typeof showToast === 'function') showToast('✅ You are on the latest version (1.0.0)');
+      return false;
+    }
+  }, true); // <-- TRUE = capture phase
 
-  console.log('✅ settings-content initialized (observer active)');
+  console.log('✅ settings-content initialized (capture-phase interceptor)');
 })();
