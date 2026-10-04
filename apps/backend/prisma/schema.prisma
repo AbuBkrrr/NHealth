@@ -136,11 +136,23 @@ model User {
 
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
-
+  supportTickets   SupportTicket[]
   payments         Payment[] @relation("PayerPayments")
   confirmedPayments Payment[] @relation("ConfirmedPayments")
 
   adminActions     AdminAuditLog[] @relation("AdminActions")
+
+  // N-Health Credits
+  creditLedger        CreditLedger?
+  creditTransactions  CreditTransaction[]
+
+  // Payment gateway logs
+  paymentGatewayLogs  PaymentGatewayLog[]
+
+  // Escrow
+  escrowTransactions  EscrowTransaction[]
+  escrowAsProvider    EscrowTransaction[] @relation("ProviderEscrows")
+  bankAccounts        BankAccount[]
 
   @@index([role])
 }
@@ -168,10 +180,10 @@ model PatientProfile {
   donations         Donation[]
   insurancePolicies InsurancePolicy[]
   nurseRequests     NurseRequest[]
-  height           Float?
-  weight           Float?
-  bloodTypeChanges Int      @default(0)
-  genotypeChanges  Int      @default(0)
+  height            Float?
+  weight            Float?
+  bloodTypeChanges  Int      @default(0)
+  genotypeChanges   Int      @default(0)
 }
 
 model DoctorProfile {
@@ -188,8 +200,8 @@ model DoctorProfile {
   lat               Float?
   lng               Float?
 
-  appointments  Appointment[]
-  prescriptions Prescription[]
+  appointments       Appointment[]
+  prescriptions      Prescription[]
   reviewedLabResults LabResult[]
 }
 
@@ -250,12 +262,11 @@ model NurseProfile {
 // ============ SPECIALIZATIONS ============
 
 model Specialization {
-  id       String @id @default(uuid())
-  name     String @unique
+  id       String       @id @default(uuid())
+  name     String       @unique
   desc     String
-  category String // "Cardiology", "Surgery", "General Nursing", etc.
+  category String       // "Cardiology", "Surgery", "General Nursing", etc.
   type     ProviderType // "DOCTOR" or "NURSE"
-
 }
 
 // ============ APPOINTMENTS & PRESCRIPTIONS ============
@@ -279,38 +290,38 @@ model Appointment {
 }
 
 model Prescription {
-  id         String   @id @default(uuid())
-  patientId  String
-  patient    PatientProfile @relation(fields: [patientId], references: [id])
-  doctorId   String
-  doctor     DoctorProfile  @relation(fields: [doctorId], references: [id])
-  medications Json    // [{ name, dosage, frequency, durationDays }]
-  status     String   @default("ACTIVE")
-  issuedAt   DateTime @default(now())
-  orders     PharmacyOrder[]
+  id          String          @id @default(uuid())
+  patientId   String
+  patient     PatientProfile  @relation(fields: [patientId], references: [id])
+  doctorId    String
+  doctor      DoctorProfile   @relation(fields: [doctorId], references: [id])
+  medications Json            // [{ name, dosage, frequency, durationDays }]
+  status      String          @default("ACTIVE")
+  issuedAt    DateTime        @default(now())
+  orders      PharmacyOrder[]
 }
 
 // ============ PHARMACY ============
 
 model Inventory {
-  id         String   @id @default(uuid())
+  id         String          @id @default(uuid())
   pharmacyId String
   pharmacy   PharmacyProfile @relation(fields: [pharmacyId], references: [id])
   name       String
   category   String?
-  stock      Int      @default(0)
+  stock      Int             @default(0)
   price      Decimal
   expiryDate DateTime?
   supplierId String?
-  supplier   Supplier? @relation(fields: [supplierId], references: [id])
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  supplier   Supplier?       @relation(fields: [supplierId], references: [id])
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
   @@index([pharmacyId])
 }
 
 model Supplier {
-  id         String @id @default(uuid())
+  id         String          @id @default(uuid())
   pharmacyId String
   pharmacy   PharmacyProfile @relation(fields: [pharmacyId], references: [id])
   name       String
@@ -321,19 +332,19 @@ model Supplier {
 }
 
 model PharmacyOrder {
-  id             String      @id @default(uuid())
+  id             String           @id @default(uuid())
   patientId      String
-  patient        PatientProfile @relation(fields: [patientId], references: [id])
+  patient        PatientProfile   @relation(fields: [patientId], references: [id])
   pharmacyId     String
-  pharmacy       PharmacyProfile @relation(fields: [pharmacyId], references: [id])
+  pharmacy       PharmacyProfile  @relation(fields: [pharmacyId], references: [id])
   prescriptionId String?
-  prescription   Prescription? @relation(fields: [prescriptionId], references: [id])
-  items          Json        // [{ inventoryId, name, qty, price }]
+  prescription   Prescription?    @relation(fields: [prescriptionId], references: [id])
+  items          Json             // [{ inventoryId, name, qty, price }]
   total          Decimal
-  status         OrderStatus @default(PENDING)
-  paymentStatus  String      @default("PENDING")
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  status         OrderStatus      @default(PENDING)
+  paymentStatus  String           @default("PENDING")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([patientId])
   @@index([pharmacyId])
@@ -342,16 +353,16 @@ model PharmacyOrder {
 // ============ LAB ============
 
 model LabTest {
-  id          String        @id @default(uuid())
+  id          String         @id @default(uuid())
   patientId   String
   patient     PatientProfile @relation(fields: [patientId], references: [id])
   labId       String
-  lab         LabProfile    @relation(fields: [labId], references: [id])
+  lab         LabProfile     @relation(fields: [labId], references: [id])
   testType    String
-  status      LabTestStatus @default(REQUESTED)
+  status      LabTestStatus  @default(REQUESTED)
   scheduledAt DateTime?
-  fee         Decimal       @default(5000)
-  createdAt   DateTime      @default(now())
+  fee         Decimal        @default(5000)
+  createdAt   DateTime       @default(now())
 
   result LabResult?
 
@@ -360,29 +371,29 @@ model LabTest {
 }
 
 model LabResult {
-  id          String    @id @default(uuid())
-  labTestId   String    @unique
-  labTest     LabTest   @relation(fields: [labTestId], references: [id])
-  resultData  Json
-  fileUrl     String?
+  id           String         @id @default(uuid())
+  labTestId    String         @unique
+  labTest      LabTest        @relation(fields: [labTestId], references: [id])
+  resultData   Json
+  fileUrl      String?
   reviewedById String?
-  reviewedBy  DoctorProfile? @relation(fields: [reviewedById], references: [id])
-  uploadedAt  DateTime  @default(now())
+  reviewedBy   DoctorProfile? @relation(fields: [reviewedById], references: [id])
+  uploadedAt   DateTime       @default(now())
 }
 
 // ============ AMBULANCE / EMERGENCY ============
 
 model EmergencyRequest {
-  id          String          @id @default(uuid())
+  id          String           @id @default(uuid())
   patientId   String
-  patient     PatientProfile  @relation(fields: [patientId], references: [id])
+  patient     PatientProfile   @relation(fields: [patientId], references: [id])
   ambulanceId String?
   ambulance   AmbulanceProfile? @relation(fields: [ambulanceId], references: [id])
   lat         Float
   lng         Float
   notes       String?
-  status      EmergencyStatus @default(REQUESTED)
-  requestedAt DateTime        @default(now())
+  status      EmergencyStatus  @default(REQUESTED)
+  requestedAt DateTime         @default(now())
   completedAt DateTime?
 
   @@index([patientId])
@@ -420,14 +431,14 @@ model Donation {
 }
 
 model InsurancePolicy {
-  id              String   @id @default(uuid())
+  id              String         @id @default(uuid())
   patientId       String
   patient         PatientProfile @relation(fields: [patientId], references: [id])
   provider        String
   policyNumber    String
   coverageDetails String?
   premiumAmount   Decimal?
-  status          String   @default("ACTIVE")
+  status          String         @default("ACTIVE")
   expiresAt       DateTime?
 }
 
@@ -466,9 +477,9 @@ model Payment {
   providerUserId String?
 
   // Method-specific display instructions, filled in when the payment is created.
-  ussdCode             String?
-  transferBankName     String?
-  transferAccountName  String?
+  ussdCode              String?
+  transferBankName      String?
+  transferAccountName   String?
   transferAccountNumber String?
 
   expiresAt     DateTime
@@ -484,10 +495,6 @@ model Payment {
 
 // ============ ADMIN ============
 
-// A lightweight trail of admin actions (suspend/reactivate a user, create/remove
-// an admin, etc) so a super admin can see who did what. Kept generic (targetType
-// + targetId, same pattern as Payment's payableType/payableId) rather than a
-// dedicated table per action type.
 model AdminAuditLog {
   id         String   @id @default(uuid())
   actorId    String
@@ -500,4 +507,202 @@ model AdminAuditLog {
 
   @@index([actorId])
   @@index([targetType, targetId])
+}
+
+// ============================================================
+// SUPPORT TICKETS
+// ============================================================
+model SupportTicket {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName    String
+  userEmail   String
+  subject     String
+  category    String
+  message     String   @db.Text
+  priority    String   @default("normal")
+  status      String   @default("open")
+  adminReply  String?  @db.Text
+  repliedById String?
+  repliedAt   DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// ============================================================
+// N-HEALTH CREDITS
+// Closed-loop prepaid instrument — NOT a wallet, NOT e-money.
+// Redeemable only for healthcare services on the N-Health platform.
+// Not transferable between users. Not cashable.
+// ============================================================
+
+model CreditLedger {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Running balance. Derived from sum of transactions but cached for fast reads.
+  balance           Decimal  @default(0) @db.Decimal(12, 2)
+
+  lastTransactionId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  transactions      CreditTransaction[]
+
+  @@index([userId])
+}
+
+model CreditTransaction {
+  id           String       @id @default(uuid())
+  ledgerId     String
+  ledger       CreditLedger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // purchase | spend | refund | expiry | adjustment
+  type         String
+
+  // Positive for purchase/refund, negative for spend/expiry
+  amount       Decimal      @db.Decimal(12, 2)
+
+  // Running balance after this transaction
+  balanceAfter Decimal      @db.Decimal(12, 2)
+
+  description  String
+  reference    String       @unique // our internal ref, e.g. CR-xxx, ORD-xxx, APT-xxx
+  metadata     Json?        // gateway, orderId, appointmentId, etc.
+
+  // pending | completed | failed | reversed
+  status       String       @default("completed")
+
+  createdAt    DateTime     @default(now())
+
+  @@index([userId])
+  @@index([ledgerId])
+  @@index([type])
+  @@index([reference])
+  @@index([createdAt])
+}
+
+// ============================================================
+// PAYMENT GATEWAY LOGS
+// One log per payment attempt across any gateway.
+// ============================================================
+
+model PaymentGatewayLog {
+  id              String   @id @default(uuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // fincra | monnify | flutterwave | payscrow
+  gateway         String
+
+  // Gateway's reference (their transaction ID)
+  gatewayRef      String
+
+  // Our internal reference (unique)
+  internalRef     String   @unique
+
+  amount          Decimal  @db.Decimal(12, 2)
+  currency        String   @default("NGN")
+
+  // pending | success | failed | abandoned
+  status          String
+
+  // credit_purchase | appointment | pharmacy | lab | escrow_release
+  purpose         String
+
+  requestPayload  Json?
+  responsePayload Json?
+  webhookPayload  Json?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([gateway])
+  @@index([status])
+  @@index([internalRef])
+  @@index([gatewayRef])
+}
+
+// ============================================================
+// ESCROW (via PayScrow)
+// Holds funds for high-value services until delivery is confirmed.
+// ============================================================
+
+model EscrowTransaction {
+  id                  String   @id @default(uuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id])
+
+  // Provider receiving the funds
+  providerUserId      String?
+  provider            User?    @relation("ProviderEscrows", fields: [providerUserId], references: [id], onDelete: SetNull)
+  purpose             String   // appointment | pharmacy | lab | nurse | emergency
+  purposeId           String   // appointment ID, order ID, etc.
+
+  // PayScrow references
+  externalReference   String   @unique
+  payscrowRef         String   @unique   // transactionNumber (MKT-xxxx)
+  payscrowTransactionId String?          // GUID for apply-code endpoint
+  paymentLink         String?            // customer checkout URL
+  escrowCode          String?            // released only after payment
+
+  // Amounts
+  currency            String   @default("NGN")
+  amount              Decimal  @db.Decimal(12, 2)   // gross item total
+  merchantCharge      Decimal  @default(0) @db.Decimal(12, 2)
+  customerCharge      Decimal  @default(0) @db.Decimal(12, 2)
+  totalPayable        Decimal  @default(0) @db.Decimal(12, 2)
+  netSettlement       Decimal  @default(0) @db.Decimal(12, 2)
+
+  // Status
+  status              String   // pending | in_escrow | completed | released | disputed | refunded | terminated
+
+  fundedAt            DateTime?
+  releasedAt          DateTime?
+  disputedAt          DateTime?
+  terminatedAt        DateTime?
+
+  metadata            Json?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+  @@index([providerUserId])
+  @@index([status])
+  @@index([purposeId])
+  @@index([payscrowRef])
+}
+
+// ============================================================
+// BANK ACCOUNTS (provider payouts)
+// ============================================================
+model BankAccount {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bankCode      String   // CBN bank code e.g. "058"
+  bankName      String   // Display name e.g. "GTBank"
+  accountNumber String   // 10 digits
+  accountName   String
+
+  isPrimary     Boolean  @default(true)
+  isVerified    Boolean  @default(false)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, accountNumber])
+  @@index([userId])
 }

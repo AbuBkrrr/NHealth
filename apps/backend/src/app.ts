@@ -1,3 +1,5 @@
+import creditsRoutes from './routes/creditsRoutes';
+import webhookRoutes from './routes/webhookRoutes'
 import 'express-async-errors';
 import express from 'express';
 import path from 'path';
@@ -18,16 +20,69 @@ import messageRoutes from './routes/messageRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import adminRoutes from './routes/adminRoutes';
 import { errorHandler } from './middleware/errorHandler';
+import escrowRoutes from './routes/escrowRoutes';
+import providerBankRoutes from './routes/providerBankRoutes';
 
 export function createApp() {
   const app = express();
+
+  // [GLOBAL BODY PARSERS - MUST BE FIRST]
+  // These MUST run before any route to parse JSON bodies
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+  // [/GLOBAL BODY PARSERS]
+
+
+  // [BULLETPROOF CORS — inserted by fix-cors-top.cjs]
+  // Runs FIRST — before any other middleware. Sets CORS headers on EVERY request
+  // and handles OPTIONS preflight immediately with 204.
+app.use('/api/escrow', escrowRoutes);
+app.use('/api/provider', providerBankRoutes);
+  app.use((req: any, res: any, next: any) => {
+    const origin = req.headers.origin;
+
+    // Always echo back the origin (Bearer tokens don't need credentials flag)
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.setHeader('Vary', 'Origin');
+
+    // Handle preflight IMMEDIATELY
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
+    next();
+  });
+  // [/BULLETPROOF CORS]
+
+  // [BODY PARSERS — must run BEFORE any route]
+  // Raw body for webhook signature verification
+app.use('/api/webhooks', express.raw({ type: 'application/json', limit: '2mb' }), (req: any, res, next) => {
+  if (req.body && Buffer.isBuffer(req.body)) {
+    req.rawBody = req.body.toString('utf8');
+    try { req.body = JSON.parse(req.rawBody); } catch (e) { req.body = {}; }
+  }
+  next();
+});
+
+
 
   // ==================================================
   // 1. EXPLICIT CORS HANDLER — MUST BE FIRST
   //    This runs before any other middleware and sets
   //    headers on every response, including OPTIONS.
   // ==================================================
-  app.use((req, res, next) => {
+app.use('/api/webhooks', webhookRoutes);
+app.use('/api/credits', creditsRoutes);  
+app.use((req, res, next) => {
     const origin = req.headers.origin;
 
     // Allow requests with no origin (mobile apps, curl, Postman)
@@ -78,7 +133,7 @@ export function createApp() {
   // ==================================================
   // 3. Body parsers and loggers
   // ==================================================
-  app.use(express.json());
+
   app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
   // Serves uploaded avatars back out as plain static files.
