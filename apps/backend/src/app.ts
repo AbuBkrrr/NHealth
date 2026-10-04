@@ -22,6 +22,7 @@ import adminRoutes from './routes/adminRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import escrowRoutes from './routes/escrowRoutes';
 import providerBankRoutes from './routes/providerBankRoutes';
+import providerListRoutes from './routes/providerListRoutes';
 
 export function createApp() {
   const app = express();
@@ -29,6 +30,7 @@ export function createApp() {
   // [GLOBAL BODY PARSERS - MUST BE FIRST]
   // These MUST run before any route to parse JSON bodies
   app.use(express.json({ limit: '2mb' }));
+  app.use('/api/providers', providerListRoutes);
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
   // [/GLOBAL BODY PARSERS]
 

@@ -4,18 +4,30 @@
 (function() {
   'use strict';
 
-  var PROVIDERS = [
-    { id: 'd1', type: 'DOCTOR', icon: '👨‍⚕️', name: 'Dr. Adebayo Ogunlesi', specialty: 'Cardiology', rating: 4.8, reviews: 24, location: 'Lagos', experience: 12, fee: 15000, online: true },
-    { id: 'd2', type: 'DOCTOR', icon: '👩‍⚕️', name: 'Dr. Funmi Adeyemi', specialty: 'Pediatrics', rating: 4.6, reviews: 18, location: 'Lagos', experience: 8, fee: 10000, online: false },
-    { id: 'd3', type: 'DOCTOR', icon: '👨‍⚕️', name: 'Dr. Chidi Okonkwo', specialty: 'Orthopedics', rating: 4.9, reviews: 32, location: 'Abuja', experience: 15, fee: 20000, online: true },
-    { id: 'd4', type: 'DOCTOR', icon: '👩‍⚕️', name: 'Dr. Aisha Bello', specialty: 'Dermatology', rating: 4.7, reviews: 20, location: 'Lagos', experience: 10, fee: 12000, online: true },
-    { id: 'p1', type: 'PHARMACY', icon: '💊', name: 'HealthPlus Pharmacy', specialty: 'Retail Pharmacy', rating: 4.5, reviews: 18, location: 'Surulere, Lagos', experience: 10, fee: 0, online: true },
-    { id: 'p2', type: 'PHARMACY', icon: '💊', name: 'MedPlus Pharmacy', specialty: 'Retail Pharmacy', rating: 4.3, reviews: 12, location: 'Ikeja, Lagos', experience: 6, fee: 0, online: false },
-    { id: 'l1', type: 'LAB', icon: '🔬', name: 'Lagos Medical Lab', specialty: 'Diagnostics', rating: 4.7, reviews: 30, location: 'Surulere, Lagos', experience: 12, fee: 0, online: true },
-    { id: 'l2', type: 'LAB', icon: '🔬', name: 'LUTH Diagnostics', specialty: 'Radiology', rating: 4.4, reviews: 22, location: 'Idi-Araba, Lagos', experience: 20, fee: 0, online: true },
-    { id: 'n1', type: 'NURSE', icon: '👩‍⚕️', name: 'Nurse Funmi Adeyemi', specialty: 'Pediatric Nurse', rating: 4.8, reviews: 15, location: 'Lagos', experience: 8, fee: 8000, online: true },
-    { id: 'a1', type: 'AMBULANCE', icon: '🚑', name: 'N-Health Ambulance', specialty: 'Emergency Transport', rating: 4.6, reviews: 40, location: 'Lagos', experience: 5, fee: 0, online: true },
-  ];
+  
+  var API = 'https://n-health-backend-production.up.railway.app';
+  var PROVIDERS = [];  // populated from backend
+  var state = { filter: 'ALL', sortBy: 'rating' };
+
+  async function fetchProviders() {
+    try {
+      var token = localStorage.getItem('token');
+      var res = await fetch(API + '/api/providers/list', {
+        headers: { 'Authorization': 'Bearer ' + (token || '') },
+      });
+      if (!res.ok) {
+        console.error('Failed to fetch providers:', res.status);
+        return [];
+      }
+      var data = await res.json();
+      console.log('Loaded ' + data.length + ' providers from backend');
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.error('Fetch providers error:', e);
+      return [];
+    }
+  }
+
 
   var state = { filter: 'ALL', sortBy: 'rating' };
 
@@ -29,6 +41,10 @@
   }
 
   function renderList(container) {
+    if (!PROVIDERS || PROVIDERS.length === 0) {
+      container.innerHTML = '<div style="text-align:center;padding:40px 0;"><div style="font-size:32px;">🔍</div><p style="color:var(--text-secondary);margin-top:8px;">No providers found</p></div>';
+      return;
+    }
     var list = PROVIDERS;
     if (state.filter !== 'ALL') list = list.filter(function(p) { return p.type === state.filter; });
     list = applySort(list);
@@ -103,8 +119,8 @@
         if (apptBtn) apptBtn.click();
         setTimeout(function() {
           if (typeof window.bookAppointment === 'function') {
-            window.bookAppointment(p.name, p.specialty, p.fee);
-          } else {
+  window.bookAppointment(p.name, p.specialty, p.fee, p.userId);
+} else {
             showToast('⚠️ Booking module loading...');
           }
         }, 400);
@@ -143,7 +159,8 @@
   // ================================================
   // INJECT DIRECTORY INTO PROVIDERS SCREEN
   // ================================================
-  function injectDirectory() {
+  async function injectDirectory() {
+    PROVIDERS = await fetchProviders();
     var screen = document.getElementById('patient-providers');
     if (!screen || screen.dataset.dirInjected) return;
     screen.dataset.dirInjected = 'true';
