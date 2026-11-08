@@ -3,6 +3,8 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { env } from '../config/env';
+import { payWithCoins } from '../services/checkout';
 import { startDocument, drawField, drawTotal, drawFooterNote, finishDocument, formatNaira } from '../utils/pdf';
 
 const PAYMENT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes to complete USSD/Transfer/Card payment
@@ -32,7 +34,7 @@ interface ResolvedPayable {
  * from the database, never from the client, so nobody can pay less than
  * what's actually owed by tampering with the request body.
  */
-async function resolvePayable(
+export async function resolvePayable(
   payableType: string,
   payableId: string,
   patientId: string
@@ -44,7 +46,7 @@ async function resolvePayable(
         include: { doctor: { include: { user: { select: { id: true } } } } },
       });
       if (!appt || appt.patientId !== patientId) throw ApiError.notFound('Appointment not found');
-      return { amount: Number(appt.doctor.consultationFee), providerUserId: appt.doctor.user.id };
+      return { amount: Number(appt.fee) > 0 ? Number(appt.fee) + Number(appt.serviceFee) : Number(appt.doctor.consultationFee), providerUserId: appt.doctor.user.id };
     }
     case 'PHARMACY_ORDER': {
       const order = await prisma.pharmacyOrder.findUnique({
@@ -71,7 +73,7 @@ async function resolvePayable(
       if (!request.nurse) {
         throw ApiError.conflict('A nurse needs to accept this request before you can pay');
       }
-      return { amount: Number(request.nurse.hourlyRate) || NURSE_FALLBACK_FEE, providerUserId: request.nurse.user.id };
+      return { amount: Number(request.fee) || Number(request.nurse.hourlyRate) * (request.durationHours || 1) || NURSE_FALLBACK_FEE, providerUserId: request.nurse.user.id };
     }
     case 'DONATION': {
       const donation = await prisma.donation.findUnique({ where: { id: payableId } });
@@ -109,8 +111,15 @@ const createPaymentSchema = z.object({
 export async function createPayment(req: Request, res: Response) {
   const data = createPaymentSchema.parse(req.body);
 
+  // WALLET = pay with N-Health coins (closed-loop, prepaid via a licensed gateway). Settles instantly.
   if (data.method === 'WALLET') {
-    throw ApiError.forbidden('Wallet payments are not available yet - this feature is pending licensing approval.');
+    const payment = await payWithCoins(req.user!.userId, data.payableType as any, data.payableId);
+    return res.status(201).json(payment);
+  }
+  // Manual USSD/transfer instructions are a development simulation only. In production all card,
+  // transfer and USSD money moves through Paystack/Flutterwave top-ups or PayScrow escrow.
+  if (env.nodeEnv === 'production') {
+    throw ApiError.badRequest('Pay with N-Health coins, or use escrow checkout. Top up coins by card, transfer or USSD.');
   }
 
   const patient = await prisma.patientProfile.findUnique({ where: { userId: req.user!.userId } });

@@ -1,77 +1,62 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
-import { purchaseCredits } from '../services/creditsService';
+import { verifyWebhookSignature as verifyGatewaySignature, Gateway } from '../services/gateways';
+import { settleCreditPurchase } from '../services/creditSettlement';
+import { notify } from '../services/notify';
+import * as didit from '../services/didit';
+import { onKycDecision } from '../services/kyc';
 
-// Fincra
-export async function fincraWebhook(req: Request, res: Response) {
-  try {
-    const { event, data } = req.body;
-    console.log('Fincra webhook:', event, data && data.reference);
-    if (event === 'charge.successful' || event === 'collection.successful') {
-      const internalRef = (data && data.merchantReference) || (data && data.reference);
-      const log = await prisma.paymentGatewayLog.findFirst({
-        where: { internalRef, gateway: 'fincra', status: 'pending' },
-      });
-      if (log && log.userId) {
-        await purchaseCredits(log.userId, Number(log.amount), internalRef, 'Credit purchase via Fincra', { gateway: 'fincra', gatewayRef: data && data.reference });
-        await prisma.paymentGatewayLog.update({ where: { id: log.id }, data: { status: 'success', gatewayRef: (data && data.reference) || log.gatewayRef, webhookPayload: req.body } });
-      }
-    }
-    res.status(200).json({ received: true });
-  } catch (err) {
-    console.error('Fincra webhook error:', err);
-    res.status(200).json({ received: true });
+/** Common handler: authenticate webhook, then settle the referenced top-up if the gateway says it succeeded. */
+async function gatewayWebhook(gateway: Gateway, req: Request, res: Response, extract: (b: any) => { ref?: string; ok: boolean; amount?: number; currency?: string; gatewayRef?: string }) {
+  if (!verifyGatewaySignature(gateway, req.rawBody || '', req.headers)) {
+    console.warn(`[webhook:${gateway}] invalid signature`);
+    return res.status(401).json({ error: 'Invalid signature' });
   }
+  try {
+    const e = extract(req.body || {});
+    if (e.ok && e.ref) {
+      await prisma.paymentGatewayLog.updateMany({ where: { internalRef: e.ref }, data: { webhookPayload: req.body } });
+      // Webhook body is authenticated; still require amount/currency to match the pending log.
+      const verified = e.amount !== undefined && e.currency ? { amount: e.amount, currency: e.currency, gatewayRef: e.gatewayRef || '', raw: req.body } : undefined;
+      await settleCreditPurchase(e.ref, verified);
+    }
+  } catch (err) {
+    console.error(`[webhook:${gateway}] error`, err);
+  }
+  res.status(200).json({ received: true });
 }
 
-// Monnify
-export async function monnifyWebhook(req: Request, res: Response) {
-  try {
-    const { eventType, eventData } = req.body;
-    console.log('Monnify webhook:', eventType, eventData && eventData.paymentReference);
-    if (eventType === 'SUCCESSFUL_TRANSACTION') {
-      const internalRef = eventData && eventData.paymentReference;
-      const log = await prisma.paymentGatewayLog.findFirst({
-        where: { internalRef, gateway: 'monnify', status: 'pending' },
-      });
-      if (log && log.userId) {
-        await purchaseCredits(log.userId, Number(log.amount), internalRef, 'Credit purchase via Monnify', { gateway: 'monnify', gatewayRef: eventData && eventData.transactionReference });
-        await prisma.paymentGatewayLog.update({ where: { id: log.id }, data: { status: 'success', gatewayRef: (eventData && eventData.transactionReference) || log.gatewayRef, webhookPayload: req.body } });
-      }
-    }
-    res.status(200).json({ received: true });
-  } catch (err) {
-    console.error('Monnify webhook error:', err);
-    res.status(200).json({ received: true });
-  }
-}
+export const paystackWebhook = (req: Request, res: Response) => gatewayWebhook('paystack', req, res, (b) => ({
+  ok: b.event === 'charge.success' && b.data?.status === 'success', ref: b.data?.reference,
+  amount: b.data ? Number(b.data.amount) / 100 : undefined, currency: b.data?.currency, gatewayRef: String(b.data?.id ?? ''),
+}));
 
-// Flutterwave
-export async function flutterwaveWebhook(req: Request, res: Response) {
+export const flutterwaveWebhook = (req: Request, res: Response) => gatewayWebhook('flutterwave', req, res, (b) => ({
+  // Flutterwave's verif-hash is a shared secret, not a body signature -> re-verify via API (verified undefined).
+  ok: (b.event === 'charge.completed' || b['event.type'] === 'CARD_TRANSACTION') && (b.data?.status === 'successful'), ref: b.data?.tx_ref,
+}));
+
+export const fincraWebhook = (req: Request, res: Response) => gatewayWebhook('fincra', req, res, (b) => ({
+  ok: b.event === 'charge.successful' || b.event === 'collection.successful', ref: b.data?.merchantReference || b.data?.reference,
+  amount: b.data?.amount !== undefined ? Number(b.data.amount) : undefined, currency: b.data?.currency, gatewayRef: b.data?.reference,
+}));
+
+export const monnifyWebhook = (req: Request, res: Response) => gatewayWebhook('monnify', req, res, (b) => ({
+  ok: b.eventType === 'SUCCESSFUL_TRANSACTION', ref: b.eventData?.paymentReference,
+  amount: b.eventData?.amountPaid !== undefined ? Number(b.eventData.amountPaid) : undefined, currency: b.eventData?.currency || 'NGN',
+  gatewayRef: b.eventData?.transactionReference,
+}));
+
+// Didit identity verification
+export async function diditWebhook(req: Request, res: Response) {
+  if (!didit.verifyWebhook(req.rawBody || '', req.headers)) return res.status(401).json({ error: 'Invalid signature' });
   try {
-    const hash = req.headers['verif-hash'];
-    const expectedHash = process.env.FLUTTERWAVE_WEBHOOK_HASH;
-    if (expectedHash && hash !== expectedHash) {
-      console.warn('Flutterwave webhook: invalid hash');
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
-    const { event, data } = req.body;
-    console.log('Flutterwave webhook:', event, data && data.tx_ref);
-    if (event === 'charge.completed' && data && data.status === 'successful') {
-      const internalRef = data && data.tx_ref;
-      const log = await prisma.paymentGatewayLog.findFirst({
-        where: { internalRef, gateway: 'flutterwave', status: 'pending' },
-      });
-      if (log && log.userId) {
-        await purchaseCredits(log.userId, Number(log.amount), internalRef, 'Credit purchase via Flutterwave', { gateway: 'flutterwave', gatewayRef: String(data && data.id) });
-        await prisma.paymentGatewayLog.update({ where: { id: log.id }, data: { status: 'success', gatewayRef: String((data && data.id) || log.gatewayRef), webhookPayload: req.body } });
-      }
-    }
-    res.status(200).json({ received: true });
-  } catch (err) {
-    console.error('Flutterwave webhook error:', err);
-    res.status(200).json({ received: true });
+    const b = req.body || {};
+    if (b.session_id) await onKycDecision(b.session_id, b.status, b.decision, b.vendor_data);
+  } catch (e) {
+    console.error('[webhook:didit]', e);
   }
+  res.status(200).json({ received: true });
 }
 
 // PayScrow
@@ -122,6 +107,15 @@ export async function payscrowWebhook(req: Request, res: Response) {
         },
       });
       console.log(`Escrow funded: ${escrow.id} (${transactionNumber})`);
+      if (escrow.purpose === 'appointment') {
+        await prisma.appointment.updateMany({ where: { id: escrow.purposeId }, data: { paymentStatus: 'PAID_ESCROW' } });
+      } else if (escrow.purpose === 'pharmacy') {
+        await prisma.pharmacyOrder.updateMany({ where: { id: escrow.purposeId }, data: { paymentStatus: 'PAID', status: 'PROCESSING' } });
+      } else if (escrow.purpose === 'lab') {
+        await prisma.labTest.updateMany({ where: { id: escrow.purposeId }, data: { paymentStatus: 'PAID_ESCROW' } });
+      }
+      await notify(escrow.userId, 'payment', 'Payment secured in escrow 🔒', 'Your payment is held safely and released to the provider once you confirm the service.', { data: { escrowId: escrow.id } });
+      if (escrow.providerUserId) await notify(escrow.providerUserId, 'payment', 'New paid booking', 'A patient has paid into escrow for your service.', { data: { escrowId: escrow.id } });
     }
 
     res.status(200).json({ received: true });

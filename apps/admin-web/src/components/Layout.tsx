@@ -18,6 +18,11 @@ export function Layout() {
         <NavLink to="/users" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           Users
         </NavLink>
+        {[['/operations', 'Operations'], ['/verifications', 'Provider verification'], ['/kyc', 'Identity (KYC)'], ['/campaigns', 'Donation campaigns'], ['/payouts', 'Payouts'], ['/tickets', 'Support tickets'], ['/catalogs', 'Catalogs & rates']].map(([to, label]) => (
+          <NavLink key={to} to={to} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+            {label}
+          </NavLink>
+        ))}
         {user?.isSuperAdmin && (
           <>
             <NavLink to="/admins" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>

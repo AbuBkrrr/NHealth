@@ -23,3 +23,9 @@ mobile/.expo/
 
 # One-time helper scripts
 *.cjs
+
+# Production migration runner must be committed
+!apps/backend/scripts/*.cjs
+
+# Local upload fallback (dev only)
+apps/backend/uploads/

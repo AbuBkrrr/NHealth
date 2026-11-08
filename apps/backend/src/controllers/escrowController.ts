@@ -1,3 +1,5 @@
+import { resolvePayable } from './paymentController';
+import { env } from '../config/env';
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
@@ -15,14 +17,20 @@ import {
 // ============================================================
 export async function initiateEscrow(req: Request, res: Response) {
   const patientUserId = req.user!.userId;
-  const { purpose, purposeId, amount, providerUserId, description } = req.body;
-
-  if (!purpose || !purposeId || !amount || amount < 100) {
+  const { purpose, purposeId, description } = req.body;
+  const PURPOSE_TO_PAYABLE: Record<string, string> = { appointment: 'APPOINTMENT', pharmacy: 'PHARMACY_ORDER', lab: 'LAB_TEST', nurse: 'NURSE_REQUEST' };
+  if (!purpose || !purposeId || !PURPOSE_TO_PAYABLE[purpose]) {
     throw ApiError.badRequest('Missing or invalid fields');
   }
-  if (!providerUserId) {
-    throw ApiError.badRequest('Provider user ID required');
-  }
+  // Amount and payee always come from the booked record - never from the client.
+  const patientProfile = await prisma.patientProfile.findUnique({ where: { userId: patientUserId } });
+  if (!patientProfile) throw ApiError.notFound('Patient profile not found');
+  const resolved = await resolvePayable(PURPOSE_TO_PAYABLE[purpose], purposeId, patientProfile.id);
+  const amount = resolved.amount;
+  const providerUserId = resolved.providerUserId;
+  if (!providerUserId || amount < 100) throw ApiError.badRequest('This item cannot be paid through escrow');
+  const already = await prisma.escrowTransaction.findFirst({ where: { purposeId, userId: patientUserId, status: { in: ['pending', 'in_escrow'] } } });
+  if (already?.paymentLink) return res.json({ escrowId: already.id, paymentLink: already.paymentLink, status: already.status, reused: true });
 
   // Fetch patient and provider
   const [patient, provider] = await Promise.all([
@@ -60,7 +68,7 @@ export async function initiateEscrow(req: Request, res: Response) {
     customerName: patient.name,
     currencyCode: 'NGN',
     merchantChargePercentage: 50,
-    returnUrl: `https://www.nhealth.com.ng/?escrow=success&ref=${externalRef}`,
+    returnUrl: `${env.appUrl}/?escrow=success&ref=${externalRef}`,
     items: [{
       name: description || `N-Health ${purpose}`,
       quantity: 1,

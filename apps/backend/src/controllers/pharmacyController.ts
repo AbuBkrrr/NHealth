@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { notify } from '../services/notify';
+import { refundCoinPayment } from '../services/checkout';
 
 /** Looks up the PharmacyProfile row for the logged-in user, or throws. */
 async function getPharmacyProfile(userId: string) {
@@ -43,7 +45,7 @@ export async function getStats(req: Request, res: Response) {
 
   const [pendingOrders, lowStockCount, totalItems, orders] = await Promise.all([
     prisma.pharmacyOrder.count({ where: { pharmacyId: pharmacy.id, status: 'PENDING' } }),
-    prisma.inventory.count({ where: { pharmacyId: pharmacy.id, stock: { lte: 5 } } }),
+    prisma.inventory.count({ where: { pharmacyId: pharmacy.id, stock: { lte: 10 } } }),
     prisma.inventory.count({ where: { pharmacyId: pharmacy.id } }),
     prisma.pharmacyOrder.findMany({
       where: { pharmacyId: pharmacy.id, paymentStatus: 'PAID' },
@@ -79,6 +81,15 @@ const inventorySchema = z.object({
   price: z.number().min(0),
   expiryDate: z.string().datetime().optional().nullable(),
   supplierId: z.string().optional().nullable(),
+  brand: z.string().max(120).optional().nullable(),
+  manufacturer: z.string().max(120).optional().nullable(),
+  batchNumber: z.string().max(60).optional().nullable(),
+  barcode: z.string().max(60).optional().nullable(),
+  unit: z.string().max(30).optional().nullable(),
+  costPrice: z.number().min(0).optional().nullable(),
+  reorderLevel: z.number().int().min(0).optional(),
+  requiresPrescription: z.boolean().optional(),
+  description: z.string().max(1000).optional().nullable(),
 });
 
 export async function createInventoryItem(req: Request, res: Response) {
@@ -93,6 +104,8 @@ export async function createInventoryItem(req: Request, res: Response) {
       price: data.price,
       expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
       supplierId: data.supplierId ?? null,
+      brand: data.brand, manufacturer: data.manufacturer, batchNumber: data.batchNumber, barcode: data.barcode, unit: data.unit,
+      costPrice: data.costPrice ?? undefined, reorderLevel: data.reorderLevel, requiresPrescription: data.requiresPrescription, description: data.description,
     },
   });
   res.status(201).json(item);
@@ -178,7 +191,7 @@ export async function listOrders(req: Request, res: Response) {
   const { status } = req.query;
   const orders = await prisma.pharmacyOrder.findMany({
     where: { pharmacyId: pharmacy.id, status: status ? (String(status) as any) : undefined },
-    include: { patient: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } } },
+    include: { patient: { include: { user: { select: { id: true, name: true, avatarUrl: true, phone: true } } } }, prescription: { include: { doctor: { include: { user: { select: { name: true } } } } } } },
     orderBy: { createdAt: 'desc' },
   });
   res.json(orders);
@@ -217,7 +230,8 @@ export async function updateOrderStatus(req: Request, res: Response) {
     throw ApiError.conflict(`Cannot move an order from ${order.status} to ${data.status}`);
   }
 
-  const updated = await prisma.pharmacyOrder.update({ where: { id: order.id }, data: { status: data.status } });
+  const updated = await prisma.pharmacyOrder.update({ where: { id: order.id }, data: { status: data.status, declineReason: data.status === 'CANCELLED' ? (req.body as any).reason || null : undefined } });
+  if (data.status === 'CANCELLED') await refundCoinPayment('PHARMACY_ORDER', order.id, 'order declined by pharmacy');
 
   // Restock items if the order is cancelled after stock was already deducted.
   if (data.status === 'CANCELLED') {
@@ -232,6 +246,8 @@ export async function updateOrderStatus(req: Request, res: Response) {
   const patient = await prisma.patientProfile.findUnique({ where: { id: order.patientId }, select: { userId: true } });
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('order:updated', updated);
+    const txt: Record<string, string> = { PROCESSING: 'is being prepared', READY: 'is ready for pickup', OUT_FOR_DELIVERY: 'is on its way 🛵', DELIVERED: 'was delivered', CANCELLED: 'was declined' };
+    await notify(patient.userId, 'order', 'Order update', `Your pharmacy order ${txt[updated.status] || updated.status}.`, { sms: updated.status === 'READY', data: { orderId: order.id } });
   }
 
   res.json(updated);

@@ -8,6 +8,36 @@ import { ApiError } from '../utils/ApiError';
 import { Role } from '@nhealth/shared-types';
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
+import { issueOtp, checkOtp } from '../services/otp';
+import { sendEmail } from '../services/email';
+import { sendSms } from '../services/sms';
+import { notify } from '../services/notify';
+import { invalidateUserState } from '../middleware/auth';
+
+const PROVIDER_ROLES = ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE', 'INSTITUTION'];
+const MAX_FAILED_LOGINS = 5;
+const LOCK_MINUTES = 15;
+
+/** Public, safe user payload returned by every auth endpoint. */
+function publicUser(user: any, role: string, roles: string[]) {
+  return {
+    id: user.id, email: user.email, name: user.name, role, roles, isSuperAdmin: user.isSuperAdmin,
+    avatarUrl: user.avatarUrl, phone: user.phone, country: user.country, currency: user.currency, locale: user.locale,
+    timezone: user.timezone, kycStatus: user.kycStatus, verificationStatus: user.verificationStatus,
+    emailVerified: !!user.emailVerifiedAt, phoneVerified: !!user.phoneVerifiedAt, referralCode: user.referralCode,
+  };
+}
+
+function tokenFor(user: any, role: string) {
+  return signToken({ userId: user.id, role: role as any, isSuperAdmin: user.isSuperAdmin, tv: user.tokenVersion ?? 0 } as any, env.jwtSecret, env.jwtExpiresIn);
+}
+
+const makeReferralCode = () => 'NH' + crypto.randomBytes(4).toString('hex').toUpperCase();
+
+async function sendEmailVerification(userId: string, email: string) {
+  const code = await issueOtp(email, 'email_verify', userId);
+  await sendEmail(email, 'Verify your email', 'Verify your email', `Your N-Health verification code is <b style="font-size:20px;letter-spacing:3px">${code}</b>. It expires in 10 minutes.`);
+}
 
 
 const registerSchema = z.object({
@@ -17,6 +47,13 @@ const registerSchema = z.object({
   phone: z.string().optional(),
   role: z.nativeEnum(Role),
   profile: z.record(z.any()).optional(),
+  country: z.string().length(2).optional(),
+  currency: z.string().length(3).optional(),
+  timezone: z.string().optional(),
+  locale: z.string().optional(),
+  acceptTerms: z.boolean().optional(),
+  marketingOptIn: z.boolean().optional(),
+  referralCode: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -96,6 +133,23 @@ async function createRoleProfile(userId: string, role: Role, profile: Record<str
           hourlyRate: profile.hourlyRate ?? 0,
         },
       });
+    case 'INSTITUTION':
+      return prisma.institutionProfile.create({
+        data: {
+          userId,
+          name: profile.name ?? profile.institutionName ?? '',
+          type: profile.type ?? 'HOSPITAL',
+          licenseNumber: profile.licenseNumber ?? '',
+          email: profile.email,
+          phone: profile.phone,
+          address: profile.address,
+          city: profile.city,
+          state: profile.state,
+          country: profile.country ?? 'NG',
+          lat: profile.lat,
+          lng: profile.lng,
+        },
+      });
     case 'ADMIN':
       return undefined;
   }
@@ -110,6 +164,7 @@ function buildRolesArray(u: any): string[] {
   if (u.labProfile) roles.push('LAB');
   if (u.ambulanceProfile) roles.push('AMBULANCE');
   if (u.nurseProfile) roles.push('NURSE');
+  if (u.institutionProfile) roles.push('INSTITUTION');
   if (u.isSuperAdmin || u.role === 'ADMIN') roles.push('ADMIN');
   return roles;
 }
@@ -125,6 +180,7 @@ async function getUserWithProfiles(where: any) {
       labProfile: true,
       ambulanceProfile: true,
       nurseProfile: true,
+      institutionProfile: true,
     },
   });
 }
@@ -139,7 +195,7 @@ export async function register(req: Request, res: Response) {
     throw ApiError.forbidden('Admin accounts cannot self-register - ask a super admin to create one.');
   }
 
-  const existing = await getUserWithProfiles({ email: data.email });
+  const existing = await getUserWithProfiles({ email: data.email.toLowerCase() });
 
   let user;
 
@@ -175,43 +231,44 @@ export async function register(req: Request, res: Response) {
     }
 
     await createRoleProfile(existing.id, data.role, data.profile ?? {});
+    if (PROVIDER_ROLES.includes(data.role) && existing.verificationStatus === 'UNVERIFIED') {
+      await prisma.user.update({ where: { id: existing.id }, data: { verificationStatus: 'PENDING' } });
+    }
     user = existing;
   } else {
+    if (data.acceptTerms === false) throw ApiError.badRequest('You must accept the Terms of Service and Privacy Policy');
     const passwordHash = await bcrypt.hash(String(data.password), 12);
+    const referrer = data.referralCode ? await prisma.user.findUnique({ where: { referralCode: data.referralCode.toUpperCase() } }) : null;
     user = await prisma.user.create({
       data: {
-        email: data.email,
+        email: data.email.toLowerCase(),
         passwordHash,
         name: data.name,
         phone: data.phone,
         role: data.role,
+        country: data.country?.toUpperCase() ?? 'NG',
+        currency: data.currency?.toUpperCase() ?? 'NGN',
+        timezone: data.timezone ?? 'Africa/Lagos',
+        locale: data.locale ?? 'en',
+        termsAcceptedAt: new Date(),
+        privacyAcceptedAt: new Date(),
+        marketingOptIn: !!data.marketingOptIn,
+        referralCode: makeReferralCode(),
+        referredById: referrer?.id,
+        verificationStatus: PROVIDER_ROLES.includes(data.role) ? 'PENDING' : 'UNVERIFIED',
       },
     });
     await createRoleProfile(user.id, data.role, data.profile ?? {});
+    await sendEmailVerification(user.id, user.email).catch(() => null);
+    await notify(user.id, 'system', 'Welcome to N-Health 🎉', PROVIDER_ROLES.includes(data.role)
+      ? 'Complete identity verification and upload your licence to start receiving patients.'
+      : 'Complete your health profile and verify your identity to unlock all services.');
   }
 
   const fullUser = await getUserWithProfiles({ id: user.id });
   const roles = buildRolesArray(fullUser!);
-
-  const token = signToken(
-    { userId: user.id, role: user.role, isSuperAdmin: user.isSuperAdmin },
-    env.jwtSecret,
-    env.jwtExpiresIn
-  );
-
-  res.status(201).json({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      roles,
-      isSuperAdmin: user.isSuperAdmin,
-      avatarUrl: user.avatarUrl,
-      phone: user.phone,
-    },
-  });
+  const activeRole = existing ? data.role : user.role;
+  res.status(201).json({ token: tokenFor(fullUser, activeRole), user: publicUser(fullUser, activeRole, roles) });
 }
 
 // ============================================================
@@ -220,11 +277,22 @@ export async function register(req: Request, res: Response) {
 export async function login(req: Request, res: Response) {
   const data = loginSchema.parse(req.body);
 
-  const user = await getUserWithProfiles({ email: data.email });
-  if (!user) throw ApiError.unauthorized('Invalid email or password');
+  const user = await getUserWithProfiles({ email: data.email.toLowerCase() });
+  if (!user || user.deletedAt) throw ApiError.unauthorized('Invalid email or password');
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    throw ApiError.forbidden(`Too many failed attempts. Try again after ${user.lockedUntil.toISOString()} or reset your password.`);
+  }
 
-  const valid = await bcrypt.compare(String(data.password), user.passwordHash);
-  if (!valid) throw ApiError.unauthorized('Invalid email or password');
+  const valid = await bcrypt.compare(String(data.password), user.passwordHash).catch(() => false);
+  if (!valid) {
+    const fails = user.failedLogins + 1;
+    await prisma.user.update({ where: { id: user.id }, data: {
+      failedLogins: fails >= MAX_FAILED_LOGINS ? 0 : fails,
+      lockedUntil: fails >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : undefined,
+    } });
+    throw ApiError.unauthorized('Invalid email or password');
+  }
+  await prisma.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
 
   if (!user.isActive) throw ApiError.forbidden('This account has been deactivated');
 
@@ -237,7 +305,7 @@ export async function login(req: Request, res: Response) {
 
     if (requested === 'PROVIDER') {
       // Pick the user's first provider role (DOCTOR, PHARMACY, LAB, AMBULANCE, NURSE)
-      const providerRoles = ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE'];
+      const providerRoles = PROVIDER_ROLES;
       const found = roles.find(r => providerRoles.includes(r));
       if (found) {
         activeRole = found as any;
@@ -251,25 +319,7 @@ export async function login(req: Request, res: Response) {
     activeRole = roles[0] as any;
   }
 
-  const token = signToken(
-    { userId: user.id, role: activeRole, isSuperAdmin: user.isSuperAdmin },
-    env.jwtSecret,
-    env.jwtExpiresIn
-  );
-
-  res.json({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: activeRole,
-      roles,
-      isSuperAdmin: user.isSuperAdmin,
-      avatarUrl: user.avatarUrl,
-      phone: user.phone,
-    },
-  });
+  res.json({ token: tokenFor(user, activeRole), user: publicUser(user, activeRole, roles) });
 }
 
 // ============================================================
@@ -285,12 +335,13 @@ export async function me(req: Request, res: Response) {
       labProfile: true,
       ambulanceProfile: true,
       nurseProfile: true,
+      institutionProfile: true,
     },
   });
   if (!user) throw ApiError.notFound('User not found');
-  const { passwordHash, ...safeUser } = user;
+  const { passwordHash, failedLogins, lockedUntil, tokenVersion, ...safeUser } = user as any;
   const roles = buildRolesArray(user);
-  res.json({ ...safeUser, roles });
+  res.json({ ...safeUser, roles, activeRole: req.user!.role, emailVerified: !!user.emailVerifiedAt, phoneVerified: !!user.phoneVerifiedAt });
 }
 
 // ============================================================
@@ -309,77 +360,96 @@ export async function switchRole(req: Request, res: Response) {
     return res.status(403).json({ error: 'You do not have a ' + role.toLowerCase() + ' profile.' });
   }
 
-  const token = signToken(
-    { userId: user.id, role: role as any, isSuperAdmin: user.isSuperAdmin },
-    env.jwtSecret,
-    env.jwtExpiresIn
-  );
-
-  res.json({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role,
-      roles,
-      isSuperAdmin: user.isSuperAdmin,
-      avatarUrl: user.avatarUrl,
-      phone: user.phone,
-    },
-  });
+  res.json({ token: tokenFor(user, role), user: publicUser(user, role, roles) });
 }
 
 // ============================================================
 // PASSWORD RESET
 // ============================================================
-const resetCodes = new Map<string, { code: string; expiresAt: number }>();
-
+// Codes are 6 digits, stored hashed in the database, valid 10 minutes, max 5 attempts.
 export async function forgotPassword(req: Request, res: Response) {
-  const { email } = req.body;
+  const email = String(req.body.email || '').toLowerCase().trim();
   if (!email) return res.status(400).json({ error: 'Email is required' });
-
   const user = await prisma.user.findUnique({ where: { email } });
-
-  if (!user) {
-    return res.json({ message: 'If that email exists, a code has been sent.' });
+  if (user && !user.deletedAt) {
+    const code = await issueOtp(email, 'password_reset', user.id);
+    await sendEmail(email, 'Reset your N-Health password', 'Password reset code',
+      `Use this code to reset your password: <b style="font-size:20px;letter-spacing:3px">${code}</b><br>It expires in 10 minutes. If you didn't request this, you can ignore this email.`);
+    if (user.phone) await sendSms(user.phone, `Your N-Health password reset code is ${code}. Expires in 10 min. Never share it.`);
   }
-
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  resetCodes.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
-
-  console.log('\u{1F4E7} Password reset code for ' + email + ': ' + code);
-
   return res.json({ message: 'If that email exists, a code has been sent.' });
 }
 
 export async function verifyResetCode(req: Request, res: Response) {
-  const { email, code } = req.body;
+  const email = String(req.body.email || '').toLowerCase().trim();
+  const { code } = req.body;
   if (!email || !code) return res.status(400).json({ error: 'Email and code required' });
-
-  const entry = resetCodes.get(email);
-  if (!entry || entry.code !== code || Date.now() > entry.expiresAt) {
-    return res.status(400).json({ error: 'Invalid or expired code' });
-  }
-
+  if (!(await checkOtp(email, 'password_reset', code, false))) return res.status(400).json({ error: 'Invalid or expired code' });
   return res.json({ message: 'Code verified' });
 }
 
 export async function resetPassword(req: Request, res: Response) {
-  const { email, code, password } = req.body;
+  const email = String(req.body.email || '').toLowerCase().trim();
+  const { code, password } = req.body;
   if (!email || !code || !password) return res.status(400).json({ error: 'Missing fields' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-
-  const entry = resetCodes.get(email);
-  if (!entry || entry.code !== code || Date.now() > entry.expiresAt) {
-    return res.status(400).json({ error: 'Invalid or expired code' });
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-  await prisma.user.update({ where: { email }, data: { passwordHash: hashedPassword } });
-  resetCodes.delete(email);
-
+  if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!(await checkOtp(email, 'password_reset', code, true))) return res.status(400).json({ error: 'Invalid or expired code' });
+  const passwordHash = await bcrypt.hash(String(password), 12);
+  const u = await prisma.user.update({ where: { email }, data: { passwordHash, tokenVersion: { increment: 1 }, failedLogins: 0, lockedUntil: null } });
+  invalidateUserState(u.id);
+  await notify(u.id, 'system', 'Password changed', 'Your password was reset. If this was not you, contact support immediately.', { email: true });
   return res.json({ message: 'Password reset successful' });
+}
+
+export async function changePassword(req: Request, res: Response) {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || String(newPassword).length < 8) throw ApiError.badRequest('New password must be at least 8 characters');
+  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  if (!user) throw ApiError.notFound('User not found');
+  const isGoogleOnly = user.passwordHash.startsWith('GOOGLE_OAUTH_');
+  if (!isGoogleOnly && !(await bcrypt.compare(String(currentPassword || ''), user.passwordHash))) throw ApiError.unauthorized('Current password is incorrect');
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(String(newPassword), 12), tokenVersion: { increment: 1 } } });
+  invalidateUserState(user.id);
+  res.json({ message: 'Password changed', token: tokenFor(updated, req.user!.role) });
+}
+
+/** Revokes every issued token for this account. */
+export async function logoutAll(req: Request, res: Response) {
+  await prisma.user.update({ where: { id: req.user!.userId }, data: { tokenVersion: { increment: 1 } } });
+  invalidateUserState(req.user!.userId);
+  res.json({ message: 'Signed out on all devices' });
+}
+
+export async function sendVerifyEmail(req: Request, res: Response) {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  if (!user) throw ApiError.notFound('User not found');
+  if (user.emailVerifiedAt) return res.json({ message: 'Email already verified' });
+  await sendEmailVerification(user.id, user.email);
+  res.json({ message: 'Verification code sent' });
+}
+
+export async function confirmVerifyEmail(req: Request, res: Response) {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  if (!user) throw ApiError.notFound('User not found');
+  if (!(await checkOtp(user.email, 'email_verify', String(req.body.code || ''), true))) throw ApiError.badRequest('Invalid or expired code');
+  await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+  res.json({ message: 'Email verified' });
+}
+
+export async function sendVerifyPhone(req: Request, res: Response) {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  if (!user?.phone) throw ApiError.badRequest('Add a phone number to your profile first');
+  const code = await issueOtp(user.phone, 'phone_verify', user.id);
+  await sendSms(user.phone, `Your N-Health verification code is ${code}. Expires in 10 min.`);
+  res.json({ message: 'Verification code sent by SMS' });
+}
+
+export async function confirmVerifyPhone(req: Request, res: Response) {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  if (!user?.phone) throw ApiError.badRequest('No phone number on file');
+  if (!(await checkOtp(user.phone, 'phone_verify', String(req.body.code || ''), true))) throw ApiError.badRequest('Invalid or expired code');
+  await prisma.user.update({ where: { id: user.id }, data: { phoneVerifiedAt: new Date() } });
+  res.json({ message: 'Phone verified' });
 }
 
 // ============================================================
@@ -415,6 +485,10 @@ export async function googleAuth(req: Request, res: Response) {
           passwordHash: 'GOOGLE_OAUTH_' + Math.random().toString(36),
           avatarUrl: picture,
           role: finalRole as any,
+          emailVerifiedAt: new Date(),
+          termsAcceptedAt: new Date(),
+          privacyAcceptedAt: new Date(),
+          referralCode: makeReferralCode(),
         },
       });
 
@@ -429,32 +503,16 @@ export async function googleAuth(req: Request, res: Response) {
     let activeRole = user!.role;
     const requestedRole = String(role).toUpperCase();
     if (requestedRole === 'PROVIDER') {
-      const providerRoles = ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE'];
+      const providerRoles = PROVIDER_ROLES;
       const found = roles.find(r => providerRoles.includes(r));
       if (found) activeRole = found as any;
     } else if (roles.includes(requestedRole)) {
       activeRole = requestedRole as any;
     }
 
-    const token = signToken(
-      { userId: user!.id, role: activeRole, isSuperAdmin: user!.isSuperAdmin },
-      env.jwtSecret,
-      env.jwtExpiresIn
-    );
-
-    return res.json({
-      token,
-      user: {
-        id: user!.id,
-        email: user!.email,
-        name: user!.name,
-        role: activeRole,
-        roles,
-        isSuperAdmin: user!.isSuperAdmin,
-        avatarUrl: user!.avatarUrl,
-        phone: user!.phone,
-      },
-    });
+    if (!user!.isActive || user!.deletedAt) return res.status(403).json({ error: 'This account has been deactivated' });
+    await prisma.user.update({ where: { id: user!.id }, data: { lastLoginAt: new Date(), emailVerifiedAt: user!.emailVerifiedAt ?? new Date() } });
+    return res.json({ token: tokenFor(user, activeRole), user: publicUser(user, activeRole, roles) });
   } catch (err) {
     console.error('Google auth error:', err);
     return res.status(401).json({ error: 'Google authentication failed' });
@@ -468,6 +526,7 @@ export async function googleAuth(req: Request, res: Response) {
 export async function updateProfile(req: Request, res: Response) {
   const userId = req.user!.userId;
   const { name, phone, address, height, weight, bloodType, genotype } = req.body;
+  const b = req.body || {};
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -479,6 +538,10 @@ export async function updateProfile(req: Request, res: Response) {
   const userUpdate: any = {};
   if (name) userUpdate.name = name;
   if (phone) userUpdate.phone = phone;
+  if (phone && phone !== user.phone) userUpdate.phoneVerifiedAt = null;
+  for (const k of ['country', 'currency', 'locale', 'timezone']) if (typeof b[k] === 'string' && b[k]) userUpdate[k] = k === 'country' || k === 'currency' ? b[k].toUpperCase() : b[k];
+  if (b.notificationPrefs && typeof b.notificationPrefs === 'object') userUpdate.notificationPrefs = b.notificationPrefs;
+  if (typeof b.marketingOptIn === 'boolean') userUpdate.marketingOptIn = b.marketingOptIn;
   if (Object.keys(userUpdate).length > 0) {
     await prisma.user.update({ where: { id: userId }, data: userUpdate });
   }
@@ -489,6 +552,15 @@ export async function updateProfile(req: Request, res: Response) {
     if (address !== undefined) profileUpdate.address = address;
     if (height !== undefined) profileUpdate.height = height;
     if (weight !== undefined) profileUpdate.weight = weight;
+    // KYC & health information used by providers and insurers
+    const text = ['gender', 'maritalStatus', 'occupation', 'city', 'state', 'country', 'allergies', 'chronicConditions', 'currentMedications',
+      'disabilities', 'surgeries', 'familyHistory', 'alcohol', 'emergencyContact', 'emergencyPhone', 'nhisNumber', 'nationalIdType'];
+    for (const k of text) if (b[k] !== undefined) profileUpdate[k] = b[k] === '' ? null : String(b[k]);
+    if (b.nationalIdNumber) profileUpdate.nationalIdLast4 = String(b.nationalIdNumber).slice(-4);
+    if (b.dateOfBirth !== undefined) profileUpdate.dateOfBirth = b.dateOfBirth ? new Date(b.dateOfBirth) : null;
+    if (typeof b.smoker === 'boolean') profileUpdate.smoker = b.smoker;
+    if (typeof b.isBloodDonor === 'boolean') profileUpdate.isBloodDonor = b.isBloodDonor;
+    if (typeof b.insuranceShareConsent === 'boolean') profileUpdate.insuranceShareConsent = b.insuranceShareConsent;
 
     // Blood group change limit (2 max)
     if (bloodType && bloodType !== user.patientProfile.bloodType) {
@@ -528,9 +600,10 @@ export async function updateProfile(req: Request, res: Response) {
       labProfile: true,
       ambulanceProfile: true,
       nurseProfile: true,
+      institutionProfile: true,
     },
   });
 
-  const { passwordHash, ...safe } = updated!;
+  const { passwordHash, failedLogins, lockedUntil, tokenVersion, ...safe } = updated as any;
   res.json(safe);
 }

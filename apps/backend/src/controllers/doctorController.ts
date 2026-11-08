@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { notify } from '../services/notify';
+import { refundCoinPayment } from '../services/checkout';
+import { logAccess } from '../services/audit';
 import { startDocument, drawField, drawTable, drawFooterNote, finishDocument } from '../utils/pdf';
 
 /** Looks up the DoctorProfile row for the logged-in user, or throws. */
@@ -88,6 +91,14 @@ export async function respondToAppointment(req: Request, res: Response) {
   const patient = await prisma.patientProfile.findUnique({ where: { id: appointment.patientId }, select: { userId: true } });
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('appointment:updated', updated);
+    const msg: Record<string, string> = { CONFIRMED: 'confirmed ✅', CANCELLED: 'declined', COMPLETED: 'marked completed', IN_PROGRESS: 'started' };
+    await notify(patient.userId, 'appointment', 'Appointment ' + (msg[updated.status] || updated.status.toLowerCase()), `Your appointment on ${appointment.scheduledAt.toISOString()} was ${msg[updated.status] || updated.status.toLowerCase()}.${data.notes ? ' Note: ' + data.notes : ''}`, { email: true, sms: updated.status === 'CONFIRMED', data: { appointmentId: appointment.id } });
+  }
+  if (updated.status === 'CANCELLED') await refundCoinPayment('APPOINTMENT', appointment.id, 'declined by doctor');
+  // "Refer": hand the patient to another provider with a tracked referral.
+  if ((req.body as any).referToUserId && patient) {
+    await prisma.referral.create({ data: { fromId: req.user!.userId, toId: String((req.body as any).referToUserId), patientUserId: patient.userId, appointmentId: appointment.id, reason: data.notes || 'Specialist review' } });
+    await notify(String((req.body as any).referToUserId), 'appointment', 'New referral', 'A doctor referred a patient to you.', { data: { appointmentId: appointment.id } });
   }
 
   res.json(updated);
@@ -111,6 +122,7 @@ export async function listPatients(req: Request, res: Response) {
 }
 
 export async function getPatientDetail(req: Request, res: Response) {
+  await logAccess(req.user!.userId, (await prisma.patientProfile.findUnique({ where: { id: req.params.patientId }, select: { userId: true } }))?.userId || '', 'patient_record', 'VIEW', req.ip);
   const doctor = await getDoctorProfile(req.user!.userId);
   const patientId = req.params.patientId;
   await assertDoctorTreatsPatient(doctor.id, patientId);
@@ -153,12 +165,19 @@ export async function createPrescription(req: Request, res: Response) {
   await assertDoctorTreatsPatient(doctor.id, data.patientId);
 
   const prescription = await prisma.prescription.create({
-    data: { patientId: data.patientId, doctorId: doctor.id, medications: data.medications },
+    data: { patientId: data.patientId, doctorId: doctor.id, medications: data.medications,
+      pharmacyId: (req.body as any).pharmacyId || undefined, notes: (req.body as any).notes || undefined, appointmentId: (req.body as any).appointmentId || undefined },
   });
+  // Optionally route straight to a pharmacy of the patient's choice.
+  if (prescription.pharmacyId) {
+    const ph = await prisma.pharmacyProfile.findUnique({ where: { id: prescription.pharmacyId }, select: { userId: true } });
+    if (ph) await notify(ph.userId, 'order', 'Prescription received 📄', 'A doctor sent a prescription for a patient.', { data: { prescriptionId: prescription.id } });
+  }
 
   const patient = await prisma.patientProfile.findUnique({ where: { id: data.patientId }, select: { userId: true } });
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('prescription:new', prescription);
+    await notify(patient.userId, 'order', 'New prescription 💊', 'Your doctor issued a prescription. Order it from any pharmacy in the app.', { data: { prescriptionId: prescription.id } });
   }
 
   res.status(201).json(prescription);

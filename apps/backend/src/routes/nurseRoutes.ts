@@ -1,11 +1,13 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireRole, requireVerifiedProvider } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import * as nurse from '../controllers/nurseController';
 
 const router = Router();
 
 router.use(requireAuth, requireRole('NURSE'));
+// Only verified providers can act on patients; reading data and editing their own profile stays open.
+router.use((req, res, next) => (req.method === 'GET' || req.path.startsWith('/profile') || req.path.startsWith('/availability') ? next() : requireVerifiedProvider(req, res, next)));
 
 router.get('/profile', asyncHandler(nurse.getProfile));
 router.patch('/profile', asyncHandler(nurse.updateProfile));

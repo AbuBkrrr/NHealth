@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { notify } from '../services/notify';
+import { distanceKm } from '../utils/geo';
 
 /** Looks up the AmbulanceProfile row for the logged-in user, or throws. */
 async function getAmbulanceProfile(userId: string) {
@@ -133,13 +135,18 @@ export async function acceptRequest(req: Request, res: Response) {
 
   const { count } = await prisma.emergencyRequest.updateMany({
     where: { id: request.id, ambulanceId: null },
-    data: { ambulanceId: ambulance.id, status: 'ACCEPTED' },
+    data: { ambulanceId: ambulance.id, status: 'ACCEPTED', acceptedAt: new Date(),
+      // ETA: straight-line distance at ~35 km/h urban average, minimum 5 minutes.
+      etaMinutes: ambulance.currentLat != null && ambulance.currentLng != null ? Math.max(5, Math.round(distanceKm(ambulance.currentLat, ambulance.currentLng, request.lat, request.lng) / 35 * 60)) : null },
   });
   if (count === 0) throw ApiError.conflict('This request has already been accepted by another ambulance');
 
   const updated = await prisma.emergencyRequest.findUnique({ where: { id: request.id } });
   const patient = await prisma.patientProfile.findUnique({ where: { id: request.patientId }, select: { userId: true } });
-  if (patient) req.app.get('io')?.to(`user:${patient.userId}`).emit('emergency:accepted', updated);
+  if (patient) {
+    req.app.get('io')?.to(`user:${patient.userId}`).emit('emergency:accepted', { ...updated, ambulance: { vehicleNumber: ambulance.vehicleNumber, phone: ambulance.phone, lat: ambulance.currentLat, lng: ambulance.currentLng } });
+    await notify(patient.userId, 'emergency', '🚑 Ambulance on the way', `Vehicle ${ambulance.vehicleNumber} accepted${updated?.etaMinutes ? ' - ETA ' + updated.etaMinutes + ' min' : ''}.`, { sms: true, data: { requestId: request.id } });
+  }
   // Tell every other ambulance dashboard this call is no longer up for grabs.
   req.app.get('io')?.to('role:AMBULANCE').emit('emergency:claimed', { id: request.id });
 
@@ -170,11 +177,16 @@ export async function updateRequestStatus(req: Request, res: Response) {
     data: {
       status: data.status,
       completedAt: data.status === 'COMPLETED' ? new Date() : undefined,
+      arrivedAt: data.status === 'ARRIVED' ? new Date() : undefined,
     },
   });
 
   const patient = await prisma.patientProfile.findUnique({ where: { id: request.patientId }, select: { userId: true } });
-  if (patient) req.app.get('io')?.to(`user:${patient.userId}`).emit('emergency:status', { status: updated.status, id: updated.id });
+  if (patient) {
+    req.app.get('io')?.to(`user:${patient.userId}`).emit('emergency:status', { status: updated.status, id: updated.id });
+    const t: Record<string, string> = { EN_ROUTE: 'is en route 🚑', ARRIVED: 'has arrived', COMPLETED: 'trip completed' };
+    await notify(patient.userId, 'emergency', 'Emergency update', `Your ambulance ${t[updated.status] || updated.status.toLowerCase()}.`, { data: { requestId: updated.id } });
+  }
 
   res.json(updated);
 }

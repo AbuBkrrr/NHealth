@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { notify } from '../services/notify';
 
 /** Looks up the NurseProfile row for the logged-in user, or throws. */
 async function getNurseProfile(userId: string) {
@@ -178,5 +179,9 @@ export async function updateRequestStatus(req: Request, res: Response) {
 
 async function notifyPatient(req: Request, patientId: string, event: string, payload: unknown) {
   const patient = await prisma.patientProfile.findUnique({ where: { id: patientId }, select: { userId: true } });
-  if (patient) req.app.get('io')?.to(`user:${patient.userId}`).emit(event, payload);
+  if (patient) {
+    req.app.get('io')?.to(`user:${patient.userId}`).emit(event, payload);
+    const st = (payload as any)?.status;
+    if (st) await notify(patient.userId, 'appointment', 'Home-care update 🩺', `Your nurse request is now ${String(st).toLowerCase().replace('_', ' ')}.`, { data: { requestId: (payload as any)?.id } });
+  }
 }

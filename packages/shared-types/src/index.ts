@@ -9,6 +9,7 @@ export enum Role {
   LAB = 'LAB',
   AMBULANCE = 'AMBULANCE',
   NURSE = 'NURSE',
+  INSTITUTION = 'INSTITUTION',
   ADMIN = 'ADMIN',
 }
 
@@ -46,6 +47,7 @@ export const JwtPayloadSchema = z.object({
   userId: z.string().uuid(),
   role: z.nativeEnum(Role),
   isSuperAdmin: z.boolean().optional(),
+  tv: z.number().optional(),
 });
 
 export type JwtPayload = z.infer<typeof JwtPayloadSchema>;
