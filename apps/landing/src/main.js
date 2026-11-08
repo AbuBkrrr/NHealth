@@ -96,6 +96,7 @@ navigator.serviceWorker?.addEventListener?.('message', (e) => { if (e.data?.type
     const q = new URLSearchParams(location.search);
     if (q.get('topup')) { sessionStorage.setItem('nh_topup', q.get('topup')); history.replaceState(null, '', location.pathname + '#/patient/wallet'); }
     if (q.get('kyc')) history.replaceState(null, '', location.pathname + '#/kyc');
+    if (q.get('settle')) { sessionStorage.setItem('nh_settle', q.get('settle')); history.replaceState(null, '', location.pathname + '#/provider/earnings'); }
     render();
   }, Math.max(0, 900 - (Date.now() - started)));
   registerSW();

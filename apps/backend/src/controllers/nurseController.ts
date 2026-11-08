@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { notify } from '../services/notify';
+import { accrueForSource } from '../services/earnings';
 
 /** Looks up the NurseProfile row for the logged-in user, or throws. */
 async function getNurseProfile(userId: string) {
@@ -173,6 +174,7 @@ export async function updateRequestStatus(req: Request, res: Response) {
 
   const updated = await prisma.nurseRequest.update({ where: { id: request.id }, data: { status: data.status } });
   await notifyPatient(req, request.patientId, 'nurse:status', { id: updated.id, status: updated.status });
+  if (updated.status === 'COMPLETED') await accrueForSource('NURSE_REQUEST', updated.id);
 
   res.json(updated);
 }

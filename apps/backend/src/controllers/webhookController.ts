@@ -13,6 +13,24 @@ async function gatewayWebhook(gateway: Gateway, req: Request, res: Response, ext
     return res.status(401).json({ error: 'Invalid signature' });
   }
   try {
+    // Payout transfer outcomes (Paystack transfer.*, Flutterwave transfer.completed)
+    const b: any = req.body || {};
+    if (typeof b.event === 'string' && b.event.startsWith('transfer.')) {
+      const { markPayout } = await import('../services/earnings');
+      const ref = b.data?.reference;
+      if (ref) {
+        if (gateway === 'paystack') {
+          if (b.event === 'transfer.success') await markPayout(ref, 'PAID');
+          else if (b.event === 'transfer.failed') await markPayout(ref, 'FAILED', b.data?.reason || b.data?.gateway_response || 'Transfer failed');
+          else if (b.event === 'transfer.reversed') await markPayout(ref, 'REVERSED', 'Transfer reversed by the bank');
+        } else if (gateway === 'flutterwave') {
+          const st = String(b.data?.status || '').toUpperCase();
+          if (st === 'SUCCESSFUL') await markPayout(ref, 'PAID');
+          else if (st === 'FAILED') await markPayout(ref, 'FAILED', b.data?.complete_message || 'Transfer failed');
+        }
+      }
+      return res.status(200).json({ received: true });
+    }
     const e = extract(req.body || {});
     if (e.ok && e.ref) {
       await prisma.paymentGatewayLog.updateMany({ where: { internalRef: e.ref }, data: { webhookPayload: req.body } });
@@ -52,7 +70,12 @@ export async function diditWebhook(req: Request, res: Response) {
   if (!didit.verifyWebhook(req.rawBody || '', req.headers)) return res.status(401).json({ error: 'Invalid signature' });
   try {
     const b = req.body || {};
-    if (b.session_id) await onKycDecision(b.session_id, b.status, b.decision, b.vendor_data);
+    if (b.session_id) {
+      // Some v3 deliveries carry only the status; fetch the full decision for final outcomes.
+      let decision = b.decision;
+      if (!decision && ['Approved', 'Declined', 'In Review'].includes(b.status) && didit.DIDIT_CONFIGURED()) decision = await didit.getDecision(b.session_id).catch(() => undefined);
+      await onKycDecision(b.session_id, b.status, decision, b.vendor_data);
+    }
   } catch (e) {
     console.error('[webhook:didit]', e);
   }

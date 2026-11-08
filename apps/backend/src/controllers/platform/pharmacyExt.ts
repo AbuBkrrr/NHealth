@@ -5,6 +5,8 @@ import { env } from '../../config/env';
 import { ApiError } from '../../utils/ApiError';
 import { spendCredits, getOrCreateLedger } from '../../services/creditsService';
 import { notify } from '../../services/notify';
+import { accruePosCoins } from '../../services/earnings';
+import { getFinance } from '../../services/settings';
 import { uid, str, num, date } from './util';
 
 async function pharm(req: Request) {
@@ -111,7 +113,7 @@ export async function posCheckout(req: Request, res: Response) {
     }
     const subtotal = lines.reduce((s, l) => s + l.qty * l.price, 0);
     const discount = Math.min(subtotal, Math.max(0, num(req.body.discount) || 0));
-    const tax = Math.round((subtotal - discount) * env.raw.POS_TAX_PERCENT) / 100;
+    const tax = Math.round((subtotal - discount) * (await getFinance()).posTaxPercent) / 100;
     const total = subtotal - discount + tax;
     return tx.posSale.create({ data: { pharmacyId: p.id, cashierId: uid(req), receiptNo, items: lines, subtotal, tax, discount, total, paymentMethod: method,
       customerName: str(req.body.customerName, 120) || patient?.name, customerPhone: str(req.body.customerPhone, 30) || patient?.phone, patientUserId: patient?.id, prescriptionId: str(req.body.prescriptionId) } });
@@ -126,6 +128,7 @@ export async function posCheckout(req: Request, res: Response) {
       await prisma.posSale.delete({ where: { id: sale.id } });
       throw ApiError.badRequest('Patient has insufficient coins');
     }
+    await accruePosCoins(sale.id, p.userId, Number(sale.total));
     await notify(patient.id, 'payment', 'Pharmacy purchase', `${Number(sale.total).toLocaleString()} coins paid at ${p.pharmacyName}. Receipt ${sale.receiptNo}.`);
   }
   const low = await prisma.inventory.findMany({ where: { pharmacyId: p.id, id: { in: (sale.items as any[]).map((l) => l.inventoryId) } } });

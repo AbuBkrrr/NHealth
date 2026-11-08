@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { notify } from '../services/notify';
+import { accrueForSource } from '../services/earnings';
 import { startDocument, drawField, drawTable, drawFooterNote, finishDocument } from '../utils/pdf';
 
 /** Looks up the LabProfile row for the logged-in user, or throws. */
@@ -175,6 +176,7 @@ export async function uploadResult(req: Request, res: Response) {
   }
   if ((req.body as any).fileUrl) await prisma.labResult.update({ where: { id: result.id }, data: { fileUrl: String((req.body as any).fileUrl) } });
 
+  await accrueForSource('LAB_TEST', test.id);
   res.status(201).json(result);
 }
 

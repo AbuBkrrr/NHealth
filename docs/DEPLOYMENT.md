@@ -67,13 +67,13 @@ How verification works:
 - **Webhook is missed:** users can tap "Check status", which polls `GET /v2/session/{id}/decision/`.
 - **Data stored:** only the document type, issuing country, last 4 digits, the name on the ID and the decision. Document images stay with Didit.
 
-**Before go-live:** confirm in the Didit docs which API version your account uses. The API calls `POST /v2/session/` and `GET /v2/session/{id}/decision/`. If your account uses v3, set `DIDIT_BASE_URL` and adjust `src/services/didit.ts`. The paths are in one place.
+The integration uses **Didit API v3**: `POST /v3/session/` to create a session and `GET /v3/session/{id}/decision/` to read the decision. Step-by-step setup is in [GO_LIVE.md](GO_LIVE.md).
 
 ### Business rules (optional)
 
 | Variable | Default |
 |---|---|
-| `SERVICE_FEE_PERCENT` | 5 |
+| `SERVICE_FEE_PERCENT` | 5 (initial value; super admins change fees in Admin → Fees & payouts) |
 | `POS_TAX_PERCENT` | 5 |
 | `EMERGENCY_MIN_BALANCE` | 5000 |
 | `REFERRAL_REWARD` | 500 |

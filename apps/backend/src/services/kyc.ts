@@ -5,7 +5,8 @@ import { invalidateUserState } from '../middleware/auth';
 
 /** Pulls the useful, non-sensitive identity fields out of a Didit decision. */
 function summarise(decision: any) {
-  const id = decision?.id_verification || decision?.id_verifications?.[0] || decision?.kyc || {};
+  // v3 returns id_verifications[]; v2 returned id_verification{}.
+  const id = decision?.id_verifications?.[0] || decision?.id_verification || decision?.kyc || {};
   const num = String(id.document_number || id.personal_number || '');
   return {
     documentType: id.document_type || null,

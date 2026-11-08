@@ -28,6 +28,12 @@ The original mockup and the previous patched web app are kept in `apps/landing/l
 
 **Institutions**: dashboard (beds, occupancy, today's admissions/discharges), departments with bed tracking, staff enrolment by email invite (providers accept from their profile), patient registration/admission/discharge with MRN, reports, campaigns.
 
+**Provider earnings (Bolt-style)**:
+- Patients pay in-app (coins/escrow) or in cash.
+- In-app: providers earn the fee minus commission when the job completes. They are paid automatically to a bank account verified with the bank (Paystack/Flutterwave Transfers), or can cash out daily.
+- Cash: the commission becomes a balance debt; cash jobs are blocked above a limit, and providers can settle by card.
+- Super admins set commission per service, booking fee, POS tax, cash policy and payout schedule in the admin console. Admins also see revenue, balances, payouts and live integration checks.
+
 **Trust & safety**:
 - Gateway-verified top-ups and signed webhooks (Paystack, Flutterwave, Fincra, Monnify, PayScrow, Didit).
 - Server-side prices everywhere.
@@ -82,4 +88,4 @@ CI (`.github/workflows/ci.yml`):
 
 ## Deployment
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the production checklist: environment variables, webhook URLs, DNS, first admin, and the go-live steps.
+Step-by-step launch guide: [docs/GO_LIVE.md](docs/GO_LIVE.md). Reference runbook: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the production checklist: environment variables, webhook URLs, DNS, first admin, and the go-live steps.

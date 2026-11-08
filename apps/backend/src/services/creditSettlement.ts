@@ -25,6 +25,14 @@ export async function settleCreditPurchase(internalRef: string, verified?: { amo
   const claimed = await prisma.paymentGatewayLog.updateMany({ where: { id: log.id, status: 'pending' }, data: { status: 'processing' } });
   if (claimed.count === 0) return { ok: true, already: true, log };
 
+  // Provider paying off a negative balance (cash commissions) - goes to their earnings ledger, not coins.
+  if (log.purpose === 'provider_settlement') {
+    const { recordSettlement } = await import('./earnings');
+    await recordSettlement(log.userId, Number(log.amount), internalRef);
+    await prisma.paymentGatewayLog.update({ where: { id: log.id }, data: { status: 'success', gatewayRef: v.gatewayRef } });
+    return { ok: true, log };
+  }
+
   await getOrCreateLedger(log.userId);
   const txn = await purchaseCredits(log.userId, Number(log.amount), internalRef, 'Coins top-up via ' + log.gateway, { gateway: log.gateway, gatewayRef: v.gatewayRef });
   await prisma.paymentGatewayLog.update({ where: { id: log.id }, data: { status: 'success', gatewayRef: v.gatewayRef, responsePayload: (v.raw ?? undefined) as any } });

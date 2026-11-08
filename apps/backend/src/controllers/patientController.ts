@@ -8,6 +8,7 @@ import { isBookable } from '../services/availability';
 import { refundCoinPayment } from '../services/checkout';
 import { getBalance } from '../services/creditsService';
 import { distanceKm } from '../utils/geo';
+import { getFinance } from '../services/settings';
 import { startDocument, drawField, drawTable, drawTotal, drawFooterNote, finishDocument, formatNaira } from '../utils/pdf';
 
 /** Looks up the PatientProfile row for the logged-in user, or throws. */
@@ -77,7 +78,7 @@ export async function createAppointment(req: Request, res: Response) {
   const at = new Date(data.scheduledAt);
   if (!(await isBookable(doctor.user.id, at))) throw ApiError.conflict('That time slot is no longer available - please pick another');
   const fee = Number(doctor.consultationFee);
-  const serviceFee = Math.round(fee * env.raw.SERVICE_FEE_PERCENT) / 100;
+  const serviceFee = Math.round(fee * (await getFinance()).patientServiceFeePercent) / 100;
   const appointment = await prisma.appointment.create({
     data: {
       patientId: patient.id, doctorId: data.doctorId, scheduledAt: at, type: data.type, reason: data.reason,

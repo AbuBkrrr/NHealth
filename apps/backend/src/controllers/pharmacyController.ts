@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { notify } from '../services/notify';
+import { accrueForSource } from '../services/earnings';
 import { refundCoinPayment } from '../services/checkout';
 
 /** Looks up the PharmacyProfile row for the logged-in user, or throws. */
@@ -232,6 +233,7 @@ export async function updateOrderStatus(req: Request, res: Response) {
 
   const updated = await prisma.pharmacyOrder.update({ where: { id: order.id }, data: { status: data.status, declineReason: data.status === 'CANCELLED' ? (req.body as any).reason || null : undefined } });
   if (data.status === 'CANCELLED') await refundCoinPayment('PHARMACY_ORDER', order.id, 'order declined by pharmacy');
+  if (data.status === 'DELIVERED') await accrueForSource('PHARMACY_ORDER', order.id);
 
   // Restock items if the order is cancelled after stock was already deducted.
   if (data.status === 'CANCELLED') {

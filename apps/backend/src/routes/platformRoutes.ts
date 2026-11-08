@@ -13,6 +13,9 @@ import * as priv from '../controllers/platform/privacy';
 import * as adm from '../controllers/platform/adminExt';
 import * as kyc from '../controllers/kycController';
 import * as labCore from '../controllers/labController';
+import * as fin from '../controllers/platform/finance';
+import * as integ from '../controllers/platform/integrations';
+import { requireSuperAdmin } from '../middleware/auth';
 
 /**
  * Platform-wide features added for global launch. Mounted at /api.
@@ -153,6 +156,13 @@ r.get('/doctor-ops/stats', auth, requireRole('DOCTOR'), h(lab.doctorStats));
 r.get('/doctor-ops/lab-requests', auth, requireRole('DOCTOR'), h(lab.doctorLabResults));
 r.post('/doctor-ops/lab-requests', auth, requireRole('DOCTOR'), requireVerifiedProvider, h(lab.doctorLabRequest));
 
+// Provider earnings & payouts (Bolt-style)
+r.get('/earnings', auth, requireRole(...PROVIDERS), h(fin.myEarnings));
+r.get('/earnings/banks', auth, requireRole(...PROVIDERS), h(fin.payoutBanks));
+r.post('/earnings/bank', auth, requireRole(...PROVIDERS), sensitiveLimiter, h(fin.setPayoutBank));
+r.post('/earnings/cash-out', auth, requireRole(...PROVIDERS), requireVerifiedProvider, sensitiveLimiter, h(fin.cashOut));
+r.post('/earnings/settle', auth, requireRole(...PROVIDERS), sensitiveLimiter, h(fin.settleDebt));
+
 // Privacy (NDPR / GDPR)
 r.get('/privacy/export', auth, sensitiveLimiter, h(priv.exportData));
 r.post('/privacy/delete', auth, sensitiveLimiter, h(priv.deleteAccount));
@@ -173,5 +183,21 @@ r.delete('/admin-ops/catalog/:kind/:id', ...A, h(adm.catalogDelete));
 r.post('/admin-ops/rates', ...A, h(adm.setRate));
 r.get('/admin-ops/tickets', ...A, h(adm.listTickets));
 r.post('/admin-ops/tickets/:id/reply', ...A, h(adm.replyTicket));
+
+// Finance (fees are super-admin only)
+r.get('/admin-ops/finance', ...A, h(fin.getFinanceSettings));
+r.put('/admin-ops/finance', ...A, requireSuperAdmin, h(fin.updateFinanceSettings));
+r.get('/admin-ops/balances', ...A, h(fin.providerBalances));
+r.get('/admin-ops/ledger/:userId', ...A, h(fin.providerLedger));
+r.post('/admin-ops/ledger/adjust', ...A, requireSuperAdmin, h(fin.adjustBalance));
+r.get('/admin-ops/payout-runs', ...A, h(fin.listPayouts));
+r.post('/admin-ops/payout-runs', ...A, requireSuperAdmin, h(fin.runPayoutsNow));
+r.post('/admin-ops/payout-runs/:id/status', ...A, requireSuperAdmin, h(fin.setPayoutStatus));
+r.get('/admin-ops/revenue', ...A, h(fin.revenue));
+
+// Integration health (live checks against each provider)
+r.get('/admin-ops/integrations', ...A, requireSuperAdmin, h(integ.integrationStatus));
+r.post('/admin-ops/integrations/test-email', ...A, requireSuperAdmin, h(integ.testEmail));
+r.post('/admin-ops/integrations/test-sms', ...A, requireSuperAdmin, h(integ.testSms));
 
 export default r;

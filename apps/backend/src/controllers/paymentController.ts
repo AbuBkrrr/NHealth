@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { env } from '../config/env';
-import { payWithCoins } from '../services/checkout';
+import { payWithCoins, markPaidCash } from '../services/checkout';
+import { accrueForSource, cashAllowed } from '../services/earnings';
 import { startDocument, drawField, drawTotal, drawFooterNote, finishDocument, formatNaira } from '../utils/pdf';
 
 const PAYMENT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes to complete USSD/Transfer/Card payment
@@ -105,7 +106,7 @@ async function withLazyExpiry<T extends { status: string; expiresAt: Date; id: s
 const createPaymentSchema = z.object({
   payableType: z.enum(['APPOINTMENT', 'PHARMACY_ORDER', 'LAB_TEST', 'NURSE_REQUEST', 'DONATION', 'INSURANCE_POLICY']),
   payableId: z.string(),
-  method: z.enum(['USSD', 'TRANSFER', 'CARD', 'WALLET']),
+  method: z.enum(['USSD', 'TRANSFER', 'CARD', 'WALLET', 'CASH']),
 });
 
 export async function createPayment(req: Request, res: Response) {
@@ -114,6 +115,23 @@ export async function createPayment(req: Request, res: Response) {
   // WALLET = pay with N-Health coins (closed-loop, prepaid via a licensed gateway). Settles instantly.
   if (data.method === 'WALLET') {
     const payment = await payWithCoins(req.user!.userId, data.payableType as any, data.payableId);
+    return res.status(201).json(payment);
+  }
+  // CASH = patient pays the provider directly (Bolt-style). The provider confirms receipt in-app;
+  // the platform commission is then deducted from the provider's balance.
+  if (data.method === 'CASH') {
+    if (!['APPOINTMENT', 'PHARMACY_ORDER', 'LAB_TEST', 'NURSE_REQUEST'].includes(data.payableType)) throw ApiError.badRequest('Cash is not available for this item');
+    const pp = await prisma.patientProfile.findUnique({ where: { userId: req.user!.userId } });
+    if (!pp) throw ApiError.notFound('Patient profile not found');
+    const { amount, providerUserId } = await resolvePayable(data.payableType, data.payableId, pp.id);
+    if (!providerUserId) throw ApiError.badRequest('Cash is not available for this item');
+    const allowed = await cashAllowed(providerUserId);
+    if (!allowed.ok) throw ApiError.badRequest(allowed.reason + ' - please pay in-app');
+    const existing = await prisma.payment.findFirst({ where: { payableType: data.payableType, payableId: data.payableId, status: { in: ['PENDING', 'CONFIRMED'] } } });
+    if (existing) throw ApiError.conflict('A payment for this item already exists');
+    const payment = await prisma.payment.create({ data: { payerId: req.user!.userId, payableType: data.payableType, payableId: data.payableId, amount, method: 'CASH', providerUserId, reference: generateReference(), expiresAt: new Date(Date.now() + 30 * 86400_000) } });
+    await markPaidCash(data.payableType as any, data.payableId, 'CASH_DUE');
+    req.app.get('io')?.to(`user:${providerUserId}`).emit('payment:new', payment);
     return res.status(201).json(payment);
   }
   // Manual USSD/transfer instructions are a development simulation only. In production all card,
@@ -211,6 +229,10 @@ export async function confirmPayment(req: Request, res: Response) {
     });
   }
 
+  if (payment.method === 'CASH') {
+    await markPaidCash(payment.payableType as any, payment.payableId, 'PAID_CASH');
+    await accrueForSource(payment.payableType as any, payment.payableId);
+  }
   req.app.get('io')?.to(`user:${payment.payerId}`).emit('payment:confirmed', updated);
   res.json(updated);
 }

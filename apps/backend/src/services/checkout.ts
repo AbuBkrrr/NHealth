@@ -34,6 +34,16 @@ export async function settleDonation(id: string) {
   return d;
 }
 
+/** Records the cash state of a payable: CASH_DUE when chosen, PAID_CASH when the provider confirms receipt. */
+export async function markPaidCash(type: Payable, id: string, state: 'CASH_DUE' | 'PAID_CASH') {
+  switch (type) {
+    case 'APPOINTMENT': return prisma.appointment.update({ where: { id }, data: { paymentStatus: state } });
+    case 'PHARMACY_ORDER': return prisma.pharmacyOrder.update({ where: { id }, data: { paymentStatus: state === 'PAID_CASH' ? 'PAID' : state } });
+    case 'LAB_TEST': return prisma.labTest.update({ where: { id }, data: { paymentStatus: state } });
+    default: return null;
+  }
+}
+
 /** Pays for a patient-owned record with coins. The amount always comes from the database. */
 export async function payWithCoins(userId: string, payableType: Payable, payableId: string) {
   const patient = await prisma.patientProfile.findUnique({ where: { userId } });

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { notify } from '../services/notify';
+import { accrueForSource } from '../services/earnings';
 import { refundCoinPayment } from '../services/checkout';
 import { logAccess } from '../services/audit';
 import { startDocument, drawField, drawTable, drawFooterNote, finishDocument } from '../utils/pdf';
@@ -95,6 +96,7 @@ export async function respondToAppointment(req: Request, res: Response) {
     await notify(patient.userId, 'appointment', 'Appointment ' + (msg[updated.status] || updated.status.toLowerCase()), `Your appointment on ${appointment.scheduledAt.toISOString()} was ${msg[updated.status] || updated.status.toLowerCase()}.${data.notes ? ' Note: ' + data.notes : ''}`, { email: true, sms: updated.status === 'CONFIRMED', data: { appointmentId: appointment.id } });
   }
   if (updated.status === 'CANCELLED') await refundCoinPayment('APPOINTMENT', appointment.id, 'declined by doctor');
+  if (updated.status === 'COMPLETED') await accrueForSource('APPOINTMENT', appointment.id);
   // "Refer": hand the patient to another provider with a tracked referral.
   if ((req.body as any).referToUserId && patient) {
     await prisma.referral.create({ data: { fromId: req.user!.userId, toId: String((req.body as any).referToUserId), patientUserId: patient.userId, appointmentId: appointment.id, reason: data.notes || 'Specialist review' } });

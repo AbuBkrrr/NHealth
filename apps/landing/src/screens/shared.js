@@ -389,27 +389,57 @@ export async function scheduleScreen(el) {
   $('#addb', el).onclick = () => formModal('Add time off', [
     { name: 'startAt', label: 'From', type: 'datetime-local', required: true }, { name: 'endAt', label: 'To', type: 'datetime-local', required: true }, { name: 'reason', label: 'Reason (private)' },
   ], { onSubmit: async (v) => { await post('/availability/me/blocks', { ...v, startAt: new Date(v.startAt).toISOString(), endAt: new Date(v.endAt).toISOString() }); scheduleScreen(el); } });
-  el.addEventListener('click', async (e) => { const b = e.target.closest('[data-rb]'); if (b) { await del('/availability/me/blocks/' + b.dataset.rb); scheduleScreen(el); } });
+  el.onclick = async (e) => { const b = e.target.closest('[data-rb]'); if (b) { await del('/availability/me/blocks/' + b.dataset.rb); scheduleScreen(el); } };
 }
 
-// ================= PROVIDER EARNINGS =================
-export async function earningsScreen(el) {
-  const [incoming, bank, escrows] = await Promise.all([get('/payments/incoming').catch(() => []), get('/provider/bank').catch(() => null), get('/escrow/my/list').catch(() => [])]);
-  const list = Array.isArray(incoming) ? incoming : incoming.items || [];
-  const total = list.filter((p) => p.status === 'CONFIRMED').reduce((s, p) => s + Number(p.amount), 0);
-  const b = bank?.account || bank;
+// ================= PROVIDER EARNINGS (Bolt-style) =================
+const ENTRY = { EARNING: ['💰', 'Earning'], COMMISSION: ['🏷️', 'Commission'], CASH_COMMISSION: ['💵', 'Cash job commission'], PAYOUT: ['🏦', 'Payout'], PAYOUT_REVERSAL: ['↩️', 'Payout returned'], SETTLEMENT: ['✅', 'Balance payment'], ADJUSTMENT: ['⚙️', 'Adjustment'], ESCROW_SETTLED: ['🔒', 'Escrow (paid by PayScrow)'], REFUND_CLAWBACK: ['↩️', 'Refund'] };
+const DAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+export async function earningsScreen(el, _p, q) {
+  const settleRef = sessionStorage.getItem('nh_settle');
+  if (settleRef) {
+    sessionStorage.removeItem('nh_settle');
+    try { await post('/credits/purchase/confirm', { internalRef: settleRef }); toast('✅ Balance payment received'); } catch (e) { toast(e.status === 402 ? '⏳ Payment still confirming - your balance updates automatically' : '⚠️ ' + e.message); }
+  }
+  const e = await get('/earnings');
+  const pol = e.policy;
+  const sched = pol.payoutSchedule === 'MANUAL' ? 'Paid out by N-Health finance' : pol.payoutSchedule === 'DAILY' ? `Daily at ${pol.payoutHour}:00` : `Every ${DAYS_LONG[pol.payoutDay]} at ${pol.payoutHour}:00`;
+  const rate = pol.commission[{ DOCTOR: 'APPOINTMENT', NURSE: 'NURSE_REQUEST', LAB: 'LAB_TEST', PHARMACY: 'PHARMACY_ORDER', AMBULANCE: 'EMERGENCY' }[state.user.role]] ?? null;
   el.innerHTML = appBar({ title: '💰 Earnings', back: true, roleCls: roleCls() }) +
-    `<div class="balance-card"><div class="balance-label">Total confirmed earnings</div><div class="balance-amount">${money(total)}</div><div class="small" style="opacity:.8">Paid out to your bank account by N-Health on the weekly settlement cycle</div></div>` +
-    card(cardHead('🏦 Payout account', `<button class="link" id="bank">${b?.accountNumber ? 'Change' : 'Add'}</button>`) + (b?.accountNumber ? `<div class="kv"><span class="k">Bank</span><span class="v">${esc(b.bankName)}</span></div><div class="kv"><span class="k">Account</span><span class="v">${esc(b.accountName)} • ${esc(b.accountNumber)}</span></div>` : empty('🏦', 'Add a bank account to receive payouts'))) +
-    card(cardHead('💳 Payments') + (list.length ? list.map((p) => item({ icon: '💳', title: money(p.amount), sub: esc(String(p.payableType).replace('_', ' ').toLowerCase()) + ' • ' + dt(p.createdAt), trailing: badge(p.status) })).join('') : empty('💳', 'No payments yet'))) +
-    (escrows.length ? card(cardHead('🔒 Escrow') + escrows.map((x) => item({ icon: '🔒', title: money(x.amount), sub: esc(x.purpose) + ' • ' + dt(x.createdAt), trailing: badge(x.status === 'in_escrow' ? 'PENDING' : x.status === 'released' ? 'CONFIRMED' : x.status, x.status.replace('_', ' ')) })).join('')) : '');
-  $('#bank', el).onclick = async () => {
-    const banks = await get('/escrow/banks').catch(() => []);
-    const opts = (Array.isArray(banks) ? banks : banks.banks || []).map((x) => [x.code || x.bankCode, x.name || x.bankName]);
-    formModal('Payout bank account', [
-      opts.length ? { name: 'bankCode', label: 'Bank', type: 'select', options: opts, required: true } : { name: 'bankCode', label: 'Bank code', required: true },
+    `<div class="balance-card"><div class="balance-label">${e.owed ? 'You owe N-Health' : 'Available to pay out'}</div><div class="balance-amount">${money(e.owed || e.available)}</div>
+      <div class="small" style="opacity:.85">${e.pending ? money(e.pending) + ' pending (released ' + pol.holdHours + 'h after each service) • ' : ''}${e.inFlight ? money(e.inFlight) + ' on its way to your bank • ' : ''}${sched}</div>
+      <div class="balance-actions">${e.owed ? '<button class="btn-primary" id="settle">💳 Pay balance</button>' : '<button class="btn-primary" id="cashout">🏦 Cash out now</button>'}<button class="btn-outline" id="how">ℹ️ How it works</button></div></div>
+    ${e.owed > pol.cashDebtLimit ? `<div class="banner err">Cash payments are paused because you owe more than ${money(pol.cashDebtLimit)}. Pay your balance, or keep doing in-app jobs - commission is deducted automatically.</div>` : ''}
+    ${!e.bank ? '<div class="banner warn">🏦 Add your bank account to receive payouts.<button class="btn btn-sm btn-primary" id="addbank2">Add</button></div>' : ''}
+    <div class="provider-stats">${['earned', 'commission', 'cashCollected'].map((k, i) => `<div class="provider-stat"><div class="number">${money(e.thisWeek[k]).replace(/\.00$/, '')}</div><div class="label">${['Earned (7d)', 'Commission (7d)', 'Cash collected (7d)'][i]}</div></div>`).join('')}<div class="provider-stat"><div class="number">${rate ?? '—'}%</div><div class="label">Commission</div></div></div>
+    ${e.cashDue.length ? card(cardHead('💵 Cash to collect') + e.cashDue.map((p) => `${item({ icon: '💵', title: money(p.amount) + ' from ' + esc(p.payer.name), sub: esc(String(p.payableType).replace('_', ' ').toLowerCase()) + ' • ' + dt(p.createdAt), trailing: `<button class="btn btn-success btn-sm" data-got="${p.id}">Received</button>` })}`).join('')) : ''}
+    ${card(cardHead('🏦 Payout account', `<button class="link" id="addbank">${e.bank ? 'Change' : 'Add'}</button>`) + (e.bank ? `<div class="kv"><span class="k">Bank</span><span class="v">${esc(e.bank.bankName)}</span></div><div class="kv"><span class="k">Account</span><span class="v">${esc(e.bank.accountName)} • ${esc(e.bank.accountNumber)} ${e.bank.verified ? '✅' : ''}</span></div>` : empty('🏦', 'No payout account yet')))}
+    ${card(cardHead('📒 Activity') + (e.entries.length ? e.entries.map((x) => { const [ic, lb] = ENTRY[x.type] || ['•', x.type]; const amt = Number(x.amount); return item({ icon: ic, title: esc(x.description || lb), sub: dt(x.createdAt) + (x.gross ? ' • job ' + money(x.gross) : ''), trailing: amt ? `<b style="color:${amt >= 0 ? 'var(--success)' : 'var(--error)'}">${amt >= 0 ? '+' : '−'}${money(Math.abs(amt))}</b>` : '' }); }).join('') : empty('📒', 'Completed jobs appear here')))}
+    ${card(cardHead('🗂️ Payouts') + (e.payouts.length ? e.payouts.map((p) => item({ icon: '🏦', title: money(p.amount) + ' → ' + esc(p.bankName) + ' ••' + esc(p.accountNumber.slice(-4)), sub: dt(p.createdAt) + (p.failureReason ? ' • ' + esc(p.failureReason) : ''), trailing: badge(p.status === 'PAID' ? 'COMPLETED' : p.status === 'PROCESSING' || p.status === 'PENDING' ? 'PENDING' : 'FAILED', p.status.toLowerCase()) })).join('') : empty('🏦', 'No payouts yet')))}`;
+  const addBank = async () => {
+    const banks = await get('/earnings/banks').catch(() => []);
+    formModal('🏦 Payout bank account', [
+      banks.length ? { name: 'bankCode', label: 'Bank', type: 'select', options: banks.map((b) => [b.code, b.name]), required: true } : { name: 'bankCode', label: 'Bank code', required: true },
       { name: 'accountNumber', label: 'Account number (10 digits)', inputmode: 'numeric', required: true },
-      { name: 'accountName', label: 'Account name', required: true },
-    ], { onSubmit: async (v) => { const bn = opts.find((o) => o[0] === v.bankCode); await post('/provider/bank', { ...v, bankName: bn ? bn[1] : v.bankCode }); toast('✅ Bank account saved'); earningsScreen(el); } });
+    ], { submit: 'Verify & save', intro: '<p class="muted mb8">We confirm the account name with your bank. It must match your verified identity.</p>', onSubmit: async (v) => {
+      const b = banks.find((x) => x.code === v.bankCode);
+      const r = await post('/earnings/bank', { ...v, bankName: b ? b.name : v.bankCode });
+      toast('✅ ' + r.accountName + ' saved'); earningsScreen(el, _p, q);
+    } });
   };
+  $('#addbank', el).onclick = addBank; $('#addbank2', el)?.addEventListener('click', addBank);
+  $('#cashout', el)?.addEventListener('click', (ev) => busy(ev.target, async () => {
+    if (!(await confirmBox(`Send ${money(e.available)} to your bank now?`, { ok: 'Cash out' }))) return;
+    const p = await post('/earnings/cash-out'); toast(p.status === 'FAILED' ? '⚠️ ' + (p.failureReason || 'Payout failed') : '🏦 Payout started'); earningsScreen(el, _p, q);
+  }));
+  $('#settle', el)?.addEventListener('click', () => formModal('💳 Pay your balance', [{ name: 'amount', label: 'Amount (₦)', type: 'number', value: Math.ceil(e.owed), required: true }, ...(e.settleGateways.length > 1 ? [{ name: 'gateway', label: 'Pay with', type: 'select', options: e.settleGateways }] : [])], {
+    submit: 'Continue to payment', intro: '<p class="muted mb8">This covers commission on cash jobs. You can also just keep working - commission on in-app jobs is deducted automatically.</p>',
+    onSubmit: async (v) => { const r = await post('/earnings/settle', { amount: Number(v.amount), gateway: v.gateway, returnUrl: location.origin + '/' }); sessionStorage.setItem('nh_settle', r.internalRef); if (r.checkoutUrl) location.href = r.checkoutUrl; else throw new Error('Checkout unavailable'); },
+  }));
+  $('#how', el).onclick = () => modal(`<div class="modal-title">How earnings work</div><div class="muted" style="line-height:1.6">
+    <p><b>In-app payments</b> (coins): the patient pays N-Health. When you complete the job, your fee minus ${rate ?? ''}% commission is added to your balance and becomes available after ${pol.holdHours}h.</p>
+    <p><b>Cash payments</b>: you collect the money. Tap <i>Received</i>, complete the job, and the commission is deducted from your balance. Above ${money(pol.cashDebtLimit)} owed, cash jobs pause until you pay.</p>
+    <p><b>Escrow</b> payments go straight to your bank through PayScrow when the patient releases them.</p>
+    <p><b>Payouts</b>: ${sched}, when your available balance is at least ${money(pol.minPayout)}. You can also cash out once a day.</p></div>`);
+  el.onclick = async (ev) => { const b = ev.target.closest('[data-got]'); if (b) await busy(b, async () => { await post('/payments/' + b.dataset.got + '/confirm'); toast('✅ Cash receipt confirmed'); earningsScreen(el, _p, q); }); };
 }

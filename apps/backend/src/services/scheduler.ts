@@ -1,5 +1,7 @@
 import { prisma } from '../config/prisma';
 import { notify } from './notify';
+import { getFinance } from './settings';
+import { runPayouts } from './earnings';
 
 /**
  * Lightweight in-process scheduler (runs every minute):
@@ -52,4 +54,22 @@ export async function runOnce(now = new Date()) {
 
   // Expire stale pending payments
   await prisma.payment.updateMany({ where: { status: 'PENDING', expiresAt: { lt: now } }, data: { status: 'EXPIRED' } });
+
+  await maybeRunPayouts(now);
+}
+
+/** Automatic provider payouts on the admin-configured schedule (Africa/Lagos time). Runs once per slot. */
+async function maybeRunPayouts(now: Date) {
+  const fin = await getFinance();
+  if (fin.payoutSchedule === 'MANUAL') return;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Lagos', weekday: 'short', hour: '2-digit', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now).map((p) => [p.type, p.value]));
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);
+  if (Number(parts.hour) !== fin.payoutHour) return;
+  if (fin.payoutSchedule === 'WEEKLY' && dow !== fin.payoutDay) return;
+  const slot = `${parts.year}-${parts.month}-${parts.day}`;
+  const claimed = await prisma.platformSetting.upsert({ where: { key: 'payoutRun:' + slot }, create: { key: 'payoutRun:' + slot, value: { startedAt: now.toISOString() } }, update: {} });
+  if (new Date((claimed.value as any).startedAt).getTime() !== now.getTime()) return; // another tick/instance already ran this slot
+  const results = await runPayouts();
+  await prisma.platformSetting.update({ where: { key: 'payoutRun:' + slot }, data: { value: { startedAt: now.toISOString(), finishedAt: new Date().toISOString(), count: results.length } } });
+  console.log(`[payouts] scheduled run ${slot}: ${results.length} providers processed`);
 }

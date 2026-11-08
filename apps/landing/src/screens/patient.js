@@ -379,12 +379,12 @@ export async function ordersScreen(el) {
   el.innerHTML = appBar({ title: '📦 My Orders', back: '/patient/pharmacy' }) + `<div id="ol">${skeleton(3)}</div>`;
   const orders = await get('/patient/orders');
   $('#ol', el).innerHTML = orders.length ? orders.map(orderCard).join('') : empty('📦', 'No orders yet');
-  el.addEventListener('click', async (e) => {
+  el.onclick = async (e) => {
     const b = e.target.closest('[data-paor],[data-inv],[data-revo]'); if (!b) return;
     if (b.dataset.paor && await payModal({ payableType: 'PHARMACY_ORDER', payableId: b.dataset.paor, amount: Number(b.dataset.amt), title: 'Pharmacy order' })) ordersScreen(el);
     if (b.dataset.inv) download('/patient/orders/' + b.dataset.inv + '/invoice.pdf', 'invoice.pdf').catch(toastErr);
     if (b.dataset.revo) reviewModal({ contextType: 'PHARMACY_ORDER', contextId: b.dataset.revo, name: b.dataset.name });
-  });
+  };
 }
 
 export async function storeScreen(el, { id }, q) {
@@ -578,7 +578,7 @@ export async function campaignScreen(el, { id }) {
   if (mine) {
     const pl = await get('/donations/campaigns/' + id + '/pledges');
     $('#pl', el).innerHTML = card(cardHead('🙋 Donors who pledged') + (pl.length ? pl.map((x) => `${item({ icon: '🙋', title: esc(x.donor.name), sub: (x.scheduledAt ? dt(x.scheduledAt) : '') + (x.donor.phone ? ' • ' + esc(x.donor.phone) : ''), trailing: badge(x.status) })}${x.status === 'SCHEDULED' ? `<div class="row mb8"><button class="btn btn-success btn-sm grow" data-done="${x.id}">✓ Donated</button><button class="btn btn-outline btn-sm grow" data-go="/chat/${x.donor.id}">💬</button></div>` : ''}`).join('') : empty('🙋', 'No pledges yet')));
-    el.addEventListener('click', async (e) => { const b = e.target.closest('[data-done]'); if (b) { await patch('/donations/pledges/' + b.dataset.done, { status: 'COMPLETED' }).catch(toastErr); campaignScreen(el, { id }); } });
+    el.onclick = async (e) => { const b = e.target.closest('[data-done]'); if (b) { await patch('/donations/pledges/' + b.dataset.done, { status: 'COMPLETED' }).catch(toastErr); campaignScreen(el, { id }); } };
   }
 }
 

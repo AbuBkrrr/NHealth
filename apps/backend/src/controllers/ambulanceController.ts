@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { notify } from '../services/notify';
+import { settleEmergencyTrip } from '../services/earnings';
 import { distanceKm } from '../utils/geo';
 
 /** Looks up the AmbulanceProfile row for the logged-in user, or throws. */
@@ -185,6 +186,7 @@ export async function updateRequestStatus(req: Request, res: Response) {
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('emergency:status', { status: updated.status, id: updated.id });
     const t: Record<string, string> = { EN_ROUTE: 'is en route 🚑', ARRIVED: 'has arrived', COMPLETED: 'trip completed' };
+    if (updated.status === 'COMPLETED') await settleEmergencyTrip(updated.id).catch((e) => console.error('[emergency-settle]', e));
     await notify(patient.userId, 'emergency', 'Emergency update', `Your ambulance ${t[updated.status] || updated.status.toLowerCase()}.`, { data: { requestId: updated.id } });
   }
 

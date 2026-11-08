@@ -8,14 +8,17 @@ import { DIDIT_CONFIGURED } from '../../services/didit';
 import { vapidPublicKey, notify } from '../../services/notify';
 import { storeFile, parseDataUri } from '../../services/storage';
 import { distanceKm } from '../../utils/geo';
+import { getFinance } from '../../services/settings';
 import { str, num, uid, page } from './util';
 
 /** GET /api/config - public runtime configuration for the apps. */
 export async function config(_req: Request, res: Response) {
+  const fin = await getFinance();
   res.json({
+    cashEnabled: fin.cashEnabled, commission: fin.commission,
     gateways: enabledGateways(), escrow: !!process.env.PAYSCROW_API_KEY, kyc: DIDIT_CONFIGURED(), vapidPublicKey: vapidPublicKey(),
-    currencies: SUPPORTED_CURRENCIES, rates: await ratesPerNgn(), baseCurrency: 'NGN', serviceFeePercent: env.raw.SERVICE_FEE_PERCENT,
-    posTaxPercent: env.raw.POS_TAX_PERCENT, emergencyMinBalance: env.raw.EMERGENCY_MIN_BALANCE, googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+    currencies: SUPPORTED_CURRENCIES, rates: await ratesPerNgn(), baseCurrency: 'NGN', serviceFeePercent: fin.patientServiceFeePercent,
+    posTaxPercent: fin.posTaxPercent, emergencyMinBalance: env.raw.EMERGENCY_MIN_BALANCE, googleClientId: process.env.GOOGLE_CLIENT_ID || null,
     emergencyNumbers: { NG: ['112', '767', '199'], GH: ['112', '193'], KE: ['999', '112'], ZA: ['10177', '112'], US: ['911'], GB: ['999', '112'], DEFAULT: ['112'] },
   });
 }
