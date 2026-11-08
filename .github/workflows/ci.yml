@@ -64,3 +64,6 @@ jobs:
         run: pnpm --filter @nhealth/landing build
       - name: Build admin console
         run: pnpm --filter @nhealth/admin-web build
+      - name: Typecheck mobile app
+        working-directory: apps/mobile
+        run: npx tsc --noEmit -p .
