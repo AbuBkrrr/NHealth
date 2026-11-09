@@ -4,13 +4,15 @@ import { ApiError } from '../utils/ApiError';
 import { getOrCreateLedger, spendCredits, refundCredits } from './creditsService';
 import { resolvePayable } from '../controllers/paymentController';
 import { notify } from './notify';
+import { refund } from './gateways';
+import { clawbackDirect } from './earnings';
 
 type Payable = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'DONATION' | 'INSURANCE_POLICY' | 'EMERGENCY';
 
 const ref = () => 'NH-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
 
 /** Marks the underlying record as paid. */
-async function markPaid(type: Payable, id: string) {
+export async function markPaid(type: Payable, id: string) {
   switch (type) {
     case 'APPOINTMENT': return prisma.appointment.update({ where: { id }, data: { paymentStatus: 'PAID' } });
     case 'PHARMACY_ORDER': return prisma.pharmacyOrder.update({ where: { id }, data: { paymentStatus: 'PAID', status: 'PROCESSING' } });
@@ -69,10 +71,30 @@ export async function payWithCoins(userId: string, payableType: Payable, payable
 
 /** Refunds a coin payment (e.g. cancellation before service). Idempotent per payment. */
 export async function refundCoinPayment(payableType: Payable, payableId: string, reason: string) {
+  const card = await prisma.payment.findFirst({ where: { payableType: payableType as any, payableId, status: 'CONFIRMED', method: 'CARD' } });
+  if (card) return refundCardPayment(card, reason);
   const p = await prisma.payment.findFirst({ where: { payableType: payableType as any, payableId, status: 'CONFIRMED', method: 'WALLET' } });
   if (!p) return null;
   await refundCredits(p.payerId, Number(p.amount), 'RF-' + p.reference, 'Refund: ' + reason, { paymentId: p.id });
   await prisma.payment.update({ where: { id: p.id }, data: { status: 'CANCELLED' } });
   await notify(p.payerId, 'payment', 'Refund issued', `${Number(p.amount).toLocaleString()} coins were returned to your balance (${reason}).`);
+  return p;
+}
+
+/** Refunds a direct (split) card payment through the gateway and claws the payees' shares back from their balances. */
+async function refundCardPayment(p: { id: string; reference: string; payerId: string; amount: any; payableType: any; payableId: string }, reason: string) {
+  const log = await prisma.paymentGatewayLog.findUnique({ where: { internalRef: p.reference } });
+  const plan = (log?.requestPayload as any)?.plan;
+  try {
+    if (log) await refund(log.gateway as any, log.gatewayRef, Number(p.amount));
+  } catch (e: any) {
+    console.error('[refund]', e?.response?.data || e?.message);
+    await notify(p.payerId, 'payment', 'Refund being processed', `Your refund of ${Number(p.amount).toLocaleString()} is being processed by our team (${reason}).`, { email: true });
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN', isSuperAdmin: true }, select: { id: true } });
+    await Promise.all(admins.map((a) => notify(a.id, 'payment', 'Manual refund needed', `Card refund failed for payment ${p.reference}. Refund ${Number(p.amount).toLocaleString()} from the gateway dashboard.`, { email: true })));
+  }
+  if (plan) await clawbackDirect(p.payableType, p.payableId, plan, reason);
+  await prisma.payment.update({ where: { id: p.id }, data: { status: 'CANCELLED' } });
+  await notify(p.payerId, 'payment', 'Refund issued', `${Number(p.amount).toLocaleString()} is being refunded to your card/account (${reason}). Banks take 3-10 working days.`, { email: true });
   return p;
 }

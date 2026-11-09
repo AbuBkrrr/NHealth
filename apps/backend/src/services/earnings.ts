@@ -4,6 +4,7 @@ import { prisma } from '../config/prisma';
 import { getFinance } from './settings';
 import { notify } from './notify';
 import { sendTransfer, gatewayReady, PayoutGateway } from './transfers';
+import { payeesFor, SplitPlan } from './splits';
 
 type Source = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'EMERGENCY' | 'POS_SALE';
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -64,7 +65,18 @@ export async function accrueForSource(type: Source, id: string) {
   const label = type.replace('_', ' ').toLowerCase();
 
   if (escrow && !payment) {
-    await entry({ ...base, type: 'ESCROW_SETTLED', amount: 0, method: 'ESCROW', description: `Escrow-settled ${label} (paid to your bank by PayScrow)` });
+    const split = (escrow.metadata as any)?.split;
+    if (split?.payees) {
+      for (const p of split.payees) {
+        const b = { ...base, providerUserId: p.userId };
+        if (p.direct) await entry({ ...b, type: 'ESCROW_SETTLED', amount: 0, method: 'ESCROW', description: `Escrow-settled ${label} - ${Number(p.amount).toLocaleString()} paid to your bank by PayScrow` });
+        else await entry({ ...b, type: 'EARNING', amount: p.amount, method: 'ESCROW', description: `Escrow ${label} - add a bank account for direct settlement` });
+      }
+      // Platform account wasn't configured, so the provider received the platform's share too.
+      if (!split.platformDirect && split.platformAmount > 0) await entry({ ...base, type: 'ESCROW_COMMISSION', amount: -split.platformAmount, method: 'ESCROW', description: `Commission & booking fee on escrow ${label} (paid to you by PayScrow)` });
+    } else {
+      await entry({ ...base, type: 'ESCROW_SETTLED', amount: 0, method: 'ESCROW', description: `Escrow-settled ${label} (paid to your bank by PayScrow)` });
+    }
     return { method: 'ESCROW', gross };
   }
   if (payment!.method === 'CASH') {
@@ -77,9 +89,18 @@ export async function accrueForSource(type: Source, id: string) {
     }
     return { method: 'CASH', gross, commission: owed };
   }
+  // Card payments with split settlement were recorded when the payment cleared (see recordDirectSettlement).
+  if (payment!.method === 'CARD') return { method: 'DIRECT', gross };
   const created = await entry({ ...base, type: 'EARNING', amount: gross, method: 'IN_APP', description: `Earning: ${label}` });
   if (commission > 0) await entry({ ...base, type: 'COMMISSION', amount: -commission, method: 'IN_APP', description: `Platform commission (${rate}%)` });
-  if (created) await notify(src.providerUserId, 'payment', 'Earning added 💰', `${round2(gross - commission).toLocaleString()} added to your balance for a ${label}.`);
+  // Affiliated staff: the institution's share moves from the provider's balance to the institution's.
+  const shares = await payeesFor(src.providerUserId, round2(gross - commission));
+  const inst = shares.find((x) => x.role === 'INSTITUTION');
+  if (inst) {
+    await entry({ ...base, type: 'INSTITUTION_SHARE', amount: -inst.amount, method: 'IN_APP', description: 'Institution share' });
+    await entry({ ...base, providerUserId: inst.userId, type: 'EARNING', amount: inst.amount, method: 'IN_APP', description: `Staff ${label} earning`, commissionRate: null });
+  }
+  if (created) await notify(src.providerUserId, 'payment', 'Earning added 💰', `${round2(gross - commission - (inst?.amount || 0)).toLocaleString()} added to your balance for a ${label}.`);
   return { method: 'IN_APP', gross, commission };
 }
 
@@ -209,4 +230,30 @@ export async function recordSettlement(providerUserId: string, amount: number, r
 export async function adjust(providerUserId: string, amount: number, description: string, adminId: string) {
   await prisma.providerLedgerEntry.create({ data: { providerUserId, type: 'ADJUSTMENT', amount, method: 'MANUAL', description, createdById: adminId } });
   await notify(providerUserId, 'payment', 'Balance adjusted', `${amount >= 0 ? '+' : ''}${amount.toLocaleString()} - ${description}`);
+}
+
+/**
+ * Records a card payment whose shares were settled directly to payees' bank accounts by the gateway split.
+ * Payees without a subaccount had their share collected by the platform - that share is credited to their
+ * balance and paid out on the normal schedule. Idempotent per payment reference.
+ */
+export async function recordDirectSettlement(type: string, id: string, plan: SplitPlan, settled: Record<string, boolean>, gateway: string) {
+  const label = type.replace('_', ' ').toLowerCase();
+  for (const p of plan.payees) {
+    const base = { providerUserId: p.userId, sourceType: type, sourceId: id, gross: plan.gross, commissionRate: plan.commissionRate };
+    if (settled[p.userId]) {
+      await entry({ ...base, type: 'DIRECT_SETTLED', amount: 0, method: 'DIRECT', description: `${label} paid by card - ${p.amount.toLocaleString()} settled to your bank by ${gateway}` });
+      await notify(p.userId, 'payment', 'Payment received 💳', `${p.amount.toLocaleString()} for a ${label} is being settled to your bank account by ${gateway}.`);
+    } else {
+      await entry({ ...base, type: 'EARNING', amount: p.amount, method: 'DIRECT', description: `${label} paid by card (net of commission) - add a verified bank account for direct settlement` });
+      await notify(p.userId, 'payment', 'Earning added 💰', `${p.amount.toLocaleString()} added to your balance for a ${label}.`);
+    }
+  }
+}
+
+/** Reverses earnings for a refunded direct card payment (recovered from future balances where already settled). */
+export async function clawbackDirect(type: string, id: string, plan: SplitPlan, reason: string) {
+  for (const p of plan.payees) {
+    await entry({ providerUserId: p.userId, type: 'REFUND_CLAWBACK', amount: -p.amount, method: 'DIRECT', sourceType: type, sourceId: id, description: `Refund to patient: ${reason}` });
+  }
 }

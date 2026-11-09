@@ -158,6 +158,7 @@ Without this, uploads are saved on the server disk and lost on every redeploy.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | from Step 0 |
 | `GOOGLE_CLIENT_ID` | optional; add `https://www.nhealth.com.ng` to its authorised JavaScript origins |
 | `JWT_SECRET` | keep the existing value |
+| `PLATFORM_BANK_CODE` / `PLATFORM_ACCOUNT_NUMBER` / `PLATFORM_ACCOUNT_NAME` | **N-Health's own bank account.** Escrow (PayScrow) payments send your commission and booking fee here. Use the same bank codes as Paystack (e.g. `058` = GTBank). |
 
 ---
 
@@ -206,7 +207,20 @@ Admin → **Fees & payouts**:
    - provider: **Paystack Transfers**
 5. Click **Save settings**.
 
-How it works (same model as Bolt drivers):
+How patients can pay, and where the money goes:
+
+| Patient pays with | Provider / institution receives | N-Health receives |
+|---|---|---|
+| **Card / Transfer / USSD** | Their share **straight to their bank**, settled by Paystack or Flutterwave split payments | Commission + booking fee, which stay in your Paystack/Flutterwave balance |
+| **Escrow (PayScrow)** | Their share to their bank when the patient releases it | Commission + booking fee to your `PLATFORM_*` account |
+| **Coins** | Their share via the scheduled payout | Commission, kept from the coin balance |
+| **Cash** | The cash, in hand | Commission is deducted from their balance |
+
+- **Direct settlement:** when a provider or institution adds a bank account in **Earnings** (the name is checked with the bank), the app creates their Paystack and Flutterwave **subaccount** automatically. Admin → Integration status → *Split settlement* shows how many accounts are ready.
+- **Hospitals:** each institution sets **Staff earnings share** in *Facility info*. The default is 100%: all earnings of its active staff doctors and nurses go to the institution's account. With 60%, the institution gets 60% of the provider's net and the provider gets 40%.
+- **Refunds:** if a provider declines or a patient cancels in time after a card payment, the patient is refunded by the gateway. The amount already settled to the provider is recovered from their future earnings.
+
+Details of the Bolt-style ledger:
 - **In-app payment:** the patient pays N-Health. When the job is completed, the provider's balance gets the fee minus commission. It is paid automatically on payout day, or the provider can **Cash out** once a day.
 - **Cash payment:** the provider collects the money and taps **Received**. The commission (and any patient booking fee they collected) is deducted from their balance. If their balance goes negative they can **Pay balance** by card, or it is offset against future in-app jobs.
 - **Escrow (PayScrow):** paid straight to the provider's bank when the patient releases it. It is recorded in their activity for reporting.

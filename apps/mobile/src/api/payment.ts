@@ -36,6 +36,9 @@ export const paymentApi = {
   balance: () => api.get<{ balance: number }>('/credits/balance').then((r) => Number(r.data.balance) || 0),
   /** Public runtime config: which payment options are live. */
   config: () => api.get<{ cashEnabled?: boolean; escrow?: boolean; gateways?: string[] }>('/config').then((r) => r.data),
+  /** Card/transfer/USSD checkout that pays the provider (or their institution) directly, minus N-Health fees. */
+  card: (payableType: PayableType, payableId: string) =>
+    api.post<{ checkoutUrl?: string; internalRef: string }>('/payments/card', { payableType, payableId }).then((r) => r.data),
   /** Starts a PayScrow escrow checkout; amount is computed by the server. */
   escrow: (purpose: string, purposeId: string, description: string) =>
     api.post<{ paymentLink?: string; escrowId: string }>('/escrow/initiate', { purpose, purposeId, description }).then((r) => r.data),

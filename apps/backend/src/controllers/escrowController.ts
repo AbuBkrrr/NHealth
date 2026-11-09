@@ -1,3 +1,4 @@
+import { planFor, platformAccount } from '../services/splits';
 import { resolvePayable } from './paymentController';
 import { env } from '../config/env';
 import { Request, Response } from 'express';
@@ -57,6 +58,29 @@ export async function initiateEscrow(req: Request, res: Response) {
   const chargeData = charges.data;
   const externalRef = `NH-${purpose.toUpperCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
+  // Split the settlement: provider (and their institution, if affiliated staff) + N-Health's commission & booking fee.
+  const plan = await planFor(PURPOSE_TO_PAYABLE[purpose] as any, purposeId, patientUserId);
+  const T = Number(chargeData.totalSettlementAmount);
+  const platform = platformAccount();
+  const split: { payees: { userId: string; amount: number; direct: boolean }[]; platformAmount: number; platformDirect: boolean; commission: number } = { payees: [], platformAmount: 0, platformDirect: !!platform, commission: plan.commission };
+  const settlementAccounts: { bankCode: string; accountNumber: string; accountName: string; amount: number }[] = [];
+  let allocated = 0;
+  for (const p of plan.payees) {
+    const share = Math.floor((T * p.amount / plan.total) * 100) / 100;
+    if (share <= 0) continue;
+    if (p.bank) { settlementAccounts.push({ bankCode: p.bank.bankCode, accountNumber: p.bank.accountNumber, accountName: p.bank.accountName, amount: share }); allocated += share; split.payees.push({ userId: p.userId, amount: share, direct: true }); }
+    else split.payees.push({ userId: p.userId, amount: share, direct: false });
+  }
+  const rest = Math.round((T - allocated) * 100) / 100;
+  split.platformAmount = Math.round((rest - split.payees.filter((x) => !x.direct).reduce((a, x) => a + x.amount, 0)) * 100) / 100;
+  if (platform && rest > 0) settlementAccounts.push({ ...platform, amount: rest });
+  else if (rest > 0) {
+    // No platform account configured: the provider receives everything; the platform's share is recorded as a balance debt.
+    const main = settlementAccounts.find((a) => a.accountNumber === bankAccount.accountNumber) || settlementAccounts[0];
+    if (main) main.amount = Math.round((main.amount + rest) * 100) / 100;
+    else settlementAccounts.push({ bankCode: bankAccount.bankCode, accountNumber: bankAccount.accountNumber, accountName: bankAccount.accountName, amount: T });
+  }
+
   // Start escrow transaction
   const txn = await startTransaction({
     transactionReference: externalRef,
@@ -74,12 +98,7 @@ export async function initiateEscrow(req: Request, res: Response) {
       quantity: 1,
       price: Number(amount),
     }],
-    settlementAccounts: [{
-      bankCode: bankAccount.bankCode,
-      accountNumber: bankAccount.accountNumber,
-      accountName: bankAccount.accountName,
-      amount: chargeData.totalSettlementAmount,
-    }],
+    settlementAccounts,
   });
 
   if (!txn?.success || !txn?.data?.transactionNumber) {
@@ -105,6 +124,7 @@ export async function initiateEscrow(req: Request, res: Response) {
       totalPayable: chargeData.grandTotalPayable,
       netSettlement: chargeData.totalSettlementAmount,
       status: 'pending',
+      metadata: { split } as any,
     },
   });
 

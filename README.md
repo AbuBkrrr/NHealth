@@ -28,6 +28,8 @@ The original mockup and the previous patched web app are kept in `apps/landing/l
 
 **Institutions**: dashboard (beds, occupancy, today's admissions/discharges), departments with bed tracking, staff enrolment by email invite (providers accept from their profile), patient registration/admission/discharge with MRN, reports, campaigns.
 
+**Direct payments**: card / transfer / USSD payments are split at checkout through Paystack or Flutterwave subaccounts. The provider's share (or their hospital's, for affiliated staff) settles straight to their bank, and N-Health keeps its commission and booking fee. PayScrow escrow splits the same way, with the platform share going to N-Health's settlement account.
+
 **Provider earnings (Bolt-style)**:
 - Patients pay in-app (coins/escrow) or in cash.
 - In-app: providers earn the fee minus commission when the job completes. They are paid automatically to a bank account verified with the bank (Paystack/Flutterwave Transfers), or can cash out daily.

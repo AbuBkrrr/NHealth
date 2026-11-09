@@ -19,8 +19,8 @@ interface Props {
 
 const ESCROW_PURPOSE: Partial<Record<PayableType, string>> = { APPOINTMENT: 'appointment', PHARMACY_ORDER: 'pharmacy', LAB_TEST: 'lab', NURSE_REQUEST: 'nurse' };
 
-type Choice = 'WALLET' | 'CASH' | 'ESCROW';
-type Stage = 'SELECT' | 'CASH_PENDING' | 'ESCROW_OPENED' | 'SUCCESS' | 'CANCELLED';
+type Choice = 'WALLET' | 'CARD' | 'CASH' | 'ESCROW';
+type Stage = 'SELECT' | 'CASH_PENDING' | 'ESCROW_OPENED' | 'CARD_OPENED' | 'SUCCESS' | 'CANCELLED';
 
 /**
  * Payment sheet. Options:
@@ -34,11 +34,12 @@ export function PaymentModal({ visible, payableType, payableId, label, onClose, 
   const [payment, setPayment] = useState<Payment | null>(null);
   const [busy, setBusy] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
-  const [cfg, setCfg] = useState<{ cashEnabled?: boolean; escrow?: boolean }>({});
+  const [cfg, setCfg] = useState<{ cashEnabled?: boolean; escrow?: boolean; gateways?: string[] }>({});
 
   const providerService = !!ESCROW_PURPOSE[payableType];
   const options: { key: Choice; label: string; icon: string; note: string; enabled: boolean }[] = [
     { key: 'WALLET', label: 'N-Health Coins', icon: '🪙', note: balance === null ? 'Checking balance…' : `Balance: ${balance.toLocaleString()} coins`, enabled: true },
+    ...(providerService && (cfg.gateways || []).some((g) => g === 'paystack' || g === 'flutterwave') ? [{ key: 'CARD' as Choice, label: 'Card / Transfer / USSD', icon: '💳', note: 'Paid straight to the provider', enabled: true }] : []),
     ...(providerService && cfg.cashEnabled ? [{ key: 'CASH' as Choice, label: 'Cash to provider', icon: '💵', note: 'Pay in person; the provider confirms receipt', enabled: true }] : []),
     ...(providerService && cfg.escrow ? [{ key: 'ESCROW' as Choice, label: 'Escrow (card / transfer)', icon: '🔒', note: 'Held safely until the service is done', enabled: true }] : []),
   ];
@@ -86,6 +87,10 @@ export function PaymentModal({ visible, payableType, payableId, label, onClose, 
         setPayment(created);
         setStage('SUCCESS');
         onConfirmed?.(created);
+      } else if (choice === 'CARD') {
+        const r = await paymentApi.card(payableType, payableId);
+        if (r.checkoutUrl) await Linking.openURL(r.checkoutUrl);
+        setStage('CARD_OPENED');
       } else if (choice === 'CASH') {
         const created = await paymentApi.create(payableType, payableId, 'CASH');
         setPayment(created);
@@ -154,6 +159,15 @@ export function PaymentModal({ visible, payableType, payableId, label, onClose, 
               <Text style={styles.bigIcon}>🔒</Text>
               <Text style={styles.title}>Complete payment in the browser</Text>
               <Text style={styles.subtitle}>Your money is held in escrow and released to the provider after your service. You'll be notified when payment is received.</Text>
+              <Button title="Done" onPress={onClose} style={{ marginTop: 10, width: '100%' }} />
+            </View>
+          )}
+
+          {stage === 'CARD_OPENED' && (
+            <View style={styles.centered}>
+              <Text style={styles.bigIcon}>💳</Text>
+              <Text style={styles.title}>Complete payment in the browser</Text>
+              <Text style={styles.subtitle}>Once your bank confirms, the booking is marked paid and you'll get a notification.</Text>
               <Button title="Done" onPress={onClose} style={{ marginTop: 10, width: '100%' }} />
             </View>
           )}

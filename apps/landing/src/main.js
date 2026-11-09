@@ -96,10 +96,23 @@ navigator.serviceWorker?.addEventListener?.('message', (e) => { if (e.data?.type
     const q = new URLSearchParams(location.search);
     if (q.get('topup')) { sessionStorage.setItem('nh_topup', q.get('topup')); history.replaceState(null, '', location.pathname + '#/patient/wallet'); }
     if (q.get('kyc')) history.replaceState(null, '', location.pathname + '#/kyc');
+    if (q.get('paid')) { sessionStorage.setItem('nh_paid', q.get('paid')); history.replaceState(null, '', location.pathname + '#/patient/appointments'); }
     if (q.get('settle')) { sessionStorage.setItem('nh_settle', q.get('settle')); history.replaceState(null, '', location.pathname + '#/provider/earnings'); }
     render();
+    confirmCardPayment();
   }, Math.max(0, 900 - (Date.now() - started)));
   registerSW();
 })();
+
+/** After returning from a card checkout: the server verifies the payment with the gateway before marking it paid. */
+async function confirmCardPayment() {
+  const ref = sessionStorage.getItem('nh_paid');
+  if (!ref || !state.user) return;
+  for (let i = 0; i < 8; i++) {
+    try { await post('/credits/purchase/confirm', { internalRef: ref }); sessionStorage.removeItem('nh_paid'); toast('✅ Payment successful'); render(); return; }
+    catch (e) { if (e.status !== 402) { sessionStorage.removeItem('nh_paid'); toast('⚠️ ' + e.message); return; } await new Promise((r) => setTimeout(r, 3000)); }
+  }
+  toast('⏳ Payment is still confirming - it will update automatically');
+}
 
 export { esc, current };

@@ -19,11 +19,15 @@ export function enabledGateways(): Gateway[] {
 
 export interface InitResult { checkoutUrl?: string; accessCode?: string; publicKey?: string; }
 
-export async function initialize(gateway: Gateway, o: { reference: string; amount: number; currency: string; email: string; name: string; callbackUrl: string; channels?: string[] }): Promise<InitResult> {
+/** Per-payee shares settled straight to their subaccounts (flat amounts in NGN). The main account keeps the rest. */
+export interface SplitShares { paystack?: { subaccount: string; amount: number }[]; flutterwave?: { id: string; amount: number }[] }
+
+export async function initialize(gateway: Gateway, o: { reference: string; amount: number; currency: string; email: string; name: string; callbackUrl: string; channels?: string[]; split?: SplitShares; description?: string }): Promise<InitResult> {
   if (gateway === 'paystack') {
     const r = await http.post('https://api.paystack.co/transaction/initialize', {
       email: o.email, amount: Math.round(o.amount * 100), currency: o.currency, reference: o.reference, callback_url: o.callbackUrl,
       channels: o.channels || ['card', 'bank', 'ussd', 'bank_transfer', 'mobile_money'], metadata: { name: o.name },
+      ...(o.split?.paystack?.length ? { split: { type: 'flat', bearer_type: 'account', subaccounts: o.split.paystack.map((x) => ({ subaccount: x.subaccount, share: Math.round(x.amount * 100) })) } } : {}),
     }, { headers: { Authorization: `Bearer ${env.raw.PAYSTACK_SECRET_KEY}` } });
     return { checkoutUrl: r.data.data.authorization_url, accessCode: r.data.data.access_code, publicKey: env.raw.PAYSTACK_PUBLIC_KEY };
   }
@@ -31,7 +35,8 @@ export async function initialize(gateway: Gateway, o: { reference: string; amoun
     const r = await http.post('https://api.flutterwave.com/v3/payments', {
       tx_ref: o.reference, amount: o.amount, currency: o.currency, redirect_url: o.callbackUrl,
       customer: { email: o.email, name: o.name }, payment_options: 'card,banktransfer,ussd,account,mobilemoneyghana,mpesa',
-      customizations: { title: 'N-Health', description: 'N-Health coins top-up' },
+      customizations: { title: 'N-Health', description: o.description || 'N-Health coins top-up' },
+      ...(o.split?.flutterwave?.length ? { subaccounts: o.split.flutterwave.map((x) => ({ id: x.id, transaction_charge_type: 'flat_subaccount', transaction_charge: Math.round(x.amount * 100) / 100 })) } : {}),
     }, { headers: { Authorization: `Bearer ${env.raw.FLUTTERWAVE_SECRET_KEY}` } });
     return { checkoutUrl: r.data.data.link, publicKey: env.raw.FLUTTERWAVE_PUBLIC_KEY };
   }
@@ -88,4 +93,15 @@ export function verifyWebhookSignature(gateway: Gateway, rawBody: string, header
     }
   }
   return false;
+}
+
+/** Refunds a verified transaction (full refund). */
+export async function refund(gateway: Gateway, gatewayRef: string, amount: number) {
+  if (gateway === 'paystack') {
+    await http.post('https://api.paystack.co/refund', { transaction: gatewayRef, amount: Math.round(amount * 100) }, { headers: { Authorization: `Bearer ${env.raw.PAYSTACK_SECRET_KEY}` } });
+  } else if (gateway === 'flutterwave') {
+    await http.post(`https://api.flutterwave.com/v3/transactions/${encodeURIComponent(gatewayRef)}/refund`, { amount }, { headers: { Authorization: `Bearer ${env.raw.FLUTTERWAVE_SECRET_KEY}` } });
+  } else {
+    throw Object.assign(new Error('Refunds for ' + gateway + ' are processed manually'), { status: 400 });
+  }
 }

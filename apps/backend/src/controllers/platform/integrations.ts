@@ -69,6 +69,18 @@ export async function integrationStatus(_req: Request, res: Response) {
       const r = await http.get(`https://api.cloudinary.com/v1_1/${R.CLOUDINARY_CLOUD_NAME}/usage`, { auth: { username: R.CLOUDINARY_API_KEY!, password: R.CLOUDINARY_API_SECRET! }, ...T });
       return { ok: true, detail: `Plan ${r.data?.plan || ''} • storage used ${Math.round((r.data?.storage?.usage || 0) / 1048576)} MB` };
     }),
+    check('N-Health settlement account (escrow commission)', true, async () => {
+      const R2 = process.env;
+      const ok = !!(R2.PLATFORM_BANK_CODE && R2.PLATFORM_ACCOUNT_NUMBER);
+      return { ok, detail: ok ? `${R2.PLATFORM_ACCOUNT_NAME || 'N-Health'} • bank ${R2.PLATFORM_BANK_CODE} • ••${String(R2.PLATFORM_ACCOUNT_NUMBER).slice(-4)}` : 'Set PLATFORM_BANK_CODE, PLATFORM_ACCOUNT_NUMBER, PLATFORM_ACCOUNT_NAME so escrow payments send your commission to your account' };
+    }),
+    check('Split settlement (subaccounts)', true, async () => {
+      const [total, direct] = await Promise.all([
+        prisma.bankAccount.count({ where: { isPrimary: true } }),
+        prisma.bankAccount.count({ where: { isPrimary: true, OR: [{ paystackSubaccount: { not: null } }, { flutterwaveSubaccount: { not: null } }] } }),
+      ]);
+      return { ok: total === 0 || direct === total, detail: `${direct}/${total} provider & institution bank accounts can receive card payments directly${direct < total ? ' - the rest are paid on the payout schedule' : ''}` };
+    }),
     check('Web push (VAPID)', true, async () => ({ ok: !!(R.VAPID_PUBLIC_KEY && R.VAPID_PRIVATE_KEY), detail: R.VAPID_PUBLIC_KEY ? 'Keys set' : 'Generate with: npx web-push generate-vapid-keys' })),
     check('Google sign-in', true, async () => ({ ok: !!process.env.GOOGLE_CLIENT_ID, detail: process.env.GOOGLE_CLIENT_ID ? 'Client ID set' : 'Optional - set GOOGLE_CLIENT_ID to show "Continue with Google"' })),
     check('App URLs', true, async () => ({ ok: /^https:\/\//.test(env.publicUrl) && /^https:\/\//.test(env.appUrl) && env.corsOrigin !== '*', detail: `API ${env.publicUrl} • Web ${env.appUrl} • CORS ${env.corsOrigin}` })),

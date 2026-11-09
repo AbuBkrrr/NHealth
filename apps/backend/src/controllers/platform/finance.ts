@@ -8,6 +8,7 @@ import { balanceOf, payoutProvider, runPayouts, markPayout, adjust } from '../..
 import { listBanks, resolveAccount, paystackRecipient, gatewayReady } from '../../services/transfers';
 import { initialize, enabledGateways, Gateway } from '../../services/gateways';
 import { uid, str, num } from './util';
+import { ensureSubaccounts } from '../../services/splits';
 
 /** Next scheduled payout time (ISO) for display. */
 function nextPayout(fin: Awaited<ReturnType<typeof getFinance>>) {
@@ -43,7 +44,7 @@ export async function myEarnings(req: Request, res: Response) {
     ...bal,
     thisWeek: { earned: sum(week, ['EARNING']), commission: -sum(week, ['COMMISSION', 'CASH_COMMISSION']), cashCollected: week.filter((e) => e.type === 'CASH_COMMISSION').reduce((s, e) => s + Number(e.gross || 0), 0) },
     entries, payouts, cashDue,
-    bank: bank ? { bankName: bank.bankName, bankCode: bank.bankCode, accountNumber: bank.accountNumber, accountName: bank.verifiedName || bank.accountName, verified: bank.isVerified } : null,
+    bank: bank ? { bankName: bank.bankName, bankCode: bank.bankCode, accountNumber: bank.accountNumber, accountName: bank.verifiedName || bank.accountName, verified: bank.isVerified, directSettlement: !!(bank.paystackSubaccount || bank.flutterwaveSubaccount) } : null,
     policy: { commission: fin.commission, payoutSchedule: fin.payoutSchedule, payoutDay: fin.payoutDay, payoutHour: fin.payoutHour, minPayout: fin.minPayout, holdHours: fin.holdHours, cashEnabled: fin.cashEnabled, cashDebtLimit: fin.cashDebtLimit, nextPayoutAt: nextPayout(fin) },
     settleGateways: enabledGateways().filter((g) => g === 'paystack' || g === 'flutterwave'),
   });
@@ -77,7 +78,11 @@ export async function setPayoutBank(req: Request, res: Response) {
     create: { userId: me, bankCode, bankName, accountNumber, accountName: verifiedName || str(req.body.accountName, 120) || user!.name, verifiedName, recipientCode, isPrimary: true, isVerified: !!verifiedName },
     update: { bankCode, bankName, accountName: verifiedName || str(req.body.accountName, 120) || user!.name, verifiedName, recipientCode, isPrimary: true, isVerified: !!verifiedName },
   });
-  res.json({ bankName: acct.bankName, accountNumber: acct.accountNumber, accountName: acct.accountName, verified: acct.isVerified });
+  // Bank changed -> old subaccounts point at the old account; recreate them for split settlements.
+  await prisma.bankAccount.update({ where: { id: acct.id }, data: { paystackSubaccount: null, flutterwaveSubaccount: null } });
+  if (acct.isVerified) await ensureSubaccounts(acct.id);
+  const fresh = await prisma.bankAccount.findUnique({ where: { id: acct.id } });
+  res.json({ bankName: acct.bankName, accountNumber: acct.accountNumber, accountName: acct.accountName, verified: acct.isVerified, directSettlement: !!(fresh?.paystackSubaccount || fresh?.flutterwaveSubaccount) });
 }
 
 /** POST /api/earnings/cash-out - instant payout of the available balance (once per 24h). */
@@ -170,11 +175,19 @@ export async function revenue(req: Request, res: Response) {
     prisma.appointment.aggregate({ where: { status: 'COMPLETED', updatedAt: { gte: since } }, _sum: { serviceFee: true } }),
     prisma.payout.aggregate({ where: { status: 'PAID', paidAt: { gte: since } }, _sum: { amount: true }, _count: true }),
     prisma.paymentGatewayLog.aggregate({ where: { status: 'success', purpose: 'credit_purchase', createdAt: { gte: since } }, _sum: { amount: true } }),
-    prisma.providerLedgerEntry.aggregate({ where: { type: { in: ['EARNING', 'CASH_COMMISSION', 'ESCROW_SETTLED'] }, createdAt: { gte: since } }, _sum: { gross: true } }),
+    prisma.providerLedgerEntry.aggregate({ where: { type: { in: ['EARNING', 'CASH_COMMISSION'] }, method: { notIn: ['DIRECT', 'ESCROW'] }, commissionRate: { not: null }, createdAt: { gte: since } }, _sum: { gross: true } }),
   ]);
   const owedToProviders = await prisma.providerLedgerEntry.aggregate({ _sum: { amount: true } });
+  // Platform share of card payments split at checkout, and of escrow settlements.
+  const [direct, escrows] = await Promise.all([
+    prisma.paymentGatewayLog.findMany({ where: { purpose: 'direct_payment', status: 'success', createdAt: { gte: since } }, select: { requestPayload: true, amount: true } }),
+    prisma.escrowTransaction.findMany({ where: { fundedAt: { gte: since } }, select: { metadata: true, amount: true } }),
+  ]);
+  const directRevenue = direct.reduce((s2, d) => s2 + Number((d.requestPayload as any)?.plan?.commission || 0), 0);
+  const escrowRevenue = escrows.reduce((s2, e) => s2 + Number((e.metadata as any)?.split?.commission || 0), 0);
+  const directVolume = direct.reduce((s2, d) => s2 + Number(d.amount), 0) + escrows.reduce((s2, e) => s2 + Number(e.amount), 0);
   res.json({
-    days, gmv: Number(gmv._sum.gross || 0),
+    days, gmv: Number(gmv._sum.gross || 0) + directVolume, directRevenue, escrowRevenue,
     commissionInApp: -Number(comm._sum.amount || 0), commissionCash: -Number(cashComm._sum.amount || 0), patientFees: Number(fees._sum.serviceFee || 0),
     payoutsPaid: Number(payouts._sum.amount || 0), payoutCount: payouts._count, topups: Number(topups._sum.amount || 0),
     netProviderBalance: Number(owedToProviders._sum.amount || 0),

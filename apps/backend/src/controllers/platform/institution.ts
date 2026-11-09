@@ -23,6 +23,7 @@ export async function updateInstitution(req: Request, res: Response) {
   const data: any = {};
   for (const k of ['name', 'type', 'licenseNumber', 'email', 'phone', 'address', 'city', 'state', 'country', 'description']) if (b[k] !== undefined) data[k] = str(b[k], 1000) ?? null;
   for (const k of ['bedsTotal', 'bedsAvailable']) if (b[k] !== undefined) data[k] = Math.max(0, Math.round(num(b[k]) || 0));
+  if (b.staffSharePercent !== undefined) data.staffSharePercent = Math.min(100, Math.max(0, Math.round(num(b.staffSharePercent) ?? 100)));
   for (const k of ['lat', 'lng']) if (b[k] !== undefined) data[k] = num(b[k]) ?? null;
   if (typeof b.emergencyCare === 'boolean') data.emergencyCare = b.emergencyCare;
   res.json(await prisma.institutionProfile.update({ where: { id: i.id }, data }));

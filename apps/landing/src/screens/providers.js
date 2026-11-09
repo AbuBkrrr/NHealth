@@ -495,7 +495,7 @@ export async function institutionHome(el) {
 export async function institutionProfile(el) {
   const p = await get('/institution/profile');
   el.innerHTML = appBar({ title: '⚙️ Facility info', back: '/institution/home', roleCls: 'institution-title' }) + card(`<form id="f"></form>`);
-  const F = [['name', 'Institution name'], ['type', 'Type'], ['licenseNumber', 'Licence / registration no.'], ['email', 'Email'], ['phone', 'Phone'], ['address', 'Address'], ['city', 'City'], ['state', 'State'], ['country', 'Country (ISO code)'], ['bedsTotal', 'Total beds', 'number'], ['bedsAvailable', 'Beds available', 'number'], ['description', 'About', 'textarea']];
+  const F = [['staffSharePercent', 'Staff earnings share to the institution (%)', 'number'], ['name', 'Institution name'], ['type', 'Type'], ['licenseNumber', 'Licence / registration no.'], ['email', 'Email'], ['phone', 'Phone'], ['address', 'Address'], ['city', 'City'], ['state', 'State'], ['country', 'Country (ISO code)'], ['bedsTotal', 'Total beds', 'number'], ['bedsAvailable', 'Beds available', 'number'], ['description', 'About', 'textarea']];
   $('#f', el).innerHTML = F.map(([k, l, ty]) => fld({ name: k, label: l, type: ty || 'text', value: p[k] ?? '' })).join('') + fld({ name: 'emergencyCare', label: '🚨 24-hour emergency care', type: 'checkbox', value: p.emergencyCare }) + '<button class="btn btn-outline btn-sm btn-block mb8" type="button" id="loc">📍 Use my current location for the map</button><button class="btn btn-institution btn-block" type="submit">Save</button>';
   let ll = {};
   $('#loc', el).onclick = async () => { try { const g = await locate(); ll = { lat: g.lat, lng: g.lng }; toast('📍 Location captured'); } catch (e) { toastErr(e); } };

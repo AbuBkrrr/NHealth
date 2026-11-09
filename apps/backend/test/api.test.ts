@@ -6,6 +6,7 @@ import { prisma } from '../src/config/prisma';
 import { getOrCreateLedger, purchaseCredits } from '../src/services/creditsService';
 import { saveFinance } from '../src/services/settings';
 import { balanceOf, markPayout } from '../src/services/earnings';
+import { planFor } from '../src/services/splits';
 
 const app = createApp();
 const uniq = () => crypto.randomBytes(4).toString('hex');
@@ -256,5 +257,59 @@ describe('provider earnings & payouts (Bolt-style)', () => {
     const t = signToken({ userId: plainAdmin.id, role: 'ADMIN' as any, isSuperAdmin: false, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
     const r = await request(app).put('/api/admin-ops/finance').set(auth(t)).send({ commission: { APPOINTMENT: 50 } });
     expect(r.status).toBe(403);
+  });
+});
+
+describe('direct split payments & institution routing', () => {
+  async function world(sharePct: number) {
+    const admin = await prisma.user.create({ data: { email: `adm-${uniq()}@test.io`, name: 'Admin', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    await saveFinance({ commission: { APPOINTMENT: 20 }, holdHours: 0, patientServiceFeePercent: 5 }, admin.id);
+    const inst = await register('INSTITUTION', { name: 'City Hospital', type: 'HOSPITAL', licenseNumber: 'H-9' });
+    const doc = await register('DOCTOR', { specialty: 'GP', licenseNumber: 'MDCN-S', consultationFee: 10000 });
+    const pat = await register('PATIENT');
+    const ip = await prisma.institutionProfile.findUnique({ where: { userId: inst.user.id } });
+    await prisma.institutionProfile.update({ where: { id: ip!.id }, data: { staffSharePercent: sharePct } });
+    await prisma.institutionStaff.create({ data: { institutionId: ip!.id, userId: doc.user.id, name: 'Doc', email: doc.email, staffRole: 'DOCTOR', status: 'ACTIVE', joinedAt: new Date() } });
+    await request(app).put('/api/availability/me').set(auth(doc.token)).send({ timezone: 'Africa/Lagos', rules: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, startTime: '08:00', endTime: '18:00', slotMinutes: 30 })) });
+    const dprof = await prisma.doctorProfile.findUnique({ where: { userId: doc.user.id } });
+    const day = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10);
+    const slots = await request(app).get(`/api/availability/${doc.user.id}/slots?date=${day}`).set(auth(pat.token));
+    const appt = (await request(app).post('/api/patient/appointments').set(auth(pat.token)).send({ doctorId: dprof!.id, scheduledAt: slots.body.slots[0].start })).body;
+    return { inst, doc, pat, appt };
+  }
+
+  it('splits an affiliated doctor\'s coin earnings with the institution', async () => {
+    const { inst, doc, pat, appt } = await world(60);
+    await getOrCreateLedger(pat.user.id);
+    await purchaseCredits(pat.user.id, 20000, 'TEST-' + uniq(), 'top-up');
+    await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, method: 'WALLET' });
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'COMPLETE' });
+    // 10,000 fee - 20% = 8,000 net → 60% (4,800) institution, 3,200 doctor
+    expect((await balanceOf(inst.user.id)).balance).toBe(4800);
+    expect((await balanceOf(doc.user.id)).balance).toBe(3200);
+  });
+
+  it('settles a split card payment directly, and claws back shares on refund', async () => {
+    const { inst, doc, pat, appt } = await world(100);
+    // Institution has a split subaccount; the doctor has none (but all of the net goes to the institution anyway).
+    await prisma.bankAccount.create({ data: { userId: inst.user.id, bankCode: '058', bankName: 'GTBank', accountNumber: '0011223344', accountName: 'City Hospital', isPrimary: true, isVerified: true, paystackSubaccount: 'ACCT_test' } });
+    const plan = await planFor('APPOINTMENT', appt.id, pat.user.id);
+    expect(plan.total).toBe(10500);
+    expect(plan.payees).toEqual([expect.objectContaining({ userId: inst.user.id, role: 'INSTITUTION', amount: 8000 })]);
+    expect(plan.platformAmount).toBe(2500); // 2,000 commission + 500 booking fee
+    const ref = 'PY-T-' + uniq();
+    await prisma.paymentGatewayLog.create({ data: { userId: pat.user.id, gateway: 'paystack', internalRef: ref, gatewayRef: 'pending', amount: plan.total, status: 'pending', purpose: 'direct_payment', requestPayload: { payableType: 'APPOINTMENT', payableId: appt.id, plan, settled: { [inst.user.id]: true } } as any } });
+    const body = JSON.stringify({ event: 'charge.success', data: { status: 'success', reference: ref, amount: plan.total * 100, currency: 'NGN', id: 777 } });
+    const sig = crypto.createHmac('sha512', 'sk_test_dummy').update(body).digest('hex');
+    expect((await request(app).post('/api/webhooks/paystack').set('Content-Type', 'application/json').set('x-paystack-signature', sig).send(body)).status).toBe(200);
+    const pay = await prisma.payment.findFirst({ where: { payableId: appt.id, status: 'CONFIRMED' } });
+    expect(pay?.method).toBe('CARD');
+    expect((await prisma.appointment.findUnique({ where: { id: appt.id } }))!.paymentStatus).toBe('PAID');
+    expect(await prisma.providerLedgerEntry.count({ where: { providerUserId: inst.user.id, type: 'DIRECT_SETTLED', sourceId: appt.id } })).toBe(1);
+    expect((await balanceOf(inst.user.id)).balance).toBe(0); // money already in their bank
+    // Doctor declines: patient refunded by the gateway, institution's settled share recovered from future earnings.
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'CANCEL', notes: 'Away' });
+    expect((await prisma.payment.findUnique({ where: { id: pay!.id } }))!.status).toBe('CANCELLED');
+    expect((await balanceOf(inst.user.id)).balance).toBe(-8000);
   });
 });

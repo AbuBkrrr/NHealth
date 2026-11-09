@@ -101,7 +101,8 @@ export function RevenuePage() {
       <div className="toolbar">{[7, 30, 90, 365].map((d) => <button key={d} className={d === days ? '' : 'outline'} onClick={() => setDays(d)}>{d === 365 ? '1 year' : d + ' days'}</button>)}</div>
       {r && <div className="stat-grid">{([
         ['Gross service value', r.gmv], ['Commission (in-app)', r.commissionInApp], ['Commission (cash jobs)', r.commissionCash], ['Patient booking fees', r.patientFees],
-        ['Platform revenue', r.commissionInApp + r.commissionCash + r.patientFees], ['Coins topped up', r.topups], ['Payouts sent', r.payoutsPaid], ['Owed to providers now', r.netProviderBalance],
+        ['Commission (card, split)', r.directRevenue], ['Commission (escrow)', r.escrowRevenue],
+        ['Platform revenue', r.commissionInApp + r.commissionCash + r.patientFees + (r.directRevenue || 0) + (r.escrowRevenue || 0)], ['Coins topped up', r.topups], ['Payouts sent', r.payoutsPaid], ['Owed to providers now', r.netProviderBalance],
       ] as [string, number][]).map(([l, v]) => <div className="stat-card" key={l}><div className="stat-number">{naira(v)}</div><div className="stat-label">{l}</div></div>)}</div>}
     </div>
   );

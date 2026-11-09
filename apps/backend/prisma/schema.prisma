@@ -897,11 +897,14 @@ model BankAccount {
   isPrimary  Boolean @default(true)
   isVerified Boolean @default(false)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   // Paystack transfer recipient (created once the account is resolved/verified)
-  recipientCode String?
-  verifiedName  String?
+  recipientCode         String?
+  verifiedName          String?
+  // Split-payment subaccounts: card payments settle the provider's share straight to this account
+  paystackSubaccount    String?
+  flutterwaveSubaccount String?
 
   @@unique([userId, accountNumber])
   @@index([userId])
@@ -1143,11 +1146,13 @@ model InstitutionProfile {
   reviewCount   Int      @default(0)
   createdAt     DateTime @default(now())
 
-  departments Department[]
-  staff       InstitutionStaff[]
-  patients    InstitutionPatient[]
-  doctors     DoctorProfile[]
-  campaigns   DonationCampaign[]
+  // % of an affiliated (ACTIVE staff) provider's net earnings paid to the institution's account; the rest goes to the provider.
+  staffSharePercent Int                  @default(100)
+  departments       Department[]
+  staff             InstitutionStaff[]
+  patients          InstitutionPatient[]
+  doctors           DoctorProfile[]
+  campaigns         DonationCampaign[]
 }
 
 model Department {

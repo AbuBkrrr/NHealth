@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { ensureSubaccounts } from '../services/splits';
 
 // ============================================================
 // GET /api/provider/bank
@@ -51,6 +52,7 @@ export async function upsertBankAccount(req: Request, res: Response) {
     });
 
     console.log(`Bank account upserted for ${userId}: ${bankName} ${accountNumber}`);
+    await ensureSubaccounts(account.id).catch(() => null);
     res.json(account);
   } catch (err) {
     console.error('Failed to upsert bank account:', err);

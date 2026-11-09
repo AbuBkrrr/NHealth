@@ -25,6 +25,23 @@ export async function settleCreditPurchase(internalRef: string, verified?: { amo
   const claimed = await prisma.paymentGatewayLog.updateMany({ where: { id: log.id, status: 'pending' }, data: { status: 'processing' } });
   if (claimed.count === 0) return { ok: true, already: true, log };
 
+  // Direct card payment for a service: shares already settled to payees by the gateway split.
+  if (log.purpose === 'direct_payment') {
+    const meta: any = log.requestPayload || {};
+    const { markPaid } = await import('./checkout');
+    const { recordDirectSettlement } = await import('./earnings');
+    const now = new Date();
+    const payment = await prisma.payment.create({ data: {
+      payerId: log.userId, payableType: meta.payableType, payableId: meta.payableId, amount: Number(log.amount), method: 'CARD', status: 'CONFIRMED',
+      reference: internalRef, providerUserId: meta.plan?.providerUserId ?? null, expiresAt: now, confirmedAt: now,
+    } });
+    await markPaid(meta.payableType, meta.payableId);
+    if (meta.plan) await recordDirectSettlement(meta.payableType, meta.payableId, meta.plan, meta.settled || {}, log.gateway);
+    await prisma.paymentGatewayLog.update({ where: { id: log.id }, data: { status: 'success', gatewayRef: v.gatewayRef } });
+    await notify(log.userId, 'payment', 'Payment successful ✅', `${Number(log.amount).toLocaleString()} paid for your ${String(meta.payableType).replace('_', ' ').toLowerCase()}.`, { email: true, data: { paymentId: payment.id } });
+    return { ok: true, log };
+  }
+
   // Provider paying off a negative balance (cash commissions) - goes to their earnings ledger, not coins.
   if (log.purpose === 'provider_settlement') {
     const { recordSettlement } = await import('./earnings');

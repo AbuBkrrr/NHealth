@@ -14,6 +14,7 @@ import * as adm from '../controllers/platform/adminExt';
 import * as kyc from '../controllers/kycController';
 import * as labCore from '../controllers/labController';
 import * as fin from '../controllers/platform/finance';
+import * as direct from '../controllers/platform/directPay';
 import * as integ from '../controllers/platform/integrations';
 import { requireSuperAdmin } from '../middleware/auth';
 
@@ -155,6 +156,9 @@ r.delete('/lab-ops/catalog/:id', auth, requireRole('LAB'), h(lab.deleteCatalog))
 r.get('/doctor-ops/stats', auth, requireRole('DOCTOR'), h(lab.doctorStats));
 r.get('/doctor-ops/lab-requests', auth, requireRole('DOCTOR'), h(lab.doctorLabResults));
 r.post('/doctor-ops/lab-requests', auth, requireRole('DOCTOR'), requireVerifiedProvider, h(lab.doctorLabRequest));
+
+// Direct card payment with split settlement (provider/institution paid straight to their bank)
+r.post('/payments/card', auth, requireRole('PATIENT'), sensitiveLimiter, h(direct.startCardPayment));
 
 // Provider earnings & payouts (Bolt-style)
 r.get('/earnings', auth, requireRole(...PROVIDERS), h(fin.myEarnings));
