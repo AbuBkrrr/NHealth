@@ -1,9 +1,6 @@
-import creditsRoutes from './routes/creditsRoutes';
-import webhookRoutes from './routes/webhookRoutes'
 import 'express-async-errors';
 import express from 'express';
 import path from 'path';
-import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env';
@@ -19,133 +16,75 @@ import providerRoutes from './routes/providerRoutes';
 import messageRoutes from './routes/messageRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import adminRoutes from './routes/adminRoutes';
-import { errorHandler } from './middleware/errorHandler';
+import creditsRoutes from './routes/creditsRoutes';
+import webhookRoutes from './routes/webhookRoutes';
 import escrowRoutes from './routes/escrowRoutes';
 import providerBankRoutes from './routes/providerBankRoutes';
 import providerListRoutes from './routes/providerListRoutes';
+import platformRoutes from './routes/platformRoutes';
+import { errorHandler } from './middleware/errorHandler';
+import { apiLimiter } from './middleware/rateLimit';
+
+const DEFAULT_ORIGINS = [
+  'https://www.nhealth.com.ng',
+  'https://nhealth.com.ng',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://localhost:8081',
+];
+
+/** CORS_ORIGIN may be "*" (dev only) or a comma-separated allow-list added to the defaults. */
+function allowedOrigin(origin: string): boolean {
+  const extra = (env.corsOrigin || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (extra.includes('*')) return env.nodeEnv !== 'production' || extra.length === 1;
+  return DEFAULT_ORIGINS.includes(origin) || extra.includes(origin) || /^https:\/\/[a-z0-9-]+\.up\.railway\.app$/.test(origin);
+}
 
 export function createApp() {
   const app = express();
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
 
-  // [GLOBAL BODY PARSERS - MUST BE FIRST]
-  // These MUST run before any route to parse JSON bodies
-  app.use(express.json({ limit: '2mb' }));
-  app.use('/api/providers', providerListRoutes);
-  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
-  // [/GLOBAL BODY PARSERS]
-
-
-  // [BULLETPROOF CORS — inserted by fix-cors-top.cjs]
-  // Runs FIRST — before any other middleware. Sets CORS headers on EVERY request
-  // and handles OPTIONS preflight immediately with 204.
-app.use('/api/escrow', escrowRoutes);
-app.use('/api/provider', providerBankRoutes);
-  app.use((req: any, res: any, next: any) => {
-    const origin = req.headers.origin;
-
-    // Always echo back the origin (Bearer tokens don't need credentials flag)
-    if (origin) {
+  // 1. CORS - single, allow-list based. Runs before everything so every response carries headers.
+  app.use((req, res, next) => {
+    const origin = req.headers.origin as string | undefined;
+    if (origin && allowedOrigin(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
-    } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-    }
-
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-    res.setHeader('Access-Control-Max-Age', '86400');
-    res.setHeader('Vary', 'Origin');
-
-    // Handle preflight IMMEDIATELY
-    if (req.method === 'OPTIONS') {
-      return res.status(204).end();
-    }
-
-    next();
-  });
-  // [/BULLETPROOF CORS]
-
-  // [BODY PARSERS — must run BEFORE any route]
-  // Raw body for webhook signature verification
-app.use('/api/webhooks', express.raw({ type: 'application/json', limit: '2mb' }), (req: any, res, next) => {
-  if (req.body && Buffer.isBuffer(req.body)) {
-    req.rawBody = req.body.toString('utf8');
-    try { req.body = JSON.parse(req.rawBody); } catch (e) { req.body = {}; }
-  }
-  next();
-});
-
-
-
-  // ==================================================
-  // 1. EXPLICIT CORS HANDLER — MUST BE FIRST
-  //    This runs before any other middleware and sets
-  //    headers on every response, including OPTIONS.
-  // ==================================================
-app.use('/api/webhooks', webhookRoutes);
-app.use('/api/credits', creditsRoutes);  
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin) {
-      return next();
-    }
-
-    const allowedOrigins = [
-      'https://www.nhealth.com.ng',
-      'https://nhealth.com.ng',
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:8081',
-    ];
-
-    // Check if origin is allowed (exact match or env var '*')
-    const isAllowed =
-      env.corsOrigin === '*' ||
-      allowedOrigins.includes(origin) ||
-      env.corsOrigin === origin;
-
-    if (isAllowed) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
-    } else {
-      console.log('❌ CORS blocked origin:', origin);
+      res.setHeader('Access-Control-Max-Age', '86400');
     }
-
-    // Handle preflight OPTIONS request immediately
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(204);
-    }
-
+    if (req.method === 'OPTIONS') return res.sendStatus(origin && allowedOrigin(origin) ? 204 : 403);
     next();
   });
 
-  // ==================================================
-  // 2. Helmet (AFTER CORS headers are set)
-  // ==================================================
-  app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-    crossOriginEmbedderPolicy: false,
-  }));
+  // 2. Security headers
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, crossOriginEmbedderPolicy: false }));
 
-  // ==================================================
-  // 3. Body parsers and loggers
-  // ==================================================
+  // 3. Webhooks need the exact raw body for signature verification - parse them BEFORE express.json().
+  app.use('/api/webhooks', express.raw({ type: '*/*', limit: '2mb' }), (req, _res, next) => {
+    const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
+    req.rawBody = raw;
+    try { req.body = raw ? JSON.parse(raw) : {}; } catch { req.body = {}; }
+    next();
+  }, webhookRoutes);
 
-  app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+  // 4. Body parsers (25mb allows base64 images / short videos in chat & documents; storage enforces per-type caps)
+  app.use(express.json({ limit: '25mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+  app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev', { skip: () => env.nodeEnv === 'test' }));
 
-  // Serves uploaded avatars back out as plain static files.
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  // Local-disk uploads (dev fallback when Cloudinary is not configured)
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { maxAge: '7d' }));
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  app.get('/health', (_req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
-  // ==================================================
-  // 4. Routes
-  // ==================================================
+  app.use('/api', apiLimiter);
+
+  // 5. Routes
   app.use('/api/account', accountRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/patient', patientRoutes);
@@ -154,15 +93,17 @@ app.use((req, res, next) => {
   app.use('/api/lab', labRoutes);
   app.use('/api/nurse', nurseRoutes);
   app.use('/api/pharmacy', pharmacyRoutes);
+  app.use('/api/providers', providerListRoutes);
   app.use('/api/providers', providerRoutes);
   app.use('/api/messages', messageRoutes);
   app.use('/api/payments', paymentRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/credits', creditsRoutes);
+  app.use('/api/escrow', escrowRoutes);
+  app.use('/api/provider', providerBankRoutes);
+  app.use('/api', platformRoutes);
 
-  // 404 fallback
   app.use((req, res) => res.status(404).json({ error: `No route for ${req.method} ${req.path}` }));
-
   app.use(errorHandler);
-
   return app;
 }

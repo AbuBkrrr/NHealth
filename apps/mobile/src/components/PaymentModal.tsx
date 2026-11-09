@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert, Linking } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import { paymentApi, Payment, PayableType, PaymentMethod } from '../api/payment';
+import { paymentApi, Payment, PayableType, WEB_APP_URL } from '../api/payment';
 import { Button } from './Button';
 import { colors, radius } from '../theme/colors';
-import { useCountdown, formatCountdown } from '../hooks/useCountdown';
 import { useSocket } from '../hooks/useSocket';
 import { getErrorMessage } from '../utils/errorMessage';
 import { downloadAndSharePdf } from '../utils/downloadPdf';
@@ -19,35 +17,43 @@ interface Props {
   onConfirmed?: (payment: Payment) => void;
 }
 
-const METHODS: { key: PaymentMethod; label: string; icon: string; enabled: boolean }[] = [
-  { key: 'USSD', label: 'USSD', icon: '📱', enabled: true },
-  { key: 'TRANSFER', label: 'Bank Transfer', icon: '🏦', enabled: true },
-  { key: 'CARD', label: 'Debit/Credit Card', icon: '💳', enabled: true },
-  { key: 'WALLET', label: 'N-Health Wallet', icon: '👛', enabled: false },
-];
+const ESCROW_PURPOSE: Partial<Record<PayableType, string>> = { APPOINTMENT: 'appointment', PHARMACY_ORDER: 'pharmacy', LAB_TEST: 'lab', NURSE_REQUEST: 'nurse' };
 
-type Stage = 'SELECT' | 'AWAITING' | 'SUCCESS' | 'EXPIRED' | 'CANCELLED';
+type Choice = 'WALLET' | 'CARD' | 'CASH' | 'ESCROW';
+type Stage = 'SELECT' | 'CASH_PENDING' | 'ESCROW_OPENED' | 'CARD_OPENED' | 'SUCCESS' | 'CANCELLED';
 
+/**
+ * Payment sheet. Options:
+ *  - N-Health coins (instant; top up in the web app by card / transfer / USSD through Paystack or Flutterwave)
+ *  - Cash to the provider (provider confirms receipt; commission is handled on their earnings balance)
+ *  - Escrow via PayScrow (card/transfer checkout; funds released to the provider after service)
+ */
 export function PaymentModal({ visible, payableType, payableId, label, onClose, onConfirmed }: Props) {
   const [stage, setStage] = useState<Stage>('SELECT');
-  const [method, setMethod] = useState<PaymentMethod | null>(null);
+  const [choice, setChoice] = useState<Choice | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [cfg, setCfg] = useState<{ cashEnabled?: boolean; escrow?: boolean; gateways?: string[] }>({});
 
-  const remainingMs = useCountdown(payment?.status === 'PENDING' ? payment.expiresAt : null);
+  const providerService = !!ESCROW_PURPOSE[payableType];
+  const options: { key: Choice; label: string; icon: string; note: string; enabled: boolean }[] = [
+    { key: 'WALLET', label: 'N-Health Coins', icon: '🪙', note: balance === null ? 'Checking balance…' : `Balance: ${balance.toLocaleString()} coins`, enabled: true },
+    ...(providerService && (cfg.gateways || []).some((g) => g === 'paystack' || g === 'flutterwave') ? [{ key: 'CARD' as Choice, label: 'Card / Transfer / USSD', icon: '💳', note: 'Paid straight to the provider', enabled: true }] : []),
+    ...(providerService && cfg.cashEnabled ? [{ key: 'CASH' as Choice, label: 'Cash to provider', icon: '💵', note: 'Pay in person; the provider confirms receipt', enabled: true }] : []),
+    ...(providerService && cfg.escrow ? [{ key: 'ESCROW' as Choice, label: 'Escrow (card / transfer)', icon: '🔒', note: 'Held safely until the service is done', enabled: true }] : []),
+  ];
 
-  // Reset to a clean slate every time the modal is (re)opened for a new payable.
   useEffect(() => {
-    if (visible) {
-      setStage('SELECT');
-      setMethod(null);
-      setPayment(null);
-    }
+    if (!visible) return;
+    setStage('SELECT');
+    setChoice(null);
+    setPayment(null);
+    paymentApi.balance().then(setBalance).catch(() => setBalance(0));
+    paymentApi.config().then(setCfg).catch(() => setCfg({}));
   }, [visible, payableId]);
 
-  // Live push from the provider confirming - falls back to the countdown/expiry
-  // logic below if the socket message is missed for any reason.
+  // Cash: the provider confirms receipt in their app.
   useSocket({
     'payment:confirmed': (updated: Payment) => {
       if (payment && updated.id === payment.id) {
@@ -57,76 +63,61 @@ export function PaymentModal({ visible, payableType, payableId, label, onClose, 
       }
     },
   });
-
-  // Fallback poll in case the socket event doesn't arrive.
   useEffect(() => {
-    if (stage !== 'AWAITING' || !payment) return;
-    const interval = setInterval(async () => {
+    if (stage !== 'CASH_PENDING' || !payment) return;
+    const t = setInterval(async () => {
       try {
         const latest = await paymentApi.get(payment.id);
-        setPayment(latest);
-        if (latest.status === 'CONFIRMED') {
-          setStage('SUCCESS');
-          onConfirmed?.(latest);
-        } else if (latest.status === 'EXPIRED') {
-          setStage('EXPIRED');
-        }
-      } catch {
-        // Ignore transient poll failures - the socket or the next poll will catch up.
-      }
-    }, 5000);
-    return () => clearInterval(interval);
+        if (latest.status === 'CONFIRMED') { setPayment(latest); setStage('SUCCESS'); onConfirmed?.(latest); }
+        if (latest.status === 'CANCELLED' || latest.status === 'EXPIRED') setStage('CANCELLED');
+      } catch { /* next poll */ }
+    }, 8000);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, payment?.id]);
 
-  // Countdown hit zero client-side - flip to expired without waiting for the next poll.
-  useEffect(() => {
-    if (stage === 'AWAITING' && remainingMs <= 0) {
-      setStage('EXPIRED');
-    }
-  }, [stage, remainingMs]);
+  const topUp = () => Linking.openURL(`${WEB_APP_URL}/#/patient/wallet`);
 
   const proceed = async () => {
-    if (!method) return;
-    setCreating(true);
+    if (!choice) return;
+    setBusy(true);
     try {
-      const created = await paymentApi.create(payableType, payableId, method);
-      setPayment(created);
-      if (created.status === 'CONFIRMED') {
+      if (choice === 'WALLET') {
+        const created = await paymentApi.create(payableType, payableId, 'WALLET');
+        setPayment(created);
         setStage('SUCCESS');
         onConfirmed?.(created);
+      } else if (choice === 'CARD') {
+        const r = await paymentApi.card(payableType, payableId);
+        if (r.checkoutUrl) await Linking.openURL(r.checkoutUrl);
+        setStage('CARD_OPENED');
+      } else if (choice === 'CASH') {
+        const created = await paymentApi.create(payableType, payableId, 'CASH');
+        setPayment(created);
+        setStage('CASH_PENDING');
       } else {
-        setStage('AWAITING');
+        const r = await paymentApi.escrow(ESCROW_PURPOSE[payableType]!, payableId, label);
+        if (r.paymentLink) await Linking.openURL(r.paymentLink);
+        setStage('ESCROW_OPENED');
       }
     } catch (err: any) {
-      Alert.alert('Could not start payment', getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      if (/insufficient coins/i.test(msg)) {
+        Alert.alert('Not enough coins', msg, [{ text: 'Cancel', style: 'cancel' }, { text: 'Top up', onPress: topUp }]);
+      } else {
+        Alert.alert('Could not complete payment', msg);
+      }
     } finally {
-      setCreating(false);
+      setBusy(false);
     }
   };
 
-  const cancel = async () => {
+  const cancelCash = async () => {
     if (!payment) return;
-    setCancelling(true);
-    try {
-      await paymentApi.cancel(payment.id);
-      setStage('CANCELLED');
-    } catch (err: any) {
-      Alert.alert('Could not cancel', getErrorMessage(err));
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  const copy = async (value: string, what: string) => {
-    await Clipboard.setStringAsync(value);
-    Alert.alert('Copied', `${what} copied to clipboard.`);
-  };
-
-  const tryAgain = () => {
-    setStage('SELECT');
-    setMethod(null);
-    setPayment(null);
+    setBusy(true);
+    try { await paymentApi.cancel(payment.id); setStage('CANCELLED'); }
+    catch (err: any) { Alert.alert('Could not cancel', getErrorMessage(err)); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -137,93 +128,48 @@ export function PaymentModal({ visible, payableType, payableId, label, onClose, 
             <>
               <Text style={styles.title}>Pay {label}</Text>
               <Text style={styles.subtitle}>Choose how you'd like to pay</Text>
-
-              {METHODS.map((m) => (
-                <Pressable
-                  key={m.key}
-                  disabled={!m.enabled}
-                  onPress={() => setMethod(m.key)}
-                  style={[
-                    styles.methodRow,
-                    method === m.key && styles.methodRowActive,
-                    !m.enabled && styles.methodRowDisabled,
-                  ]}
-                >
+              {options.map((m) => (
+                <Pressable key={m.key} disabled={!m.enabled} onPress={() => setChoice(m.key)} style={[styles.methodRow, choice === m.key && styles.methodRowActive, !m.enabled && styles.methodRowDisabled]}>
                   <Text style={styles.methodIcon}>{m.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.methodLabel, !m.enabled && styles.methodLabelDisabled]}>{m.label}</Text>
-                    {!m.enabled && <Text style={styles.methodLockedNote}>🔒 Coming soon - pending license approval</Text>}
+                    <Text style={styles.methodLabel}>{m.label}</Text>
+                    <Text style={styles.methodLockedNote}>{m.note}</Text>
                   </View>
-                  {method === m.key && <Text style={styles.checkmark}>✓</Text>}
+                  {choice === m.key && <Text style={styles.checkmark}>✓</Text>}
                 </Pressable>
               ))}
-
-              <Button title="Proceed to Pay" onPress={proceed} loading={creating} disabled={!method} style={{ marginTop: 20 }} />
-              <Button title="Cancel" variant="outline" onPress={onClose} style={{ marginTop: 10 }} />
+              <Pressable onPress={topUp}><Text style={[styles.copyLink, { textAlign: 'center', marginTop: 6 }]}>+ Top up coins (card, transfer or USSD)</Text></Pressable>
+              <Button title="Pay now" onPress={proceed} loading={busy} disabled={!choice} style={{ marginTop: 20 }} />
+              <Button title="Pay later" variant="outline" onPress={onClose} style={{ marginTop: 10 }} />
             </>
           )}
 
-          {stage === 'AWAITING' && payment && (
-            <>
-              <Text style={styles.title}>Complete your payment</Text>
-              <View style={styles.timerBox}>
-                <Text style={styles.timerLabel}>Time remaining</Text>
-                <Text style={styles.timerValue}>{formatCountdown(remainingMs)}</Text>
-              </View>
+          {stage === 'CASH_PENDING' && payment && (
+            <View style={styles.centered}>
+              <Text style={styles.bigIcon}>💵</Text>
+              <Text style={styles.title}>Pay ₦{Number(payment.amount).toLocaleString()} in cash</Text>
+              <Text style={styles.subtitle}>Hand the cash to your provider. This screen updates when they confirm they received it.</Text>
+              <Button title="Done" onPress={onClose} style={{ marginTop: 10, width: '100%' }} />
+              <Button title="Cancel cash payment" variant="outline" onPress={cancelCash} loading={busy} style={{ marginTop: 10, width: '100%' }} />
+            </View>
+          )}
 
-              <Text style={styles.amount}>₦{Number(payment.amount).toLocaleString()}</Text>
+          {stage === 'ESCROW_OPENED' && (
+            <View style={styles.centered}>
+              <Text style={styles.bigIcon}>🔒</Text>
+              <Text style={styles.title}>Complete payment in the browser</Text>
+              <Text style={styles.subtitle}>Your money is held in escrow and released to the provider after your service. You'll be notified when payment is received.</Text>
+              <Button title="Done" onPress={onClose} style={{ marginTop: 10, width: '100%' }} />
+            </View>
+          )}
 
-              {payment.method === 'USSD' && (
-                <View style={styles.instructionBox}>
-                  <Text style={styles.instructionLabel}>Dial this USSD code</Text>
-                  <Text style={styles.instructionValue}>{payment.ussdCode}</Text>
-                  <View style={styles.instructionActions}>
-                    <Button
-                      title="📞 Dial"
-                      onPress={() => Linking.openURL(`tel:${encodeURIComponent(payment.ussdCode ?? '')}`)}
-                      style={{ flex: 1, marginRight: 8 }}
-                    />
-                    <Button title="Copy" variant="outline" onPress={() => copy(payment.ussdCode ?? '', 'USSD code')} style={{ flex: 1 }} />
-                  </View>
-                </View>
-              )}
-
-              {payment.method === 'TRANSFER' && (
-                <View style={styles.instructionBox}>
-                  <Text style={styles.instructionLabel}>Transfer to</Text>
-                  <Text style={styles.instructionValue}>{payment.transferBankName}</Text>
-                  <Text style={styles.instructionValue}>{payment.transferAccountName}</Text>
-                  <View style={styles.row}>
-                    <Text style={styles.instructionValueBold}>{payment.transferAccountNumber}</Text>
-                    <Pressable onPress={() => copy(payment.transferAccountNumber ?? '', 'Account number')}>
-                      <Text style={styles.copyLink}>Copy</Text>
-                    </Pressable>
-                  </View>
-                  <Text style={styles.instructionLabel}>Reference (include in narration)</Text>
-                  <View style={styles.row}>
-                    <Text style={styles.instructionValueBold}>{payment.reference}</Text>
-                    <Pressable onPress={() => copy(payment.reference, 'Reference')}>
-                      <Text style={styles.copyLink}>Copy</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-
-              {payment.method === 'CARD' && (
-                <View style={styles.instructionBox}>
-                  <Text style={styles.instructionLabel}>Card payment</Text>
-                  <Text style={styles.demoNote}>
-                    Demo mode - no real card is charged here. In production this connects to a licensed payment
-                    gateway (e.g. Paystack/Flutterwave), which confirms instantly instead of waiting on a manual
-                    check.
-                  </Text>
-                </View>
-              )}
-
-              <Text style={styles.waitingNote}>Waiting for the provider to confirm they've received your payment...</Text>
-
-              <Button title="Cancel Payment" variant="outline" onPress={cancel} loading={cancelling} style={{ marginTop: 16 }} />
-            </>
+          {stage === 'CARD_OPENED' && (
+            <View style={styles.centered}>
+              <Text style={styles.bigIcon}>💳</Text>
+              <Text style={styles.title}>Complete payment in the browser</Text>
+              <Text style={styles.subtitle}>Once your bank confirms, the booking is marked paid and you'll get a notification.</Text>
+              <Button title="Done" onPress={onClose} style={{ marginTop: 10, width: '100%' }} />
+            </View>
           )}
 
           {stage === 'SUCCESS' && (
@@ -232,24 +178,9 @@ export function PaymentModal({ visible, payableType, payableId, label, onClose, 
               <Text style={styles.title}>Payment confirmed</Text>
               <Text style={styles.subtitle}>Your payment has been received and confirmed.</Text>
               {payment && (
-                <Button
-                  title="Download Receipt"
-                  variant="outline"
-                  onPress={() => downloadAndSharePdf(`/payments/${payment.id}/receipt.pdf`, `receipt-${payment.reference}.pdf`)}
-                  style={{ marginTop: 12, width: '100%' }}
-                />
+                <Button title="Download Receipt" variant="outline" onPress={() => downloadAndSharePdf(`/payments/${payment.id}/receipt.pdf`, `receipt-${payment.reference}.pdf`)} style={{ marginTop: 12, width: '100%' }} />
               )}
               <Button title="Done" onPress={onClose} style={{ marginTop: 10, width: '100%' }} />
-            </View>
-          )}
-
-          {stage === 'EXPIRED' && (
-            <View style={styles.centered}>
-              <Text style={styles.bigIcon}>⏰</Text>
-              <Text style={styles.title}>Payment window expired</Text>
-              <Text style={styles.subtitle}>You didn't complete the payment within 5 minutes.</Text>
-              <Button title="Try Again" onPress={tryAgain} style={{ marginTop: 20, width: '100%' }} />
-              <Button title="Close" variant="outline" onPress={onClose} style={{ marginTop: 10, width: '100%' }} />
             </View>
           )}
 

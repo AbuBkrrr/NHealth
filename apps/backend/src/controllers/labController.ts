@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { notify } from '../services/notify';
+import { accrueForSource } from '../services/earnings';
 import { startDocument, drawField, drawTable, drawFooterNote, finishDocument } from '../utils/pdf';
 
 /** Looks up the LabProfile row for the logged-in user, or throws. */
@@ -163,21 +165,36 @@ export async function uploadResult(req: Request, res: Response) {
   ]);
 
   const patient = await prisma.patientProfile.findUnique({ where: { id: test.patientId }, select: { userId: true } });
-  if (patient) req.app.get('io')?.to(`user:${patient.userId}`).emit('labresult:new', result);
+  if (patient) {
+    req.app.get('io')?.to(`user:${patient.userId}`).emit('labresult:new', result);
+    await notify(patient.userId, 'lab', 'Lab result ready 🔬', `Your ${test.testType} result is ready.`, { email: true, data: { labTestId: test.id } });
+  }
+  // Send the result back to the doctor who requested the test.
+  if (test.requestedByDoctorId) {
+    const doc = await prisma.doctorProfile.findUnique({ where: { id: test.requestedByDoctorId }, select: { userId: true } });
+    if (doc) await notify(doc.userId, 'lab', 'Requested result ready', `The ${test.testType} result for your patient is available.`, { data: { labTestId: test.id } });
+  }
+  if ((req.body as any).fileUrl) await prisma.labResult.update({ where: { id: result.id }, data: { fileUrl: String((req.body as any).fileUrl) } });
 
+  await accrueForSource('LAB_TEST', test.id);
   res.status(201).json(result);
 }
 
 export async function getResultPdf(req: Request, res: Response) {
-  const lab = await getLabProfile(req.user!.userId);
+  // Accessible to the performing lab, the patient themselves, and the doctor who ordered the test.
+  const role = req.user!.role;
+  const lab = role === 'LAB' ? await getLabProfile(req.user!.userId) : null;
   const test = await prisma.labTest.findUnique({
     where: { id: req.params.id },
     include: {
-      patient: { include: { user: { select: { name: true } } } },
+      patient: { include: { user: { select: { name: true, id: true } } } },
       result: true,
     },
   });
-  if (!test || test.labId !== lab.id) throw ApiError.notFound('Test not found');
+  if (!test) throw ApiError.notFound('Test not found');
+  const doc = role === 'DOCTOR' ? await prisma.doctorProfile.findUnique({ where: { userId: req.user!.userId } }) : null;
+  const allowed = (lab && test.labId === lab.id) || (role === 'PATIENT' && test.patient.userId === req.user!.userId) || (doc && test.requestedByDoctorId === doc.id);
+  if (!allowed) throw ApiError.notFound('Test not found');
   if (!test.result) throw ApiError.notFound('No result has been uploaded for this test yet');
 
   const resultData = test.result.resultData as { results: { parameter: string; value: string; unit?: string; referenceRange?: string }[] };

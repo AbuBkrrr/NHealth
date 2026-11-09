@@ -18,10 +18,18 @@ export function Layout() {
         <NavLink to="/users" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           Users
         </NavLink>
+        {[['/operations', 'Operations'], ['/verifications', 'Provider verification'], ['/kyc', 'Identity (KYC)'], ['/campaigns', 'Donation campaigns'], ['/finance', 'Fees & payouts'], ['/revenue', 'Revenue'], ['/payouts', 'Coin payments by provider'], ['/tickets', 'Support tickets'], ['/catalogs', 'Catalogs & rates']].map(([to, label]) => (
+          <NavLink key={to} to={to} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+            {label}
+          </NavLink>
+        ))}
         {user?.isSuperAdmin && (
           <>
             <NavLink to="/admins" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
               Admin Accounts
+            </NavLink>
+            <NavLink to="/integrations" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+              Integration status
             </NavLink>
             <NavLink to="/audit-log" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
               Audit Log

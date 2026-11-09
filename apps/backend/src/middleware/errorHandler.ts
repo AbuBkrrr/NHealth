@@ -35,6 +35,18 @@ export function errorHandler(
     return;
   }
 
+  if (err && typeof err === 'object' && 'status' in err && typeof (err as any).status === 'number' && (err as any).status < 500) {
+    res.status((err as any).status).json({ error: (err as any).message });
+    return;
+  }
+  if (err && typeof err === 'object' && (err as any).type === 'entity.too.large') {
+    res.status(413).json({ error: 'Upload too large' });
+    return;
+  }
+  if (err && typeof err === 'object' && 'code' in err && (err as any).code === 'P2025') {
+    res.status(404).json({ error: 'Record not found' });
+    return;
+  }
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 }

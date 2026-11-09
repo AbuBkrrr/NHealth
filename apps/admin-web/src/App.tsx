@@ -12,6 +12,8 @@ import { UsersPage } from './pages/UsersPage';
 import { UserDetailPage } from './pages/UserDetailPage';
 import { AdminsPage } from './pages/AdminsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
+import { FinancePage, RevenuePage, IntegrationsPage } from './pages/FinancePages';
+import { OpsDashboardPage, VerificationsPage, KycPage, CampaignsPage, PayoutsPage, TicketsPage, CatalogPage } from './pages/OpsPages';
 import { PatientHomePage } from './pages/PatientHomePage';
 import { DoctorDashboardPage } from './pages/DoctorDashboardPage';
 import { NurseDashboardPage } from './pages/NurseDashboardPage';
@@ -112,6 +114,16 @@ export default function App() {
           >
             <Route index element={<RoleBasedHome />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="operations" element={<OpsDashboardPage />} />
+            <Route path="verifications" element={<VerificationsPage />} />
+            <Route path="kyc" element={<KycPage />} />
+            <Route path="campaigns" element={<CampaignsPage />} />
+            <Route path="payouts" element={<PayoutsPage />} />
+            <Route path="tickets" element={<TicketsPage />} />
+            <Route path="catalogs" element={<CatalogPage />} />
+            <Route path="finance" element={<FinancePage />} />
+            <Route path="revenue" element={<RevenuePage />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
             <Route path="users/:id" element={<UserDetailPage />} />
             <Route
               path="admins"

@@ -5,6 +5,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { env } from '../config/env';
+import { storeFile } from '../services/storage';
 import { ApiError } from '../utils/ApiError';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'avatars');
@@ -40,7 +41,14 @@ export const avatarUpload = multer({
 export async function uploadAvatar(req: Request, res: Response) {
   if (!req.file) throw ApiError.badRequest('No image file was uploaded');
 
-  const avatarUrl = `${env.publicUrl}/uploads/avatars/${req.file.filename}`;
+  let avatarUrl = `${env.publicUrl}/uploads/avatars/${req.file.filename}`;
+  // Persist to Cloudinary when configured (container disks are wiped on redeploy).
+  if (env.raw.CLOUDINARY_CLOUD_NAME) {
+    const local = path.join(UPLOAD_DIR, req.file.filename);
+    const stored = await storeFile(fs.readFileSync(local), req.file.mimetype, 'avatars/' + req.user!.userId, false);
+    avatarUrl = stored.url;
+    fs.unlink(local, () => null);
+  }
 
   // Best-effort cleanup of the previous avatar file, if any, so disk usage
   // doesn't grow unbounded as users update their photo repeatedly.
@@ -85,5 +93,14 @@ export async function updateAccount(req: Request, res: Response) {
     data,
     select: { id: true, name: true, phone: true },
   });
+  res.json(user);
+}
+
+/** POST /api/account/avatar-url { url } - sets an avatar previously uploaded through /api/uploads. */
+export async function setAvatarUrl(req: Request, res: Response) {
+  const url = String(req.body?.url || '');
+  const ok = url.startsWith(env.publicUrl + '/uploads/') || /^https:\/\/res\.cloudinary\.com\//.test(url);
+  if (!ok) throw ApiError.badRequest('Upload the image first');
+  const user = await prisma.user.update({ where: { id: req.user!.userId }, data: { avatarUrl: url }, select: { id: true, avatarUrl: true } });
   res.json(user);
 }

@@ -2,10 +2,12 @@ import { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
 import { env } from '../config/env';
+import { prisma } from '../config/prisma';
 
 export function initSockets(httpServer: HttpServer) {
+  const origins = (env.corsOrigin || '').split(',').map((s) => s.trim()).filter(Boolean);
   const io = new Server(httpServer, {
-    cors: { origin: env.corsOrigin },
+    cors: { origin: origins.includes('*') ? true : ['https://www.nhealth.com.ng', 'https://nhealth.com.ng', 'http://localhost:5173', ...origins] },
   });
 
   // Every socket must present the same JWT used for REST calls.
@@ -24,20 +26,28 @@ export function initSockets(httpServer: HttpServer) {
 
   io.on('connection', (socket) => {
     const { userId, role } = socket.data;
-    // Personal room: direct messages and per-user notifications.
     socket.join(`user:${userId}`);
-    // Role room: broadcasts like "new emergency request" to all ambulances.
     socket.join(`role:${role}`);
 
-    socket.on('ambulance:location', (data: { lat: number; lng: number }) => {
-      if (role !== 'AMBULANCE') return;
-      // Broadcast this ambulance's live location to anyone tracking it
-      // (e.g. the patient who requested it).
-      socket.broadcast.emit('ambulance:location', { userId, ...data });
+    // Ambulance live location: persisted, and sent ONLY to the patient(s) whose active emergency
+    // this ambulance is serving - never broadcast to everyone.
+    socket.on('ambulance:location', async (data: { lat: number; lng: number }) => {
+      if (role !== 'AMBULANCE' || typeof data?.lat !== 'number' || typeof data?.lng !== 'number') return;
+      try {
+        const amb = await prisma.ambulanceProfile.update({
+          where: { userId }, data: { currentLat: data.lat, currentLng: data.lng, lastLocationAt: new Date() },
+        });
+        const active = await prisma.emergencyRequest.findMany({
+          where: { ambulanceId: amb.id, status: { in: ['ACCEPTED', 'EN_ROUTE', 'ARRIVED'] } },
+          include: { patient: { select: { userId: true } } },
+        });
+        active.forEach((r) => io.to(`user:${r.patient.userId}`).emit('ambulance:location', { requestId: r.id, lat: data.lat, lng: data.lng, at: Date.now() }));
+      } catch { /* ignore */ }
     });
 
-    socket.on('disconnect', () => {
-      // No explicit cleanup needed; Socket.io removes room memberships automatically.
+    // Typing indicator for chat
+    socket.on('message:typing', (data: { to: string }) => {
+      if (data?.to) io.to(`user:${data.to}`).emit('message:typing', { from: userId });
     });
   });
 

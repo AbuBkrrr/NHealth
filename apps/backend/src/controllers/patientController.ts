@@ -2,6 +2,13 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { env } from '../config/env';
+import { notify } from '../services/notify';
+import { isBookable } from '../services/availability';
+import { refundCoinPayment } from '../services/checkout';
+import { getBalance } from '../services/creditsService';
+import { distanceKm } from '../utils/geo';
+import { getFinance } from '../services/settings';
 import { startDocument, drawField, drawTable, drawTotal, drawFooterNote, finishDocument, formatNaira } from '../utils/pdf';
 
 /** Looks up the PatientProfile row for the logged-in user, or throws. */
@@ -65,26 +72,54 @@ export async function listAppointments(req: Request, res: Response) {
 export async function createAppointment(req: Request, res: Response) {
   const data = createAppointmentSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
+  const doctor = await prisma.doctorProfile.findUnique({ where: { id: data.doctorId }, include: { user: { select: { id: true, name: true, verificationStatus: true, isActive: true } } } });
+  if (!doctor || !doctor.user.isActive) throw ApiError.notFound('Doctor not found');
+  if (doctor.user.verificationStatus !== 'VERIFIED' && env.nodeEnv === 'production') throw ApiError.badRequest('This doctor is not yet verified');
+  const at = new Date(data.scheduledAt);
+  if (!(await isBookable(doctor.user.id, at))) throw ApiError.conflict('That time slot is no longer available - please pick another');
+  const fee = Number(doctor.consultationFee);
+  const serviceFee = Math.round(fee * (await getFinance()).patientServiceFeePercent) / 100;
   const appointment = await prisma.appointment.create({
     data: {
-      patientId: patient.id,
-      doctorId: data.doctorId,
-      scheduledAt: new Date(data.scheduledAt),
-      type: data.type,
-      reason: data.reason,
+      patientId: patient.id, doctorId: data.doctorId, scheduledAt: at, type: data.type, reason: data.reason,
+      durationMin: doctor.slotMinutes || 30, fee, serviceFee, currency: 'NGN', institutionId: doctor.institutionId ?? undefined,
     },
   });
+  const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { name: true } });
+  await notify(doctor.user.id, 'appointment', 'New appointment request 📅', `${me?.name || 'A patient'} requested ${at.toISOString()}${data.reason ? ' - ' + data.reason : ''}.`, { email: true, data: { appointmentId: appointment.id } });
+  req.app.get('io')?.to(`user:${doctor.user.id}`).emit('appointment:new', appointment);
   res.status(201).json(appointment);
+}
+
+/** Reschedule to a new free slot (only before the visit starts). */
+export async function rescheduleAppointment(req: Request, res: Response) {
+  const patient = await getPatientProfile(req.user!.userId);
+  const appt = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { doctor: { select: { userId: true } } } });
+  if (!appt || appt.patientId !== patient.id) throw ApiError.notFound('Appointment not found');
+  if (!['PENDING', 'CONFIRMED'].includes(appt.status)) throw ApiError.conflict('This appointment can no longer be rescheduled');
+  const at = new Date(String(req.body.scheduledAt));
+  if (isNaN(at.getTime())) throw ApiError.badRequest('Invalid date');
+  if (!(await isBookable(appt.doctor.userId, at))) throw ApiError.conflict('That time slot is not available');
+  const updated = await prisma.appointment.update({ where: { id: appt.id }, data: { scheduledAt: at, status: 'PENDING', reminderSentAt: null, rescheduledFromId: appt.id } });
+  await notify(appt.doctor.userId, 'appointment', 'Appointment rescheduled', `A patient moved their appointment to ${at.toISOString()}.`, { data: { appointmentId: appt.id } });
+  res.json(updated);
 }
 
 export async function cancelAppointment(req: Request, res: Response) {
   const patient = await getPatientProfile(req.user!.userId);
   const appointment = await prisma.appointment.findUnique({ where: { id: req.params.id } });
   if (!appointment || appointment.patientId !== patient.id) throw ApiError.notFound('Appointment not found');
+  if (['COMPLETED', 'CANCELLED'].includes(appointment.status)) throw ApiError.conflict(`Appointment is already ${appointment.status.toLowerCase()}`);
   const updated = await prisma.appointment.update({
     where: { id: appointment.id },
-    data: { status: 'CANCELLED' },
+    data: { status: 'CANCELLED', cancelReason: req.body?.reason ? String(req.body.reason).slice(0, 300) : undefined, cancelledBy: 'PATIENT' },
   });
+  // Full refund if cancelled 12h+ before the visit; otherwise the provider keeps the fee (policy shown in-app).
+  if (appointment.scheduledAt.getTime() - Date.now() > 12 * 3600_000 || appointment.status === 'PENDING') {
+    await refundCoinPayment('APPOINTMENT', appointment.id, 'appointment cancelled');
+  }
+  const doc = await prisma.doctorProfile.findUnique({ where: { id: appointment.doctorId }, select: { userId: true } });
+  if (doc) await notify(doc.userId, 'appointment', 'Appointment cancelled', `A patient cancelled their appointment${req.body?.reason ? ': ' + req.body.reason : ''}.`, { data: { appointmentId: appointment.id } });
   res.json(updated);
 }
 
@@ -109,31 +144,35 @@ export async function listOrders(req: Request, res: Response) {
 export async function createOrder(req: Request, res: Response) {
   const data = createOrderSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
-  const total = data.items.reduce((sum, i) => sum + i.qty * i.price, 0);
+  const pharmacy = await prisma.pharmacyProfile.findUnique({ where: { id: data.pharmacyId }, select: { id: true, userId: true, pharmacyName: true } });
+  if (!pharmacy) throw ApiError.notFound('Pharmacy not found');
+  let rx: any = null;
+  if (data.prescriptionId) {
+    rx = await prisma.prescription.findUnique({ where: { id: data.prescriptionId } });
+    if (!rx || rx.patientId !== patient.id) throw ApiError.notFound('Prescription not found');
+  }
+  const deliveryMethod = req.body.deliveryMethod === 'DELIVERY' ? 'DELIVERY' : 'PICKUP';
 
-  // Decrement stock and create the order atomically so two patients can't both
-  // "buy" the last unit of something out from under each other.
+  // Prices always come from the pharmacy's inventory - never from the client.
   const order = await prisma.$transaction(async (tx) => {
+    const lines: any[] = [];
     for (const item of data.items) {
-      const updated = await tx.inventory.updateMany({
-        where: { id: item.inventoryId, stock: { gte: item.qty } },
-        data: { stock: { decrement: item.qty } },
-      });
-      if (updated.count === 0) {
-        throw ApiError.conflict(`Not enough stock for ${item.name}`);
-      }
+      const inv = await tx.inventory.findUnique({ where: { id: item.inventoryId } });
+      if (!inv || inv.pharmacyId !== pharmacy.id) throw ApiError.badRequest(`${item.name} is not sold by this pharmacy`);
+      if (inv.expiryDate && inv.expiryDate < new Date()) throw ApiError.conflict(`${inv.name} is expired and cannot be sold`);
+      if (inv.requiresPrescription && !rx) throw ApiError.badRequest(`${inv.name} requires a prescription from a doctor`);
+      const updated = await tx.inventory.updateMany({ where: { id: inv.id, stock: { gte: item.qty } }, data: { stock: { decrement: item.qty } } });
+      if (updated.count === 0) throw ApiError.conflict(`Not enough stock for ${inv.name}`);
+      lines.push({ inventoryId: inv.id, name: inv.name, qty: item.qty, price: Number(inv.price) });
     }
+    const total = lines.reduce((sum, i) => sum + i.qty * i.price, 0);
     return tx.pharmacyOrder.create({
-      data: {
-        patientId: patient.id,
-        pharmacyId: data.pharmacyId,
-        prescriptionId: data.prescriptionId,
-        items: data.items,
-        total,
-      },
+      data: { patientId: patient.id, pharmacyId: pharmacy.id, prescriptionId: data.prescriptionId, items: lines, total,
+        deliveryMethod, deliveryAddress: deliveryMethod === 'DELIVERY' ? String(req.body.deliveryAddress || patient.address || '') : null },
     });
   });
-
+  await notify(pharmacy.userId, 'order', 'New order 🛒', `New ${rx ? 'prescription ' : ''}order worth ${Number(order.total).toLocaleString()}.`, { data: { orderId: order.id } });
+  req.app.get('io')?.to(`user:${pharmacy.userId}`).emit('order:new', order);
   res.status(201).json(order);
 }
 
@@ -232,14 +271,19 @@ export async function listLabTests(req: Request, res: Response) {
 export async function createLabTest(req: Request, res: Response) {
   const data = createLabTestSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
+  const lab = await prisma.labProfile.findUnique({ where: { id: data.labId }, select: { id: true, userId: true } });
+  if (!lab) throw ApiError.notFound('Lab not found');
+  const cat = req.body.catalogId ? await prisma.labTestCatalog.findUnique({ where: { id: String(req.body.catalogId) } }) : null;
+  if (cat && cat.labId !== lab.id) throw ApiError.badRequest('That test is not offered by this lab');
   const test = await prisma.labTest.create({
     data: {
-      patientId: patient.id,
-      labId: data.labId,
-      testType: data.testType,
-      scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
+      patientId: patient.id, labId: lab.id, testType: cat?.name ?? data.testType, catalogId: cat?.id,
+      fee: cat ? cat.price : undefined, scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
+      homeCollection: !!req.body.homeCollection, address: req.body.address ? String(req.body.address) : undefined,
+      notes: req.body.notes ? String(req.body.notes) : undefined,
     },
   });
+  await notify(lab.userId, 'lab', 'New test booking 🔬', `${test.testType} booked${test.homeCollection ? ' (home collection)' : ''}.`, { data: { labTestId: test.id } });
   res.status(201).json(test);
 }
 
@@ -254,13 +298,33 @@ const emergencyRequestSchema = z.object({
 export async function requestEmergency(req: Request, res: Response) {
   const data = emergencyRequestSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
+  const open = await prisma.emergencyRequest.findFirst({ where: { patientId: patient.id, status: { in: ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'] } } });
+  if (open) return res.status(200).json(open);
+  // Minimum coin balance guarantees ambulance operators get paid; life-threatening cases should still dial 112/767.
+  const bal = await getBalance(req.user!.userId);
+  if (bal < env.raw.EMERGENCY_MIN_BALANCE && !req.body.overrideBalance) {
+    throw ApiError.badRequest(`A minimum balance of ${env.raw.EMERGENCY_MIN_BALANCE.toLocaleString()} coins is required. Top up, or call 112 / 767 now.`);
+  }
   const request = await prisma.emergencyRequest.create({
-    data: { patientId: patient.id, lat: data.lat, lng: data.lng, notes: data.notes },
+    data: { patientId: patient.id, lat: data.lat, lng: data.lng, notes: data.notes, type: req.body.type ? String(req.body.type) : 'MEDICAL',
+      contactPhone: req.body.contactPhone ? String(req.body.contactPhone) : undefined, address: req.body.address ? String(req.body.address) : undefined },
   });
-
-  // Notify all connected ambulance dashboards in real time.
-  req.app.get('io')?.to('role:AMBULANCE').emit('emergency:new', request);
-
+  const io = req.app.get('io');
+  // Alert the nearest available ambulances first (all if no locations known), plus available doctors.
+  const ambulances = await prisma.ambulanceProfile.findMany({ where: { isAvailable: true }, select: { userId: true, currentLat: true, currentLng: true } });
+  const ranked = ambulances.map((a) => ({ ...a, d: a.currentLat != null && a.currentLng != null ? distanceKm(data.lat, data.lng, a.currentLat, a.currentLng) : 9999 }))
+    .sort((a, b) => a.d - b.d).slice(0, 15);
+  for (const a of ranked) {
+    io?.to(`user:${a.userId}`).emit('emergency:new', { ...request, distanceKm: a.d === 9999 ? null : Math.round(a.d * 10) / 10 });
+    await notify(a.userId, 'emergency', '🚨 Emergency nearby', `Emergency request ${a.d < 9999 ? Math.round(a.d * 10) / 10 + ' km away' : ''}. Open the app to accept.`, { sms: true, data: { requestId: request.id } });
+  }
+  io?.to('role:AMBULANCE').emit('emergency:new', request);
+  io?.to('role:DOCTOR').emit('emergency:alert', { id: request.id, lat: data.lat, lng: data.lng, notes: data.notes });
+  if (patient.emergencyPhone) {
+    const u = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { name: true } });
+    const { sendSms } = await import('../services/sms');
+    await sendSms(patient.emergencyPhone, `N-Health alert: ${u?.name || 'Your contact'} requested emergency help at https://maps.google.com/?q=${data.lat},${data.lng}`);
+  }
   res.status(201).json(request);
 }
 
@@ -314,6 +378,8 @@ export async function requestNurse(req: Request, res: Response) {
       serviceType: data.serviceType,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
       notes: data.notes,
+      address: req.body.address ? String(req.body.address) : undefined,
+      durationHours: Number(req.body.durationHours) > 0 ? Math.min(24, Number(req.body.durationHours)) : 1,
     },
   });
   // Targeted request (a specific nurse was picked) still notifies that nurse's
@@ -321,7 +387,10 @@ export async function requestNurse(req: Request, res: Response) {
   const io = req.app.get('io');
   if (data.nurseId) {
     const nurse = await prisma.nurseProfile.findUnique({ where: { id: data.nurseId }, select: { userId: true } });
-    if (nurse) io?.to(`user:${nurse.userId}`).emit('nurse:new', request);
+    if (nurse) {
+      io?.to(`user:${nurse.userId}`).emit('nurse:new', request);
+      await notify(nurse.userId, 'appointment', 'New home-care request 🩺', `${data.serviceType} requested.`, { data: { requestId: request.id } });
+    }
   } else {
     io?.to('role:NURSE').emit('nurse:new', request);
   }
@@ -331,8 +400,11 @@ export async function requestNurse(req: Request, res: Response) {
 // ---------- Donations ----------
 
 const donationSchema = z.object({
-  campaign: z.string(),
-  amount: z.number().min(1),
+  campaign: z.string().optional(),
+  campaignId: z.string().optional(),
+  amount: z.number().min(100),
+  anonymous: z.boolean().optional(),
+  message: z.string().max(300).optional(),
 });
 
 export async function listDonations(req: Request, res: Response) {
@@ -347,17 +419,28 @@ export async function listDonations(req: Request, res: Response) {
 export async function createDonation(req: Request, res: Response) {
   const data = donationSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
+  const camp = data.campaignId ? await prisma.donationCampaign.findUnique({ where: { id: data.campaignId } }) : null;
+  if (data.campaignId && (!camp || camp.status !== 'ACTIVE')) throw ApiError.badRequest('This campaign is not accepting donations');
   const donation = await prisma.donation.create({
-    data: { patientId: patient.id, campaign: data.campaign, amount: data.amount, status: 'PENDING' },
+    data: { patientId: patient.id, campaign: camp?.title ?? data.campaign ?? 'General Fund', campaignId: camp?.id, amount: data.amount,
+      anonymous: !!data.anonymous, message: data.message, status: 'PENDING', currency: camp?.currency ?? 'NGN' },
   });
+  // Pay immediately with coins when requested (the usual path from the app).
+  if (req.body.payWith === 'COINS') {
+    const { payWithCoins } = await import('../services/checkout');
+    await payWithCoins(req.user!.userId, 'DONATION', donation.id);
+    return res.status(201).json(await prisma.donation.findUnique({ where: { id: donation.id } }));
+  }
   res.status(201).json(donation);
 }
 
 // ---------- Insurance ----------
 
 const insuranceSchema = z.object({
-  provider: z.string(),
-  policyNumber: z.string(),
+  provider: z.string().optional(),
+  policyNumber: z.string().optional(),
+  planId: z.string().optional(),
+  memberCount: z.number().int().min(1).max(20).optional(),
   coverageDetails: z.string().optional(),
   premiumAmount: z.number().min(0).optional(),
   expiresAt: z.string().datetime().optional(),
@@ -365,20 +448,26 @@ const insuranceSchema = z.object({
 
 export async function listInsurance(req: Request, res: Response) {
   const patient = await getPatientProfile(req.user!.userId);
-  const policies = await prisma.insurancePolicy.findMany({ where: { patientId: patient.id } });
+  const policies = await prisma.insurancePolicy.findMany({ where: { patientId: patient.id }, include: { plan: true }, orderBy: { createdAt: 'desc' } });
   res.json(policies);
 }
 
 export async function addInsurance(req: Request, res: Response) {
   const data = insuranceSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
+  const plan = data.planId ? await prisma.insurancePlan.findUnique({ where: { id: data.planId } }) : null;
+  if (data.planId && !plan) throw ApiError.notFound('Plan not found');
+  if (!plan && (!data.provider || !data.policyNumber)) throw ApiError.badRequest('Provide your insurer and policy number, or choose a plan');
   const policy = await prisma.insurancePolicy.create({
     data: {
       patientId: patient.id,
-      provider: data.provider,
-      policyNumber: data.policyNumber,
+      planId: plan?.id,
+      memberCount: data.memberCount ?? 1,
+      status: plan ? 'PENDING' : 'ACTIVE',
+      provider: plan?.provider ?? data.provider!,
+      policyNumber: data.policyNumber ?? 'APP-' + Date.now().toString(36).toUpperCase(),
       coverageDetails: data.coverageDetails,
-      premiumAmount: data.premiumAmount,
+      premiumAmount: plan ? Number(plan.monthlyPremium) * (data.memberCount ?? 1) : data.premiumAmount,
       expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
     },
   });
