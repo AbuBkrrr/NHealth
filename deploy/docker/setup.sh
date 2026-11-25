@@ -102,6 +102,10 @@ fi
 step "1/6 Files in $DIR"
 mkdir -p "$DIR" && chmod 700 "$DIR" && cd "$DIR"
 curl -fsSL "$RAW/deploy/docker/docker-compose.yml" -o docker-compose.yml
+# Containers from an older N-Health layout (services "db"/"api"/"web") are replaced; data volumes are kept.
+for c in $(docker ps -aq --filter label=com.docker.compose.project=nhealth); do
+  case "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$c")" in nhealth-*) ;; *) docker rm -f "$c" >/dev/null;; esac
+done
 if [ ! -f .env ]; then
   printf 'POSTGRES_PASSWORD=%s\nPROXY_NETWORK=%s\n' "$(openssl rand -hex 24)" "$PROXY_NETWORK" > .env
 fi
@@ -134,7 +138,7 @@ ok "Images downloaded"
 
 # --- database ----------------------------------------------------------------------
 step "3/6 Database"
-docker compose up -d db
+docker compose up -d nhealth-db
 for i in $(seq 1 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' nhealth-db)" = healthy ] && break; sleep 2; done
 [ "$(docker inspect -f '{{.State.Health.Status}}' nhealth-db)" = healthy ] || die "Database did not start: docker logs nhealth-db"
 ok "Database running (private, not reachable from outside)"
@@ -150,7 +154,7 @@ fi
 # --- API + web -------------------------------------------------------------------
 step "4/6 API and web app"
 if ! grep -q '^VAPID_PUBLIC_KEY=.\+' backend.env; then
-  KEYS=$(docker compose run --rm --no-deps -T api node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log(k.publicKey+' '+k.privateKey)" 2>/dev/null | tail -n1 || true)
+  KEYS=$(docker compose run --rm --no-deps -T nhealth-api node -e "const w=require('web-push');const k=w.generateVAPIDKeys();console.log(k.publicKey+' '+k.privateKey)" 2>/dev/null | tail -n1 || true)
   [ -n "$KEYS" ] && { set_env VAPID_PUBLIC_KEY "${KEYS% *}"; set_env VAPID_PRIVATE_KEY "${KEYS#* }"; ok "Push notification keys generated"; }
 fi
 docker compose up -d
@@ -182,7 +186,7 @@ cd $DIR
 /etc/cron.daily/nhealth-backup || true
 curl -fsSL $RAW/deploy/docker/docker-compose.yml -o docker-compose.yml
 docker compose pull
-docker compose up -d
+docker compose up -d --remove-orphans
 docker image prune -f >/dev/null
 echo "N-Health updated. Logs: docker logs -f nhealth-api"
 EOF

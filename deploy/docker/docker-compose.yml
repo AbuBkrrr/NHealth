@@ -7,10 +7,12 @@
 #   (PROXY_NETWORK) and handles HTTPS.
 # - The database sits on a private network only the API can reach.
 # - Memory limits keep N-Health from squeezing your other containers.
+# - Service names are prefixed (nhealth-*) so they never clash with names on the shared
+#   proxy network (e.g. another app's "db").
 name: nhealth
 
 services:
-  db:
+  nhealth-db:
     image: postgres:17-alpine
     container_name: nhealth-db
     restart: unless-stopped
@@ -31,7 +33,7 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
-  api:
+  nhealth-api:
     image: ${API_IMAGE:-ghcr.io/abubkrrr/nhealth-api:latest}
     container_name: nhealth-api
     restart: unless-stopped
@@ -39,10 +41,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: "4000"
-      DATABASE_URL: postgresql://nhealth:${POSTGRES_PASSWORD}@db:5432/nhealth
+      DATABASE_URL: postgresql://nhealth:${POSTGRES_PASSWORD}@nhealth-db:5432/nhealth
       NODE_OPTIONS: --max-old-space-size=384
     depends_on:
-      db:
+      nhealth-db:
         condition: service_healthy
     volumes:
       - uploads:/app/apps/backend/uploads
@@ -50,7 +52,7 @@ services:
     mem_limit: 640m
     logging: *logs
 
-  web:
+  nhealth-web:
     image: ${WEB_IMAGE:-ghcr.io/abubkrrr/nhealth-web:latest}
     container_name: nhealth-web
     restart: unless-stopped
