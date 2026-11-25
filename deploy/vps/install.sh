@@ -121,6 +121,7 @@ echo " System Node.js:       $(command -v node >/dev/null && node -v || echo non
 echo " PostgreSQL:           $(command -v psql >/dev/null && psql --version | awk '{print $3}' || echo 'not installed (will install)')"
 if command -v docker >/dev/null; then echo " Docker containers:    $(docker ps --format '{{.Names}}' 2>/dev/null | tr '\n' ' ' || true)"; fi
 if [ -d /etc/nginx/sites-enabled ]; then echo " Nginx sites:          $(ls /etc/nginx/sites-enabled 2>/dev/null | tr '\n' ' ')"; fi
+if command -v nginx >/dev/null; then echo " Nginx:                $(systemctl is-active nginx 2>/dev/null || true), listening on: $(ss -ltnpH 2>/dev/null | awk '/"nginx"/{print $4}' | sed -E 's/.*:([0-9]+)$/\1/' | sort -un | tr '\n' ' ' || true)"; fi
 echo " Ports open to the internet now:"; public_ports | sed 's/^/   /'
 echo " SSH port(s):          $(ssh_ports | tr '\n' ' ')"
 FW_STATE="off"
