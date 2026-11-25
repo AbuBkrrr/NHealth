@@ -70,7 +70,10 @@ export async function setPayoutBank(req: Request, res: Response) {
   if (g) {
     verifiedName = await resolveAccount(g as any, accountNumber, bankCode);
     if (g === 'paystack') recipientCode = await paystackRecipient(verifiedName, accountNumber, bankCode).catch(() => undefined);
-  } else if (env.nodeEnv === 'production') throw ApiError.badRequest('Bank verification is not configured yet');
+  } else if (!str(req.body.accountName, 120)) {
+    // No bank-verification gateway configured: save as unverified (finance checks the name before a manual payout).
+    throw ApiError.badRequest('Enter the account name exactly as it appears at your bank');
+  }
   const bankName = str(req.body.bankName, 120) || bankCode;
   await prisma.bankAccount.updateMany({ where: { userId: me }, data: { isPrimary: false } });
   const acct = await prisma.bankAccount.upsert({

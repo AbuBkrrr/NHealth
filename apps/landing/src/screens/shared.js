@@ -421,9 +421,10 @@ export async function earningsScreen(el, _p, q) {
     formModal('🏦 Payout bank account', [
       banks.length ? { name: 'bankCode', label: 'Bank', type: 'select', options: banks.map((b) => [b.code, b.name]), required: true } : { name: 'bankCode', label: 'Bank code', required: true },
       { name: 'accountNumber', label: 'Account number (10 digits)', inputmode: 'numeric', required: true },
-    ], { submit: 'Verify & save', intro: '<p class="muted mb8">We confirm the account name with your bank. It must match your verified identity.</p>', onSubmit: async (v) => {
+      ...(banks.length ? [] : [{ name: 'bankName', label: 'Bank name', required: true }, { name: 'accountName', label: 'Account name (as at your bank)', required: true }]),
+    ], { submit: banks.length ? 'Verify & save' : 'Save', intro: '<p class="muted mb8">We confirm the account name with your bank. It must match your verified identity.</p>', onSubmit: async (v) => {
       const b = banks.find((x) => x.code === v.bankCode);
-      const r = await post('/earnings/bank', { ...v, bankName: b ? b.name : v.bankCode });
+      const r = await post('/earnings/bank', { ...v, bankName: b ? b.name : v.bankName || v.bankCode });
       toast('✅ ' + r.accountName + ' saved'); earningsScreen(el, _p, q);
     } });
   };
