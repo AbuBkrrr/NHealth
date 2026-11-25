@@ -11,9 +11,11 @@ echo "==> Backing up the database first"; /etc/cron.daily/nhealth-backup || true
 echo "==> Fetching $BRANCH"
 git -C "$APP_DIR" fetch --depth 1 origin "$BRANCH" && git -C "$APP_DIR" reset --hard "origin/$BRANCH"
 chown -R nhealth:nhealth "$APP_DIR"
+LOW_IMPACT=(systemd-run --scope --quiet -p MemoryHigh=600M -p MemoryMax=850M nice -n 19 ionice -c3)
+systemd-run --scope --quiet -p MemoryMax=850M true >/dev/null 2>&1 || LOW_IMPACT=(nice -n 19 ionice -c3)
 echo "==> Building"
 cd "$APP_DIR"
-sudo -u nhealth env HOME=/home/nhealth PATH="$NODE_DIR/bin:/usr/bin:/bin" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 NODE_OPTIONS=--max-old-space-size=1536 bash -c "
+"${LOW_IMPACT[@]}" sudo -u nhealth env HOME=/home/nhealth PATH="$NODE_DIR/bin:/usr/bin:/bin" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 NODE_OPTIONS=--max-old-space-size=1536 bash -c "
   set -e
   pnpm install --frozen-lockfile
   pnpm --filter @nhealth/backend build

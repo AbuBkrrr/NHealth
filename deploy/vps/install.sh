@@ -58,7 +58,7 @@ ok "OS: $PRETTY_NAME"
 
 # --- helpers ------------------------------------------------------------------
 # Processes listening on a TCP port (empty if free)
-port_owner() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'users:(("[^"]*"' | sed 's/users:(("//' | sort -u | tr '\n' ' ' || true; }
+port_owner() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'users:(("[^"]*"' | sed 's/users:(("//; s/"$//' | sort -u | tr '\n' ' ' || true; }
 port_used() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q .; }
 # Public (not loopback-only) listening ports: "tcp 3000", "udp 51820", ...
 public_ports() {
@@ -72,11 +72,41 @@ other_firewall() {
   systemctl is-enabled --quiet netfilter-persistent 2>/dev/null && { echo netfilter-persistent; return; }
   return 1
 }
+# Proxy container's Docker network gateway = the address it uses to reach this server
+proxy_gateway() { docker inspect "$1" --format '{{range .NetworkSettings.Networks}}{{.Gateway}} {{end}}' 2>/dev/null | awk '{print $1}' || true; }
+proxy_caddyfile() { docker inspect "$1" --format '{{range .Mounts}}{{.Source}} {{.Destination}}{{"\n"}}{{end}}' 2>/dev/null | awk '$2 ~ /Caddyfile$|^\/etc\/caddy$/{print $1}' | head -n1 || true; }
+# Builds run with low priority and a memory cap so they can never starve your other apps:
+# if the build needs more, it slows down (swap) or fails on its own - your containers are not touched.
+LOW_IMPACT=(systemd-run --scope --quiet -p MemoryHigh=600M -p MemoryMax=850M nice -n 19 ionice -c3)
+systemd-run --scope --quiet -p MemoryMax=850M true >/dev/null 2>&1 || LOW_IMPACT=(nice -n 19 ionice -c3)
 docker_web() { command -v docker >/dev/null && docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -E ':(80|443)->' | awk '{print $1}' | tr '\n' ' ' || true; }
 free_port() { local p=$1; while port_used "$p"; do p=$((p+1)); done; echo "$p"; }
 # Addresses Docker containers can reach the host on (docker0, br-xxxx) + localhost
 bridge_ips() { echo 127.0.0.1; ip -4 -o addr show type bridge 2>/dev/null | awk '{print $4}' | cut -d/ -f1; }
 node_ok() { [ -x "$NODE_DIR/bin/node" ] && [ "$("$NODE_DIR/bin/node" -p 'process.versions.node.split(".")[0]')" -ge 22 ]; }
+
+print_proxy_steps() { # $1 proxy container, $2 address it reaches this server on
+  local ct=$1 gw=$2 np=${NGINX_PORT:-$(free_port 8088)}
+  echo
+  echo "${c_b}Last step: send the N-Health addresses from your proxy ($ct) to N-Health${c_0}"
+  if echo "$ct" | grep -qi caddy; then
+    local cf; cf=$(proxy_caddyfile "$ct")
+    echo " Your proxy is Caddy. Add this block at the END of its Caddyfile${cf:+ ($cf on this server)}:"
+    echo
+    echo "    ${DOMAIN}, ${WEB_HOST}, ${API_HOST}, ${ADMIN_HOST} {"
+    echo "        reverse_proxy ${gw}:${np}"
+    echo "    }"
+    echo
+    echo " Then check it and reload Caddy (a graceful reload: your other sites keep running):"
+    echo "    docker exec $ct caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile"
+    echo "    docker exec $ct caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile"
+    echo " Caddy gets the HTTPS certificates itself once DNS points here. It also handles websockets and large uploads."
+  else
+    echo " In your proxy, send each of $DOMAIN, $WEB_HOST, $API_HOST, $ADMIN_HOST to  http://${gw}:${np}"
+    echo " with websockets on and HTTPS on. Nginx Proxy Manager: Forward Hostname/IP $gw, Port $np, Websockets Support,"
+    echo " SSL: Request a new certificate + Force SSL. For $API_HOST, under Advanced add: client_max_body_size 30m;"
+  fi
+}
 
 # --- look at the server before changing anything --------------------------------
 step "Checking what already runs on this server"
@@ -97,7 +127,7 @@ FW_STATE="off"
 if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q 'Status: active'; then FW_STATE="ufw active"; fi
 if OF=$(other_firewall); then FW_STATE="$OF active"; fi
 echo " Firewall:             $FW_STATE"
-echo " Memory:               $(free -h | awk '/^Mem:/{print $2" total, "$7" available"}')   Disk free: $(df -h / | awk 'NR==2{print $4}')"
+echo " Memory:               $(free -h | awk '/^Mem:/{print $2" total, "$7" available"}'), swap: $(free -h | awk '/^Swap:/{print $2}')   Disk free: $(df -h / | awk 'NR==2{print $4}')"
 
 [ -n "$DOCKER_WEB" ] && echo " Docker owns 80/443:   $DOCKER_WEB -> N-Health will run behind it (no changes to that container)"
 if [ -n "$FOREIGN_WEB" ]; then
@@ -118,7 +148,10 @@ if [ "$CHECK_ONLY" = 1 ]; then
   echo " - run the API on 127.0.0.1:$P (local only), as system user '$APP_USER', service 'nhealth-api'"
   if [ "$BEHIND_PROXY" = 1 ]; then
     echo " - BEHIND YOUR DOCKER PROXY: host Nginx uses port $(free_port "${NGINX_PORT:-8088}"), answering only this server and Docker networks"
-    echo "   (not on 80/443); you add www/api/admin.${DOMAIN:-<domain>} as proxy hosts in your proxy, which also does HTTPS"
+    echo "   (not on 80/443). Your proxy ($(echo "$DOCKER_WEB" | awk '{print $1}')) keeps 80/443 and HTTPS; at the end you add one block to it:"
+    WEB_HOST="www.${DOMAIN:-nhealth.com.ng}"; API_HOST="api.${DOMAIN:-nhealth.com.ng}"; ADMIN_HOST="admin.${DOMAIN:-nhealth.com.ng}"; DOMAIN=${DOMAIN:-nhealth.com.ng}
+    CT=$(echo "$DOCKER_WEB" | awk '{print $1}'); G=$(proxy_gateway "$CT"); print_proxy_steps "$CT" "${G:-172.17.0.1}" | sed 's/^/   /'
+    echo " - build with low priority and a memory cap (850 MB, then swap), so your containers keep their memory"
   else
     echo " - add /etc/nginx/sites-available/nhealth.conf for www/api/admin.${DOMAIN:-<domain>} (other sites untouched)"
   fi
@@ -270,7 +303,7 @@ ok "Configuration written (API on local port $PORT). Add your payment/KYC/email 
 
 # -----------------------------------------------------------------------------
 step "7/11 Install dependencies & build (takes 3-8 minutes)"
-RUN_AS NODE_OPTIONS=--max-old-space-size=1536 bash -c "
+"${LOW_IMPACT[@]}" sudo -u $APP_USER env HOME=/home/$APP_USER PATH="$NODE_DIR/bin:/usr/bin:/bin" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 NODE_OPTIONS=--max-old-space-size=1536 bash -c "
   set -e
   cd $APP_DIR
   pnpm install --frozen-lockfile
@@ -345,7 +378,7 @@ else
     ok "Firewall on. Allowed: SSH, 80, 443 and the ports already in use: $(public_ports | awk '{print $2"/"$1}' | tr '\n' ' ')"
   else
     ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
-    [ "$BEHIND_PROXY" = 1 ] && ufw allow from 172.16.0.0/12 to any port "$NGINX_PORT" proto tcp >/dev/null
+    if [ "$BEHIND_PROXY" = 1 ]; then for net in 172.16.0.0/12 10.0.0.0/8 192.168.0.0/16; do ufw allow from "$net" to any port "$NGINX_PORT" proto tcp >/dev/null; done; fi
     ok "Existing ufw kept; ports 80 and 443 allowed"
   fi
   command -v docker >/dev/null && warn "Docker publishes container ports past ufw; that is unchanged."
@@ -358,12 +391,10 @@ ok "Nightly backups of the nhealth database to /var/backups/nhealth (14 days kep
 # -----------------------------------------------------------------------------
 step "11/11 HTTPS certificates"
 if [ "$BEHIND_PROXY" = 1 ]; then
-  GW=$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1); GW=${GW:-172.17.0.1}
-  warn "Your Docker proxy handles HTTPS. In it, add three proxy hosts (turn on Websockets and an SSL certificate for each):"
-  echo "    $WEB_HOST, $DOMAIN, $API_HOST, $ADMIN_HOST  ->  http://$GW:$NGINX_PORT"
-  echo "    (Nginx Proxy Manager: Forward Hostname/IP $GW, Port $NGINX_PORT, Websockets Support on, SSL tab: Request a new certificate + Force SSL)"
-  echo "    If the proxy container uses its own Docker network, use that network's gateway IP instead: $(bridge_ips | grep -v 127.0.0.1 | tr '\n' ' ')"
-  echo "    In the API proxy host also set: client_max_body_size 30m;  (Advanced tab) so chat videos upload."
+  PROXY_CT=$(echo "$DOCKER_WEB" | awk '{print $1}')
+  GW=""; [ -n "$PROXY_CT" ] && GW=$(proxy_gateway "$PROXY_CT")
+  [ -n "$GW" ] || GW=$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1); GW=${GW:-172.17.0.1}
+  print_proxy_steps "$PROXY_CT" "$GW"
   missing=(proxy)
 fi
 [ "$BEHIND_PROXY" = 1 ] || {
