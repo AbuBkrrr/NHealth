@@ -91,3 +91,5 @@ CI (`.github/workflows/ci.yml`):
 ## Deployment
 
 Step-by-step launch guide: [docs/GO_LIVE.md](docs/GO_LIVE.md). Reference runbook: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the production checklist: environment variables, webhook URLs, DNS, first admin, and the go-live steps.
+
+Own server: [docs/DOCKER_DEPLOY.md](docs/DOCKER_DEPLOY.md) for a server that already runs Docker apps (N-Health runs in its own containers, built by GitHub), or [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md) for a plain Debian server.

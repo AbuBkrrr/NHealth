@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+.git
+apps/mobile
+apps/backend/uploads
+e2e
+docs
+load-test
+legacy
+**/*.log

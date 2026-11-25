@@ -10,12 +10,16 @@ User=__USER__
 Group=__USER__
 WorkingDirectory=__APP_DIR__/apps/backend
 EnvironmentFile=__ENV_FILE__
-Environment=NODE_OPTIONS=--max-old-space-size=768
+Environment=NODE_OPTIONS=--max-old-space-size=384
+# Never take more than this much memory from the server (it shares the server with other apps)
+MemoryHigh=450M
+MemoryMax=650M
 Environment=HOME=/tmp
+Environment=PATH=__NODE_DIR__/bin:/usr/bin:/bin
 Environment=npm_config_cache=/tmp/.npm
 # Applies pending database migrations (safe, idempotent) before every start.
-ExecStartPre=/usr/bin/env node scripts/migrate.cjs
-ExecStart=/usr/bin/env node dist/apps/backend/src/server.js
+ExecStartPre=__NODE_DIR__/bin/node scripts/migrate.cjs
+ExecStart=__NODE_DIR__/bin/node dist/apps/backend/src/server.js
 Restart=always
 RestartSec=5
 TimeoutStartSec=300
