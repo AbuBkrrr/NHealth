@@ -1,5 +1,7 @@
 # Moving N-Health to your VPS (Debian 13) — step by step
 
+> **Server already running Docker apps behind a proxy such as Caddy?** Use **[DOCKER_DEPLOY.md](DOCKER_DEPLOY.md)** instead. N-Health then runs in its own containers, GitHub builds them, and nothing else on the server changes. This page is for a server without Docker.
+
 Server: **102.68.85.97** (Debian 13, 2 vCPU, 2 GB RAM, 80 GB disk).
 Everything runs on this one server:
 
