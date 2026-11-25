@@ -1,5 +1,5 @@
 // API client: token handling, timeouts, offline GET cache, uniform errors.
-export const API_BASE = (import.meta.env.VITE_API_URL || 'https://n-health-backend-production.up.railway.app').replace(/\/$/, '');
+export const API_BASE = (import.meta.env.VITE_API_URL || 'https://api.nhealth.com.ng').replace(/\/$/, '');
 const TOKEN_KEY = 'nh_token';
 const USER_KEY = 'nh_user';
 
