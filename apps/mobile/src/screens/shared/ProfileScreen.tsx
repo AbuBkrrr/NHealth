@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView, TextInput, Linking } from 'react-native';
+import { WEB_APP_URL } from '../../api/payment';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { patientApi } from '../../api/patient';
@@ -506,6 +507,19 @@ export function ProfileScreen() {
       {user.role === 'LAB' && <LabDetailsCard />}
       {user.role === 'AMBULANCE' && <AmbulanceDetailsCard />}
       {user.role === 'NURSE' && <NurseDetailsCard />}
+
+      {/* Features that live in the N-Health web app (same account) */}
+      <View style={{ width: '100%', marginTop: 16 }}>
+        {[
+          ['🪪 Verify identity & documents', '/kyc'],
+          ...(user.role === 'PATIENT'
+            ? [['🪙 Coins: top up & history', '/patient/wallet'], ['📁 Health records & reminders', '/patient/records'], ['❤️ Donations', '/patient/donations']]
+            : [['💰 Earnings & payouts', '/provider/earnings'], ['🗓️ Availability calendar', '/provider/schedule']]),
+          ['⚙️ Settings & privacy', '/settings'],
+        ].map(([label, route]) => (
+          <Button key={route} title={label} variant="outline" onPress={() => Linking.openURL(`${WEB_APP_URL}/#${route}`)} style={{ marginTop: 8, width: '100%' }} />
+        ))}
+      </View>
 
       <Button title="Log Out" variant="danger" onPress={confirmLogout} style={{ marginTop: 24, width: '100%' }} />
     </ScrollView>

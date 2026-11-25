@@ -2,10 +2,9 @@ services:
   - type: web
     name: n-health-backend
     runtime: node
-    plan: free
-    rootDir: apps/backend
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    plan: starter
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @nhealth/backend build
+    startCommand: pnpm --filter @nhealth/backend start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -19,16 +18,74 @@ services:
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: CORS_ORIGIN
-        value: "*"
+        sync: false
       - key: PUBLIC_URL
         sync: false
+      - key: APP_URL
+        value: https://www.nhealth.com.ng
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TERMII_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: FLUTTERWAVE_WEBHOOK_HASH
+        sync: false
+      - key: PAYSCROW_API_KEY
+        sync: false
+      - key: PAYSCROW_WEBHOOK_SECRET
+        sync: false
+      - key: DIDIT_API_KEY
+        sync: false
+      - key: DIDIT_WEBHOOK_SECRET
+        sync: false
+      - key: DIDIT_WORKFLOW_ID
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+
+  - type: web
+    name: n-health-web
+    runtime: static
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @nhealth/landing build
+    staticPublishPath: apps/landing/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
 
   - type: web
     name: n-health-admin-web
     runtime: static
-    rootDir: apps/admin-web
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @nhealth/admin-web build
+    staticPublishPath: apps/admin-web/dist
     envVars:
       - key: VITE_API_URL
         sync: false
@@ -39,6 +96,6 @@ services:
 
 databases:
   - name: n-health-db
-    plan: free
+    plan: basic-256mb
     databaseName: nhealth
     user: nhealth

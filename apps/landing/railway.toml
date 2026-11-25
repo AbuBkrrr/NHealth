@@ -1,8 +1,10 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm install --no-frozen-lockfile"
+# VITE_API_URL must be set as a build variable on this service (e.g. https://n-health-backend-production.up.railway.app)
+buildCommand = "corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @nhealth/landing build"
 
 [deploy]
 startCommand = "pnpm --filter @nhealth/landing start"
+healthcheckPath = "/health"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3

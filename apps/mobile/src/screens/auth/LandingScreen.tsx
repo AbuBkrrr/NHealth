@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { colors } from '../theme/colors';
+import { colors } from '../../theme/colors';
 
 export function LandingScreen() {
   const navigation = useNavigation<any>();

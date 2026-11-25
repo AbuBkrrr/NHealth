@@ -1,39 +1,25 @@
-name: CI
+name: Deploy readiness
 
+# Manual pre-release check. Day-to-day CI lives in ci.yml; hosting platforms (Railway / Render / Vercel)
+# deploy from the main branch using the configs in the repository root and apps/*.
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-
-env:
-  HUSKY: 0
-  CI: true
+  workflow_dispatch:
 
 jobs:
-  lint-and-build:
-    name: Lint & Build
+  readiness:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Generate Prisma client
-        run: pnpm --filter backend exec prisma generate
-
-      - name: Build backend
-        run: pnpm --filter backend build
-
-      - name: Build admin-web
-        run: pnpm --filter admin-web build
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nhealth/backend build
+      - run: pnpm --filter @nhealth/landing build
+      - run: pnpm --filter @nhealth/admin-web build
+      - name: Required production settings
+        run: |
+          echo "Ensure these are set on the backend service before release:"
+          echo "DATABASE_URL JWT_SECRET APP_URL PUBLIC_URL CORS_ORIGIN RESEND_API_KEY TERMII_API_KEY CLOUDINARY_* PAYSTACK_SECRET_KEY FLUTTERWAVE_SECRET_KEY FLUTTERWAVE_WEBHOOK_HASH PAYSCROW_* DIDIT_API_KEY DIDIT_WEBHOOK_SECRET DIDIT_WORKFLOW_ID VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY GOOGLE_CLIENT_ID"

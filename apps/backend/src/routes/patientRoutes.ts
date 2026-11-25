@@ -12,6 +12,7 @@ router.patch('/profile', asyncHandler(patient.updateProfile));
 
 router.get('/appointments', asyncHandler(patient.listAppointments));
 router.post('/appointments', asyncHandler(patient.createAppointment));
+router.post('/appointments/:id/reschedule', asyncHandler(patient.rescheduleAppointment));
 router.post('/appointments/:id/cancel', asyncHandler(patient.cancelAppointment));
 
 router.get('/orders', asyncHandler(patient.listOrders));

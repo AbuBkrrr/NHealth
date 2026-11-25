@@ -17,6 +17,7 @@ enum Role {
   LAB
   AMBULANCE
   NURSE
+  INSTITUTION
   ADMIN
 }
 
@@ -79,6 +80,7 @@ enum ProviderType {
   PHARMACY
   LAB
   AMBULANCE
+  INSTITUTION
 }
 
 enum PaymentMethod {
@@ -86,6 +88,7 @@ enum PaymentMethod {
   TRANSFER
   CARD
   WALLET
+  CASH
 }
 
 enum PaymentStatus {
@@ -107,6 +110,8 @@ enum PayableType {
   NURSE_REQUEST
   DONATION
   INSURANCE_POLICY
+  EMERGENCY
+  POS_SALE
 }
 
 // ============ CORE USER ============
@@ -134,25 +139,76 @@ model User {
   ambulanceProfile AmbulanceProfile?
   nurseProfile     NurseProfile?
 
-  sentMessages     Message[] @relation("SentMessages")
-  receivedMessages Message[] @relation("ReceivedMessages")
-  supportTickets   SupportTicket[]
-  payments         Payment[] @relation("PayerPayments")
-  confirmedPayments Payment[] @relation("ConfirmedPayments")
+  sentMessages      Message[]       @relation("SentMessages")
+  receivedMessages  Message[]       @relation("ReceivedMessages")
+  supportTickets    SupportTicket[]
+  payments          Payment[]       @relation("PayerPayments")
+  confirmedPayments Payment[]       @relation("ConfirmedPayments")
 
-  adminActions     AdminAuditLog[] @relation("AdminActions")
+  adminActions AdminAuditLog[] @relation("AdminActions")
 
   // N-Health Credits
-  creditLedger        CreditLedger?
-  creditTransactions  CreditTransaction[]
+  creditLedger       CreditLedger?
+  creditTransactions CreditTransaction[]
 
   // Payment gateway logs
-  paymentGatewayLogs  PaymentGatewayLog[]
+  paymentGatewayLogs PaymentGatewayLog[]
 
   // Escrow
-  escrowTransactions  EscrowTransaction[]
-  escrowAsProvider    EscrowTransaction[] @relation("ProviderEscrows")
-  bankAccounts        BankAccount[]
+  escrowTransactions EscrowTransaction[]
+  escrowAsProvider   EscrowTransaction[] @relation("ProviderEscrows")
+  bankAccounts       BankAccount[]
+
+  // ---- Global / compliance ----
+  country            String               @default("NG")
+  currency           String               @default("NGN")
+  locale             String               @default("en")
+  timezone           String               @default("Africa/Lagos")
+  emailVerifiedAt    DateTime?
+  phoneVerifiedAt    DateTime?
+  kycStatus          KycStatus            @default(NOT_STARTED)
+  verificationStatus ProviderVerification @default(UNVERIFIED)
+  verificationNote   String?
+  verifiedAt         DateTime?
+  failedLogins       Int                  @default(0)
+  lockedUntil        DateTime?
+  tokenVersion       Int                  @default(0)
+  lastLoginAt        DateTime?
+  termsAcceptedAt    DateTime?
+  privacyAcceptedAt  DateTime?
+  marketingOptIn     Boolean              @default(false)
+  referralCode       String?              @unique
+  referredById       String?
+  deletedAt          DateTime?
+  notificationPrefs  Json?
+
+  institutionProfile  InstitutionProfile?
+  kycVerifications    KycVerification[]
+  providerDocuments   ProviderDocument[]
+  otpCodes            OtpCode[]
+  notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
+  availabilityRules   AvailabilityRule[]
+  availabilityBlocks  AvailabilityBlock[]
+  reviewsGiven        Review[]                @relation("ReviewAuthor")
+  reviewsReceived     Review[]                @relation("ReviewTarget")
+  reminders           MedicationReminder[]
+  familyMembers       FamilyMember[]
+  vaccinations        Vaccination[]
+  healthDocuments     HealthDocument[]
+  campaignsOrganized  DonationCampaign[]
+  donorPledges        DonorPledge[]
+  organRegistration   OrganDonorRegistration?
+  dataRequests        DataRequest[]
+  accessLogsAsActor   AccessLog[]             @relation("AccessActor")
+  accessLogsAsSubject AccessLog[]             @relation("AccessSubject")
+  staffMemberships    InstitutionStaff[]
+  institutionPatients InstitutionPatient[]
+  referralsSent       Referral[]              @relation("ReferralFrom")
+  referralsReceived   Referral[]              @relation("ReferralTo")
+  posSales            PosSale[]
+  ledgerEntries       ProviderLedgerEntry[]
+  payouts             Payout[]
 
   @@index([role])
 }
@@ -160,17 +216,17 @@ model User {
 // ============ ROLE PROFILES ============
 
 model PatientProfile {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dateOfBirth       DateTime?
-  bloodType         String?
-  genotype          String?
-  nhisNumber        String?
-  allergies         String?
-  address           String?
-  emergencyContact  String?
-  emergencyPhone    String?
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth      DateTime?
+  bloodType        String?
+  genotype         String?
+  nhisNumber       String?
+  allergies        String?
+  address          String?
+  emergencyContact String?
+  emergencyPhone   String?
 
   appointments      Appointment[]
   prescriptions     Prescription[]
@@ -182,33 +238,64 @@ model PatientProfile {
   nurseRequests     NurseRequest[]
   height            Float?
   weight            Float?
-  bloodTypeChanges  Int      @default(0)
-  genotypeChanges   Int      @default(0)
+  bloodTypeChanges  Int                @default(0)
+  genotypeChanges   Int                @default(0)
+
+  gender                String?
+  maritalStatus         String?
+  occupation            String?
+  city                  String?
+  state                 String?
+  country               String?
+  nationalIdType        String?
+  nationalIdLast4       String?
+  chronicConditions     String?
+  currentMedications    String?
+  disabilities          String?
+  surgeries             String?
+  familyHistory         String?
+  smoker                Boolean?
+  alcohol               String?
+  emergencyCardToken    String?   @unique
+  isBloodDonor          Boolean   @default(false)
+  lastBloodDonationAt   DateTime?
+  insuranceShareConsent Boolean   @default(false)
 }
 
 model DoctorProfile {
-  id                String  @id @default(uuid())
-  userId            String  @unique
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  specialty         String
-  licenseNumber     String
-  hospital          String?
-  bio               String?
-  consultationFee   Decimal @default(0)
-  rating            Float   @default(0)
-  yearsExperience   Int     @default(0)
-  lat               Float?
-  lng               Float?
+  id              String  @id @default(uuid())
+  userId          String  @unique
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty       String
+  licenseNumber   String
+  hospital        String?
+  bio             String?
+  consultationFee Decimal @default(0)
+  rating          Float   @default(0)
+  yearsExperience Int     @default(0)
+  lat             Float?
+  lng             Float?
 
   appointments       Appointment[]
   prescriptions      Prescription[]
   reviewedLabResults LabResult[]
+
+  institutionId  String?
+  institution    InstitutionProfile? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  languages      String?
+  qualifications String?
+  city           String?
+  state          String?
+  country        String?
+  reviewCount    Int                 @default(0)
+  slotMinutes    Int                 @default(30)
+  homeVisit      Boolean             @default(false)
 }
 
 model PharmacyProfile {
-  id             String @id @default(uuid())
-  userId         String @unique
-  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   pharmacyName   String
   licenseNumber  String
   address        String?
@@ -219,12 +306,25 @@ model PharmacyProfile {
   inventory Inventory[]
   orders    PharmacyOrder[]
   suppliers Supplier[]
+
+  phone        String?
+  city         String?
+  state        String?
+  country      String?
+  rating       Float   @default(0)
+  reviewCount  Int     @default(0)
+  homeDelivery Boolean @default(false)
+
+  stockIntakes        StockIntake[]
+  stockAudits         StockAudit[]
+  posSales            PosSale[]
+  prescriptionsRouted Prescription[] @relation("RoutedPrescriptions")
 }
 
 model LabProfile {
-  id            String @id @default(uuid())
-  userId        String @unique
-  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   labName       String
   licenseNumber String
   address       String?
@@ -232,19 +332,38 @@ model LabProfile {
   lng           Float?
 
   labTests LabTest[]
+
+  phone        String?
+  city         String?
+  state        String?
+  country      String?
+  rating       Float   @default(0)
+  reviewCount  Int     @default(0)
+  homeDelivery Boolean @default(false)
+
+  operatingHours String?
+  homeCollection Boolean          @default(false)
+  catalog        LabTestCatalog[]
 }
 
 model AmbulanceProfile {
-  id            String   @id @default(uuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   vehicleNumber String
   licenseNumber String
   currentLat    Float?
   currentLng    Float?
-  isAvailable   Boolean  @default(true)
+  isAvailable   Boolean @default(true)
 
   emergencyRequests EmergencyRequest[]
+
+  operatorName   String?
+  vehicleType    String?
+  baseFee        Decimal   @default(0)
+  phone          String?
+  lastLocationAt DateTime?
+  rating         Float     @default(0)
 }
 
 model NurseProfile {
@@ -257,6 +376,15 @@ model NurseProfile {
   isAvailable   Boolean @default(true)
 
   nurseRequests NurseRequest[]
+
+  city            String?
+  state           String?
+  yearsExperience Int     @default(0)
+  bio             String?
+  rating          Float   @default(0)
+  reviewCount     Int     @default(0)
+  lat             Float?
+  lng             Float?
 }
 
 // ============ SPECIALIZATIONS ============
@@ -265,7 +393,7 @@ model Specialization {
   id       String       @id @default(uuid())
   name     String       @unique
   desc     String
-  category String       // "Cardiology", "Surgery", "General Nursing", etc.
+  category String // "Cardiology", "Surgery", "General Nursing", etc.
   type     ProviderType // "DOCTOR" or "NURSE"
 }
 
@@ -285,6 +413,19 @@ model Appointment {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
+  durationMin       Int       @default(30)
+  fee               Decimal   @default(0)
+  serviceFee        Decimal   @default(0)
+  currency          String    @default("NGN")
+  paymentStatus     String    @default("UNPAID")
+  cancelReason      String?
+  cancelledBy       String?
+  rescheduledFromId String?
+  institutionId     String?
+  diagnosis         String?
+  followUpAt        DateTime?
+  reminderSentAt    DateTime?
+
   @@index([patientId])
   @@index([doctorId])
 }
@@ -295,10 +436,15 @@ model Prescription {
   patient     PatientProfile  @relation(fields: [patientId], references: [id])
   doctorId    String
   doctor      DoctorProfile   @relation(fields: [doctorId], references: [id])
-  medications Json            // [{ name, dosage, frequency, durationDays }]
+  medications Json // [{ name, dosage, frequency, durationDays }]
   status      String          @default("ACTIVE")
   issuedAt    DateTime        @default(now())
   orders      PharmacyOrder[]
+
+  pharmacyId    String?
+  pharmacy      PharmacyProfile? @relation("RoutedPrescriptions", fields: [pharmacyId], references: [id], onDelete: SetNull)
+  notes         String?
+  appointmentId String?
 }
 
 // ============ PHARMACY ============
@@ -317,6 +463,16 @@ model Inventory {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
+  brand                String?
+  manufacturer         String?
+  batchNumber          String?
+  barcode              String?
+  unit                 String?
+  costPrice            Decimal?
+  reorderLevel         Int      @default(10)
+  requiresPrescription Boolean  @default(false)
+  description          String?
+
   @@index([pharmacyId])
 }
 
@@ -332,19 +488,24 @@ model Supplier {
 }
 
 model PharmacyOrder {
-  id             String           @id @default(uuid())
+  id             String          @id @default(uuid())
   patientId      String
-  patient        PatientProfile   @relation(fields: [patientId], references: [id])
+  patient        PatientProfile  @relation(fields: [patientId], references: [id])
   pharmacyId     String
-  pharmacy       PharmacyProfile  @relation(fields: [pharmacyId], references: [id])
+  pharmacy       PharmacyProfile @relation(fields: [pharmacyId], references: [id])
   prescriptionId String?
-  prescription   Prescription?    @relation(fields: [prescriptionId], references: [id])
-  items          Json             // [{ inventoryId, name, qty, price }]
+  prescription   Prescription?   @relation(fields: [prescriptionId], references: [id])
+  items          Json // [{ inventoryId, name, qty, price }]
   total          Decimal
-  status         OrderStatus      @default(PENDING)
-  paymentStatus  String           @default("PENDING")
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  status         OrderStatus     @default(PENDING)
+  paymentStatus  String          @default("PENDING")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  currency        String  @default("NGN")
+  deliveryMethod  String  @default("PICKUP")
+  deliveryAddress String?
+  declineReason   String?
 
   @@index([patientId])
   @@index([pharmacyId])
@@ -366,6 +527,14 @@ model LabTest {
 
   result LabResult?
 
+  catalogId           String?
+  requestedByDoctorId String?
+  notes               String?
+  homeCollection      Boolean @default(false)
+  address             String?
+  currency            String  @default("NGN")
+  paymentStatus       String  @default("UNPAID")
+
   @@index([patientId])
   @@index([labId])
 }
@@ -384,17 +553,25 @@ model LabResult {
 // ============ AMBULANCE / EMERGENCY ============
 
 model EmergencyRequest {
-  id          String           @id @default(uuid())
+  id          String            @id @default(uuid())
   patientId   String
-  patient     PatientProfile   @relation(fields: [patientId], references: [id])
+  patient     PatientProfile    @relation(fields: [patientId], references: [id])
   ambulanceId String?
   ambulance   AmbulanceProfile? @relation(fields: [ambulanceId], references: [id])
   lat         Float
   lng         Float
   notes       String?
-  status      EmergencyStatus  @default(REQUESTED)
-  requestedAt DateTime         @default(now())
+  status      EmergencyStatus   @default(REQUESTED)
+  requestedAt DateTime          @default(now())
   completedAt DateTime?
+
+  type         String    @default("MEDICAL")
+  contactPhone String?
+  doctorUserId String?
+  etaMinutes   Int?
+  acceptedAt   DateTime?
+  arrivedAt    DateTime?
+  address      String?
 
   @@index([patientId])
   @@index([ambulanceId])
@@ -414,6 +591,10 @@ model NurseRequest {
   notes       String?
   createdAt   DateTime           @default(now())
 
+  address       String?
+  durationHours Int     @default(1)
+  fee           Decimal @default(0)
+
   @@index([patientId])
   @@index([nurseId])
 }
@@ -428,6 +609,13 @@ model Donation {
   amount    Decimal
   status    DonationStatus @default(PENDING)
   createdAt DateTime       @default(now())
+
+  campaignId  String?
+  campaignRef DonationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  anonymous   Boolean           @default(false)
+  message     String?
+  currency    String            @default("NGN")
+  reference   String?           @unique
 }
 
 model InsurancePolicy {
@@ -440,6 +628,12 @@ model InsurancePolicy {
   premiumAmount   Decimal?
   status          String         @default("ACTIVE")
   expiresAt       DateTime?
+
+  planId      String?
+  plan        InsurancePlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  memberCount Int            @default(1)
+  startedAt   DateTime?
+  createdAt   DateTime       @default(now())
 }
 
 // ============ MESSAGING (cross-role) ============
@@ -453,6 +647,9 @@ model Message {
   content    String
   isRead     Boolean  @default(false)
   createdAt  DateTime @default(now())
+
+  attachments Json?
+  readAt      DateTime?
 
   @@index([senderId])
   @@index([receiverId])
@@ -513,22 +710,22 @@ model AdminAuditLog {
 // SUPPORT TICKETS
 // ============================================================
 model SupportTicket {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   userName    String
   userEmail   String
   subject     String
   category    String
-  message     String   @db.Text
-  priority    String   @default("normal")
-  status      String   @default("open")
-  adminReply  String?  @db.Text
+  message     String    @db.Text
+  priority    String    @default("normal")
+  status      String    @default("open")
+  adminReply  String?   @db.Text
   repliedById String?
   repliedAt   DateTime?
   closedAt    DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([status])
   @@index([createdAt])
@@ -543,46 +740,46 @@ model SupportTicket {
 // ============================================================
 
 model CreditLedger {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Running balance. Derived from sum of transactions but cached for fast reads.
-  balance           Decimal  @default(0) @db.Decimal(12, 2)
+  balance Decimal @default(0) @db.Decimal(12, 2)
 
   lastTransactionId String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  transactions      CreditTransaction[]
+  transactions CreditTransaction[]
 
   @@index([userId])
 }
 
 model CreditTransaction {
-  id           String       @id @default(uuid())
-  ledgerId     String
-  ledger       CreditLedger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
-  userId       String
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String       @id @default(uuid())
+  ledgerId String
+  ledger   CreditLedger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // purchase | spend | refund | expiry | adjustment
-  type         String
+  type String
 
   // Positive for purchase/refund, negative for spend/expiry
-  amount       Decimal      @db.Decimal(12, 2)
+  amount Decimal @db.Decimal(12, 2)
 
   // Running balance after this transaction
-  balanceAfter Decimal      @db.Decimal(12, 2)
+  balanceAfter Decimal @db.Decimal(12, 2)
 
-  description  String
-  reference    String       @unique // our internal ref, e.g. CR-xxx, ORD-xxx, APT-xxx
-  metadata     Json?        // gateway, orderId, appointmentId, etc.
+  description String
+  reference   String @unique // our internal ref, e.g. CR-xxx, ORD-xxx, APT-xxx
+  metadata    Json? // gateway, orderId, appointmentId, etc.
 
   // pending | completed | failed | reversed
-  status       String       @default("completed")
+  status String @default("completed")
 
-  createdAt    DateTime     @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([ledgerId])
@@ -597,34 +794,34 @@ model CreditTransaction {
 // ============================================================
 
 model PaymentGatewayLog {
-  id              String   @id @default(uuid())
-  userId          String?
-  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id     String  @id @default(uuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // fincra | monnify | flutterwave | payscrow
-  gateway         String
+  gateway String
 
   // Gateway's reference (their transaction ID)
-  gatewayRef      String
+  gatewayRef String
 
   // Our internal reference (unique)
-  internalRef     String   @unique
+  internalRef String @unique
 
-  amount          Decimal  @db.Decimal(12, 2)
-  currency        String   @default("NGN")
+  amount   Decimal @db.Decimal(12, 2)
+  currency String  @default("NGN")
 
   // pending | success | failed | abandoned
-  status          String
+  status String
 
   // credit_purchase | appointment | pharmacy | lab | escrow_release
-  purpose         String
+  purpose String
 
   requestPayload  Json?
   responsePayload Json?
   webhookPayload  Json?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([gateway])
@@ -639,43 +836,43 @@ model PaymentGatewayLog {
 // ============================================================
 
 model EscrowTransaction {
-  id                  String   @id @default(uuid())
-  userId              String
-  user                User     @relation(fields: [userId], references: [id])
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
   // Provider receiving the funds
-  providerUserId      String?
-  provider            User?    @relation("ProviderEscrows", fields: [providerUserId], references: [id], onDelete: SetNull)
-  purpose             String   // appointment | pharmacy | lab | nurse | emergency
-  purposeId           String   // appointment ID, order ID, etc.
+  providerUserId String?
+  provider       User?   @relation("ProviderEscrows", fields: [providerUserId], references: [id], onDelete: SetNull)
+  purpose        String // appointment | pharmacy | lab | nurse | emergency
+  purposeId      String // appointment ID, order ID, etc.
 
   // PayScrow references
-  externalReference   String   @unique
-  payscrowRef         String   @unique   // transactionNumber (MKT-xxxx)
-  payscrowTransactionId String?          // GUID for apply-code endpoint
-  paymentLink         String?            // customer checkout URL
-  escrowCode          String?            // released only after payment
+  externalReference     String  @unique
+  payscrowRef           String  @unique // transactionNumber (MKT-xxxx)
+  payscrowTransactionId String? // GUID for apply-code endpoint
+  paymentLink           String? // customer checkout URL
+  escrowCode            String? // released only after payment
 
   // Amounts
-  currency            String   @default("NGN")
-  amount              Decimal  @db.Decimal(12, 2)   // gross item total
-  merchantCharge      Decimal  @default(0) @db.Decimal(12, 2)
-  customerCharge      Decimal  @default(0) @db.Decimal(12, 2)
-  totalPayable        Decimal  @default(0) @db.Decimal(12, 2)
-  netSettlement       Decimal  @default(0) @db.Decimal(12, 2)
+  currency       String  @default("NGN")
+  amount         Decimal @db.Decimal(12, 2) // gross item total
+  merchantCharge Decimal @default(0) @db.Decimal(12, 2)
+  customerCharge Decimal @default(0) @db.Decimal(12, 2)
+  totalPayable   Decimal @default(0) @db.Decimal(12, 2)
+  netSettlement  Decimal @default(0) @db.Decimal(12, 2)
 
   // Status
-  status              String   // pending | in_escrow | completed | released | disputed | refunded | terminated
+  status String // pending | in_escrow | completed | released | disputed | refunded | terminated
 
-  fundedAt            DateTime?
-  releasedAt          DateTime?
-  disputedAt          DateTime?
-  terminatedAt        DateTime?
+  fundedAt     DateTime?
+  releasedAt   DateTime?
+  disputedAt   DateTime?
+  terminatedAt DateTime?
 
-  metadata            Json?
+  metadata Json?
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([providerUserId])
@@ -688,21 +885,617 @@ model EscrowTransaction {
 // BANK ACCOUNTS (provider payouts)
 // ============================================================
 model BankAccount {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  bankCode      String   // CBN bank code e.g. "058"
-  bankName      String   // Display name e.g. "GTBank"
-  accountNumber String   // 10 digits
+  bankCode      String // CBN bank code e.g. "058"
+  bankName      String // Display name e.g. "GTBank"
+  accountNumber String // 10 digits
   accountName   String
 
-  isPrimary     Boolean  @default(true)
-  isVerified    Boolean  @default(false)
+  isPrimary  Boolean @default(true)
+  isVerified Boolean @default(false)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  // Paystack transfer recipient (created once the account is resolved/verified)
+  recipientCode         String?
+  verifiedName          String?
+  // Split-payment subaccounts: card payments settle the provider's share straight to this account
+  paystackSubaccount    String?
+  flutterwaveSubaccount String?
 
   @@unique([userId, accountNumber])
   @@index([userId])
+}
+
+// ============================================================
+// GLOBAL-READINESS, TRUST & SAFETY, AND EXTENDED FEATURES
+// ============================================================
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  IN_REVIEW
+  APPROVED
+  DECLINED
+  EXPIRED
+}
+
+enum ProviderVerification {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+// Identity verification sessions run through Didit (ID documents + liveness).
+model KycVerification {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        String   @default("didit")
+  purpose         String   @default("identity") // identity | provider | institution
+  sessionId       String   @unique
+  sessionUrl      String?
+  status          String // Not Started | In Progress | In Review | Approved | Declined | Abandoned | Expired
+  documentType    String?
+  documentCountry String?
+  documentLast4   String?
+  fullName        String?
+  dateOfBirth     String?
+  decision        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Licences, certificates, CAC docs etc. uploaded by providers for admin review.
+model ProviderDocument {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String // LICENSE | CERTIFICATE | CAC | PRACTICE_PERMIT | INSURANCE | OTHER
+  title        String
+  fileUrl      String
+  fileId       String?
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewNote   String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OtpCode {
+  id        String    @id @default(uuid())
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  target    String // email or phone
+  purpose   String // password_reset | email_verify | phone_verify
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([target, purpose])
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // appointment | payment | order | lab | emergency | message | system | reminder | kyc | donation
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+// Weekly recurring availability (doctor / nurse / lab). Times are local to `timezone`.
+model AvailabilityRule {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int // 0 = Sunday
+  startTime   String // "09:00"
+  endTime     String // "17:00"
+  slotMinutes Int      @default(30)
+  timezone    String   @default("Africa/Lagos")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Blocked-out time (leave, holiday, ad-hoc busy).
+model AvailabilityBlock {
+  id      String   @id @default(uuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startAt DateTime
+  endAt   DateTime
+  reason  String?
+
+  @@index([userId, startAt])
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  authorId    String
+  author      User     @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  targetId    String
+  target      User     @relation("ReviewTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  rating      Int
+  comment     String?
+  contextType String // APPOINTMENT | PHARMACY_ORDER | LAB_TEST | NURSE_REQUEST | EMERGENCY
+  contextId   String
+  createdAt   DateTime @default(now())
+
+  @@unique([authorId, contextType, contextId])
+  @@index([targetId])
+}
+
+model MedicationReminder {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMemberId String?
+  medication     String
+  dosage         String?
+  times          Json // ["08:00","20:00"]
+  startDate      DateTime  @default(now())
+  endDate        DateTime?
+  prescriptionId String?
+  refillAt       DateTime?
+  isActive       Boolean   @default(true)
+  takenLog       Json? // [{ at, status }]
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model FamilyMember {
+  id           String    @id @default(uuid())
+  ownerId      String
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name         String
+  relationship String
+  dateOfBirth  DateTime?
+  gender       String?
+  bloodType    String?
+  genotype     String?
+  allergies    String?
+  conditions   String?
+  createdAt    DateTime  @default(now())
+
+  @@index([ownerId])
+}
+
+model Vaccination {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMemberId String?
+  vaccine        String
+  dose           String?
+  givenAt        DateTime?
+  nextDueAt      DateTime?
+  provider       String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model HealthDocument {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  category  String   @default("OTHER") // LAB | SCAN | PRESCRIPTION | DISCHARGE | INSURANCE | OTHER
+  fileUrl   String
+  fileId    String?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model InstitutionProfile {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  type          String // HOSPITAL | CLINIC | DIAGNOSTIC | MATERNITY | SPECIALIST | OTHER
+  licenseNumber String
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  country       String   @default("NG")
+  lat           Float?
+  lng           Float?
+  bedsTotal     Int      @default(0)
+  bedsAvailable Int      @default(0)
+  emergencyCare Boolean  @default(false)
+  description   String?
+  rating        Float    @default(0)
+  reviewCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  // % of an affiliated (ACTIVE staff) provider's net earnings paid to the institution's account; the rest goes to the provider.
+  staffSharePercent Int                  @default(100)
+  departments       Department[]
+  staff             InstitutionStaff[]
+  patients          InstitutionPatient[]
+  doctors           DoctorProfile[]
+  campaigns         DonationCampaign[]
+}
+
+model Department {
+  id            String             @id @default(uuid())
+  institutionId String
+  institution   InstitutionProfile @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  name          String
+  headName      String?
+  headUserId    String?
+  description   String?
+  beds          Int                @default(0)
+  bedsOccupied  Int                @default(0)
+  createdAt     DateTime           @default(now())
+
+  staff    InstitutionStaff[]
+  patients InstitutionPatient[]
+
+  @@index([institutionId])
+}
+
+model InstitutionStaff {
+  id            String             @id @default(uuid())
+  institutionId String
+  institution   InstitutionProfile @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  departmentId  String?
+  department    Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  name          String
+  email         String
+  phone         String?
+  staffRole     String // DOCTOR | NURSE | PHARMACIST | LAB_SCIENTIST | ADMIN | OTHER
+  title         String?
+  status        String             @default("INVITED") // INVITED | ACTIVE | SUSPENDED | LEFT
+  joinedAt      DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@unique([institutionId, email])
+  @@index([userId])
+}
+
+model InstitutionPatient {
+  id            String             @id @default(uuid())
+  institutionId String
+  institution   InstitutionProfile @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  departmentId  String?
+  department    Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  mrn           String // medical record number
+  name          String
+  email         String?
+  phone         String?
+  status        String             @default("OUTPATIENT") // OUTPATIENT | ADMITTED | DISCHARGED | REFERRED
+  bed           String?
+  admittedAt    DateTime?
+  dischargedAt  DateTime?
+  notes         String?
+  createdAt     DateTime           @default(now())
+
+  @@unique([institutionId, mrn])
+  @@index([userId])
+}
+
+model Referral {
+  id            String   @id @default(uuid())
+  fromId        String
+  from          User     @relation("ReferralFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId          String
+  to            User     @relation("ReferralTo", fields: [toId], references: [id], onDelete: Cascade)
+  patientUserId String
+  appointmentId String?
+  reason        String
+  status        String   @default("PENDING") // PENDING | ACCEPTED | DECLINED | COMPLETED
+  createdAt     DateTime @default(now())
+
+  @@index([toId])
+  @@index([patientUserId])
+}
+
+model LabTestCatalog {
+  id              String     @id @default(uuid())
+  labId           String
+  lab             LabProfile @relation(fields: [labId], references: [id], onDelete: Cascade)
+  name            String
+  code            String?
+  category        String?
+  price           Decimal
+  currency        String     @default("NGN")
+  turnaroundHours Int        @default(24)
+  sampleType      String?
+  preparation     String?
+  isActive        Boolean    @default(true)
+
+  @@index([labId])
+}
+
+model StockIntake {
+  id            String          @id @default(uuid())
+  pharmacyId    String
+  pharmacy      PharmacyProfile @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  supplierId    String?
+  invoiceNumber String?
+  fileUrl       String?
+  items         Json // [{ name, brand, batchNumber, qty, costPrice, price, expiryDate, inventoryId }]
+  totalCost     Decimal         @default(0)
+  createdById   String
+  createdAt     DateTime        @default(now())
+
+  @@index([pharmacyId])
+}
+
+model StockAudit {
+  id            String          @id @default(uuid())
+  pharmacyId    String
+  pharmacy      PharmacyProfile @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  items         Json // [{ inventoryId, name, expected, counted, variance }]
+  varianceValue Decimal         @default(0)
+  note          String?
+  createdById   String
+  createdAt     DateTime        @default(now())
+
+  @@index([pharmacyId])
+}
+
+model PosSale {
+  id             String          @id @default(uuid())
+  pharmacyId     String
+  pharmacy       PharmacyProfile @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  cashierId      String
+  cashier        User            @relation(fields: [cashierId], references: [id])
+  receiptNo      String          @unique
+  items          Json // [{ inventoryId, name, qty, price }]
+  subtotal       Decimal
+  tax            Decimal         @default(0)
+  discount       Decimal         @default(0)
+  total          Decimal
+  currency       String          @default("NGN")
+  paymentMethod  String // CASH | CARD | TRANSFER | CREDITS
+  customerName   String?
+  customerPhone  String?
+  patientUserId  String?
+  prescriptionId String?
+  createdAt      DateTime        @default(now())
+
+  @@index([pharmacyId, createdAt])
+}
+
+model DonationCampaign {
+  id              String              @id @default(uuid())
+  type            String // FUND | PATIENT_CASE | BLOOD | ORGAN
+  title           String
+  description     String
+  beneficiaryName String?
+  organizerId     String
+  organizer       User                @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  institutionId   String?
+  institution     InstitutionProfile? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  goalAmount      Decimal             @default(0)
+  raisedAmount    Decimal             @default(0)
+  donorCount      Int                 @default(0)
+  currency        String              @default("NGN")
+  bloodType       String?
+  organ           String?
+  unitsNeeded     Int?
+  unitsPledged    Int                 @default(0)
+  urgency         String              @default("NORMAL") // NORMAL | URGENT | CRITICAL
+  location        String?
+  lat             Float?
+  lng             Float?
+  contactName     String?
+  contactPhone    String?
+  contactEmail    String?
+  imageUrl        String?
+  status          String              @default("PENDING_REVIEW") // PENDING_REVIEW | ACTIVE | COMPLETED | CLOSED | REJECTED
+  deadline        DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  donations Donation[]
+  pledges   DonorPledge[]
+
+  @@index([type, status])
+}
+
+model DonorPledge {
+  id          String            @id @default(uuid())
+  campaignId  String?
+  campaign    DonationCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  donorId     String
+  donor       User              @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  type        String // BLOOD | ORGAN
+  centerName  String?
+  centerId    String?
+  scheduledAt DateTime?
+  status      String            @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED | INELIGIBLE
+  eligibility Json?
+  createdAt   DateTime          @default(now())
+
+  @@index([donorId])
+}
+
+model OrganDonorRegistration {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organs         Json // ["kidney","liver","cornea"]
+  livingDonor    Boolean  @default(false)
+  nextOfKinName  String?
+  nextOfKinPhone String?
+  consentAt      DateTime @default(now())
+  status         String   @default("ACTIVE") // ACTIVE | WITHDRAWN
+  donorCardNo    String   @unique
+}
+
+model DonationCenter {
+  id       String  @id @default(uuid())
+  name     String
+  type     String  @default("BLOOD") // BLOOD | ORGAN | BOTH
+  address  String
+  city     String?
+  state    String?
+  country  String  @default("NG")
+  phone    String?
+  hours    String?
+  lat      Float?
+  lng      Float?
+  isActive Boolean @default(true)
+}
+
+model InsurancePlan {
+  id             String            @id @default(uuid())
+  name           String
+  provider       String
+  type           String // NHIS | HMO | PRIVATE | COMMUNITY | MICRO
+  description    String?
+  monthlyPremium Decimal
+  currency       String            @default("NGN")
+  coverage       Json // ["Outpatient","Lab tests",...]
+  isActive       Boolean           @default(true)
+  policies       InsurancePolicy[]
+}
+
+model HealthArticle {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  title       String
+  summary     String
+  body        String   @db.Text
+  category    String
+  imageUrl    String?
+  publishedAt DateTime @default(now())
+}
+
+model DataRequest {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String // EXPORT | DELETE
+  status      String    @default("PENDING") // PENDING | COMPLETED | CANCELLED
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+// Who viewed / changed which patient's medical data (NDPR / GDPR / HIPAA-style accountability).
+model AccessLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  actor     User     @relation("AccessActor", fields: [actorId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   User     @relation("AccessSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+  resource  String
+  action    String
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([subjectId, createdAt])
+}
+
+model CurrencyRate {
+  code      String   @id // "USD"
+  perNgn    Decimal  @db.Decimal(18, 8) // units of this currency per 1 NGN
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// PROVIDER EARNINGS & PAYOUTS (Bolt-style driver settlement)
+// - In-app payments: platform collects, provider earns gross - commission when the service completes.
+// - Cash payments: provider collects; the platform commission becomes a debt on the provider balance.
+// - Balance = sum(entries). Positive is paid out on the payout schedule; negative must be settled
+//   (netted automatically from future in-app earnings, or paid by the provider).
+// ============================================================
+
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ProviderLedgerEntry {
+  id             String   @id @default(uuid())
+  providerUserId String
+  provider       User     @relation(fields: [providerUserId], references: [id], onDelete: Cascade)
+  // EARNING | COMMISSION | CASH_COMMISSION | PAYOUT | PAYOUT_REVERSAL | SETTLEMENT | ADJUSTMENT | REFUND_CLAWBACK | ESCROW_SETTLED
+  type           String
+  amount         Decimal  @db.Decimal(12, 2) // + owed to provider, - owed to platform
+  method         String // IN_APP | CASH | ESCROW | PAYOUT | MANUAL
+  sourceType     String? // APPOINTMENT | PHARMACY_ORDER | LAB_TEST | NURSE_REQUEST | EMERGENCY | POS_SALE
+  sourceId       String?
+  gross          Decimal? @db.Decimal(12, 2)
+  commissionRate Decimal? @db.Decimal(5, 2)
+  payoutId       String?
+  description    String
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@unique([providerUserId, type, sourceType, sourceId])
+  @@index([providerUserId, createdAt])
+  @@index([payoutId])
+}
+
+model Payout {
+  id             String    @id @default(uuid())
+  providerUserId String
+  provider       User      @relation(fields: [providerUserId], references: [id], onDelete: Cascade)
+  amount         Decimal   @db.Decimal(12, 2)
+  currency       String    @default("NGN")
+  // PENDING | PROCESSING | PAID | FAILED | REVERSED | MANUAL
+  status         String    @default("PENDING")
+  gateway        String // paystack | flutterwave | manual
+  reference      String    @unique
+  transferCode   String?
+  bankName       String
+  bankCode       String
+  accountNumber  String
+  accountName    String
+  failureReason  String?
+  initiatedById  String?
+  paidAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([providerUserId, createdAt])
+  @@index([status])
 }

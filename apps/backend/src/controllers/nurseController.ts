@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { notify } from '../services/notify';
+import { accrueForSource } from '../services/earnings';
 
 /** Looks up the NurseProfile row for the logged-in user, or throws. */
 async function getNurseProfile(userId: string) {
@@ -172,11 +174,16 @@ export async function updateRequestStatus(req: Request, res: Response) {
 
   const updated = await prisma.nurseRequest.update({ where: { id: request.id }, data: { status: data.status } });
   await notifyPatient(req, request.patientId, 'nurse:status', { id: updated.id, status: updated.status });
+  if (updated.status === 'COMPLETED') await accrueForSource('NURSE_REQUEST', updated.id);
 
   res.json(updated);
 }
 
 async function notifyPatient(req: Request, patientId: string, event: string, payload: unknown) {
   const patient = await prisma.patientProfile.findUnique({ where: { id: patientId }, select: { userId: true } });
-  if (patient) req.app.get('io')?.to(`user:${patient.userId}`).emit(event, payload);
+  if (patient) {
+    req.app.get('io')?.to(`user:${patient.userId}`).emit(event, payload);
+    const st = (payload as any)?.status;
+    if (st) await notify(patient.userId, 'appointment', 'Home-care update 🩺', `Your nurse request is now ${String(st).toLowerCase().replace('_', ' ')}.`, { data: { requestId: (payload as any)?.id } });
+  }
 }

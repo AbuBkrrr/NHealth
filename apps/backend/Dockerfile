@@ -18,14 +18,14 @@ COPY apps/backend/package.json ./apps/backend/
 
 RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
-RUN pnpm --filter @nhealth/shared-utils build
-RUN pnpm --filter @nhealth/shared-types build
 
 COPY apps/backend ./apps/backend
 
-RUN pnpm --filter backend exec prisma generate
-RUN pnpm --filter backend build
+RUN pnpm --filter @nhealth/backend exec prisma generate
+RUN pnpm --filter @nhealth/backend build
 
 EXPOSE 4000
 
-CMD ["node", "apps/backend/dist/apps/backend/src/server.js"]
+WORKDIR /app/apps/backend
+# Applies pending migrations safely, then starts the API
+CMD ["sh", "-c", "node scripts/migrate.cjs && node dist/apps/backend/src/server.js"]

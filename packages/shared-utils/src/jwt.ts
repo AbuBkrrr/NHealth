@@ -10,6 +10,8 @@ export interface JwtPayload {
   userId: string;
   role: string;
   isSuperAdmin?: boolean;
+  /** Token version - bumping User.tokenVersion revokes every older token (logout everywhere / password reset). */
+  tv?: number;
 }
 
 /**

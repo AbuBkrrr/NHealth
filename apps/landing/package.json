@@ -1,15 +1,20 @@
 {
-    "name":  "@nhealth/landing",
-    "version":  "1.0.0",
-    "private":  true,
-    "scripts":  {
-                    "build":  "vite build \u0026\u0026 echo ok \u003e dist/health",
-                    "start":  "serve -s dist -l tcp://0.0.0.0:$PORT"
-                },
-    "dependencies":  {
-                         "serve":  "^14.2.6"
-                     },
-    "devDependencies":  {
-                            "vite":  "^5.4.6"
-                        }
+  "name": "@nhealth/landing",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && echo ok > dist/health",
+    "preview": "vite preview",
+    "start": "serve -s dist -l tcp://0.0.0.0:${PORT:-3000}"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4",
+    "qrcode": "1.5.4",
+    "serve": "^14.2.6",
+    "socket.io-client": "4.7.5"
+  },
+  "devDependencies": {
+    "vite": "^5.4.6"
+  }
 }

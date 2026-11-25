@@ -122,7 +122,11 @@ import crypto from 'crypto';
 
 export function verifyWebhookSignature(rawBody: string, timestamp: string, signature: string): boolean {
   if (!WEBHOOK_SECRET) {
-    console.warn('[PayScrow] No webhook secret configured — skipping verification');
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[PayScrow] PAYSCROW_WEBHOOK_SECRET missing - rejecting webhook');
+      return false;
+    }
+    console.warn('[PayScrow] No webhook secret configured — skipping verification (dev only)');
     return true;
   }
   if (!timestamp || !signature) return false;
