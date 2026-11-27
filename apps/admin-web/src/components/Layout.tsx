@@ -1,9 +1,26 @@
-import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api/client';
+
+/** Number of "Talk to our team" enquiries nobody has handled yet (super admins only). */
+function useNewEnquiries(enabled: boolean) {
+  const [n, setN] = useState(0);
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let alive = true;
+    const load = () => api.get<{ newCount: number }>('/admin-ops/marketing/leads/summary').then((r) => alive && setN(r.data.newCount)).catch(() => null);
+    load();
+    const t = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(t); };
+  }, [enabled, pathname, search]);
+  return n;
+}
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const newEnquiries = useNewEnquiries(!!user?.isSuperAdmin);
 
   return (
     <div className="app-shell">
@@ -25,7 +42,10 @@ export function Layout() {
         ))}
         {user?.isSuperAdmin && (
           <>
-            <NavLink to="/marketing" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+            <NavLink to="/marketing?tab=leads" className={() => `nav-link${location.pathname === '/marketing' && new URLSearchParams(location.search).get('tab') === 'leads' ? ' active' : ''}`}>
+              Enquiries {newEnquiries > 0 && <span className="nav-count">{newEnquiries}</span>}
+            </NavLink>
+            <NavLink to="/marketing" className={({ isActive }) => `nav-link${isActive && new URLSearchParams(location.search).get('tab') !== 'leads' ? ' active' : ''}`}>
               Marketing
             </NavLink>
             <NavLink to="/admins" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>

@@ -351,6 +351,12 @@ describe('marketing links', () => {
     const qr = await request(app).get(`/api/admin-ops/marketing/links/${link.id}/qr.svg`).set(auth(t));
     expect(qr.status).toBe(200);
     expect(qr.headers['content-type']).toContain('image/svg+xml');
+    // Super admins are told about every enquiry, and the console counts the ones nobody has handled.
+    const sum = (await request(app).get('/api/admin-ops/marketing/leads/summary').set(auth(t))).body;
+    expect(sum.newCount).toBeGreaterThanOrEqual(1);
+    expect((await request(app).get('/api/admin-ops/marketing/leads/summary').set(auth(t2))).status).toBe(403);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await prisma.notification.count({ where: { userId: boss.id, type: 'lead' } })).toBeGreaterThanOrEqual(1);
   });
 });
 

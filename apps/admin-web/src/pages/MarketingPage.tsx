@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, getErrorMessage } from '../api/client';
 
 /**
@@ -41,12 +42,14 @@ const Bars = ({ title, rows }: { title: string; rows: { name: string; n: number 
 };
 
 export function MarketingPage() {
-  const [tab, setTab] = useState('overview');
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') || 'overview';
+  const setTab = (k: string) => setParams(k === 'overview' ? {} : { tab: k });
   const [days, setDays] = useState(30);
   const [linkId, setLinkId] = useState('');
   const ov = useLoad<any>(`/admin-ops/marketing/overview?days=${days}${linkId ? '&linkId=' + linkId : ''}`, null);
   const links = useLoad<any[]>('/admin-ops/marketing/links', []);
-  const TABS: [string, string][] = [['overview', 'Overview'], ['opens', 'Recent opens'], ['links', 'Links, QR & share kit'], ['leads', 'Leads'], ['broadcast', 'Broadcast'], ['settings', 'Ads & page settings']];
+  const TABS: [string, string][] = [['overview', 'Overview'], ['opens', 'Recent opens'], ['links', 'Links, QR & share kit'], ['leads', 'Enquiries (Talk to our team)'], ['broadcast', 'Broadcast'], ['settings', 'Ads & page settings']];
   return (
     <div>
       <h1 className="page-title">Marketing</h1>
@@ -227,7 +230,7 @@ function Leads({ ov, reload }: { ov: any; reload: () => void }) {
           <tr key={l.id}><td>{fmt(l.createdAt)}</td><td><b>{l.name}</b>{l.organization && <div className="mk-sub">{l.organization}</div>}</td>
             <td>{l.email}<div className="mk-sub">{l.phone}</div>{!l.consent && <div className="mk-sub">no marketing consent</div>}</td><td>{l.interest}</td><td>{l.link}</td>
             <td>{[l.city, l.country].filter(Boolean).join(', ') || '—'}</td><td>{l.opensBefore ? `opened ${l.opensBefore}×` : '—'}</td><td className="mk-sub">{l.message}</td>
-            <td><select value={l.status} onChange={(e) => setStatus(l.id, e.target.value)}>{['NEW', 'CONTACTED', 'REGISTERED', 'LOST'].map((s) => <option key={s}>{s}</option>)}</select></td></tr>
+            <td><select style={{ minWidth: 130 }} value={l.status} onChange={(e) => setStatus(l.id, e.target.value)}>{['NEW', 'CONTACTED', 'REGISTERED', 'LOST'].map((s) => <option key={s}>{s}</option>)}</select></td></tr>
         ))}</tbody></table>
       {ov.leads.length === 0 && <div className="empty-state">No leads yet.</div>}
     </div>

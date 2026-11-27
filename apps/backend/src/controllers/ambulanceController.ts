@@ -51,7 +51,7 @@ export async function updateLocation(req: Request, res: Response) {
   const ambulance = await getAmbulanceProfile(req.user!.userId);
   const updated = await prisma.ambulanceProfile.update({
     where: { id: ambulance.id },
-    data: { currentLat: data.lat, currentLng: data.lng },
+    data: { currentLat: data.lat, currentLng: data.lng, lastLocationAt: new Date() },
   });
 
   // Only the patient(s) this ambulance is actively responding to need this
@@ -59,14 +59,14 @@ export async function updateLocation(req: Request, res: Response) {
   // ambulance's live position to every other user for no reason.
   const activeRequests = await prisma.emergencyRequest.findMany({
     where: { ambulanceId: ambulance.id, status: { in: ['ACCEPTED', 'EN_ROUTE', 'ARRIVED'] } },
-    select: { patientId: true },
+    select: { id: true, patientId: true },
   });
   const patients = await prisma.patientProfile.findMany({
     where: { id: { in: activeRequests.map((r: { patientId: string }) => r.patientId) } },
     select: { userId: true },
   });
   for (const patient of patients) {
-    req.app.get('io')?.to(`user:${patient.userId}`).emit('ambulance:location', { lat: data.lat, lng: data.lng });
+    req.app.get('io')?.to(`user:${patient.userId}`).emit('ambulance:location', { lat: data.lat, lng: data.lng, at: Date.now() });
   }
 
   res.json(updated);

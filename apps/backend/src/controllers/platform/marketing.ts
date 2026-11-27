@@ -5,6 +5,7 @@ import { env } from '../../config/env';
 import { ApiError } from '../../utils/ApiError';
 import { sendEmail } from '../../services/email';
 import { sendSms } from '../../services/sms';
+import { notify } from '../../services/notify';
 import { str, uid } from './util';
 import {
   parseUa, locate, hashIp, getMarketingSettings, saveMarketingSettings, linkUrl, unsubToken, readUnsubToken,
@@ -102,6 +103,20 @@ export async function createLead(req: Request, res: Response) {
     },
   });
   res.status(201).json({ ok: true, id: lead.id });
+  // Tell the super admins straight away (in the admin console, the app and by email), so no enquiry waits unseen.
+  prisma.user.findMany({ where: { isSuperAdmin: true, isActive: true }, select: { id: true } })
+    .then((admins) => Promise.all(admins.map((a) => notify(a.id, 'lead', 'New enquiry 📝', `${name} (${lead.interest.toLowerCase()}${lead.organization ? ', ' + lead.organization : ''}) wrote via "Talk to our team"${lead.message ? ': "' + lead.message.slice(0, 140) + '"' : ''}. Reply from Admin console → Enquiries.`, { email: true, data: { leadId: lead.id } }).catch(() => null))))
+    .catch(() => null);
+}
+
+/** GET /api/admin-ops/marketing/leads/summary - how many enquiries are waiting for a reply. */
+export async function leadSummary(_req: Request, res: Response) {
+  const [newCount, total, latest] = await Promise.all([
+    prisma.marketingLead.count({ where: { status: 'NEW' } }),
+    prisma.marketingLead.count(),
+    prisma.marketingLead.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+  ]);
+  res.json({ newCount, total, latestAt: latest?.createdAt ?? null });
 }
 
 /** GET /api/mkt/unsubscribe?t=... - one-click unsubscribe from marketing messages. */

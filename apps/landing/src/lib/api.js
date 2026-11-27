@@ -91,7 +91,7 @@ function readNetwork(path, opts) {
   return inflight.get(path);
 }
 
-export async function api(path, { method = 'GET', body, timeout = 30000, cache = method === 'GET', raw = false, queue = false } = {}) {
+export async function api(path, { method = 'GET', body, timeout = 30000, cache = method === 'GET', raw = false, queue = false, fresh = false } = {}) {
   const opts = { method, body, timeout, raw };
   if (method !== 'GET') {
     try {
@@ -107,7 +107,7 @@ export async function api(path, { method = 'GET', body, timeout = 30000, cache =
   if (raw || !cache) return network(path, opts);
   tracker(path);
   const e = readEntry(path);
-  if (e) {
+  if (e && !fresh) {
     const offline = !navigator.onLine;
     const current = e.mut === mutations;
     if (offline) return fromText(e.text, true);
@@ -123,7 +123,7 @@ export async function api(path, { method = 'GET', body, timeout = 30000, cache =
     writeEntry(path, data);
     return fromText(JSON.stringify(data));
   } catch (err) {
-    if (err.network && e) return fromText(e.text, true); // offline or very slow: last saved copy
+    if (err.network && e) return fromText(e.text, true); // offline or very slow: last saved copy (also for fresh reads)
     throw err;
   }
 }
@@ -166,6 +166,8 @@ export async function flushOutbox() {
 }
 
 export const get = (p) => api(p);
+/** Read that always asks the server first (live screens such as emergency tracking); saved copy only if offline. */
+export const getFresh = (p) => api(p, { fresh: true });
 export const post = (p, body = {}) => api(p, { method: 'POST', body });
 /** POST that is kept and sent later if the phone is offline. Use only for writes that are safe to send late. */
 export const postLater = (p, body = {}) => api(p, { method: 'POST', body, queue: true });
