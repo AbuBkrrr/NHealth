@@ -2,9 +2,22 @@
 import { route } from '../lib/router.js';
 import { authScreen } from './auth.js';
 import { pitchScreen } from './pitch.js';
-import * as S from './shared.js';
-import * as P from './patient.js';
-import * as V from './providers.js';
+
+// Screens load in separate files per area, so a phone on 2G downloads only what it needs first.
+// After the first visit the service worker keeps every file, so later screens open instantly.
+function lazyModule(load) {
+  let p = null;
+  const get = () => (p = p || load().catch((e) => {
+    p = null;
+    // A new version was deployed while this page was open: reload once to pick it up.
+    if (navigator.onLine && !sessionStorage.getItem('nh_chunk_reload')) { sessionStorage.setItem('nh_chunk_reload', '1'); location.reload(); }
+    throw new Error(navigator.onLine ? 'Could not load this screen. Please try again.' : 'This screen has not been saved for offline use yet. Open it once while online.');
+  }));
+  return new Proxy({}, { get: (_t, name) => (name === 'preload' ? get : async (...args) => (await get())[name](...args)) });
+}
+export const S = lazyModule(() => import('./shared.js'));
+export const P = lazyModule(() => import('./patient.js'));
+export const V = lazyModule(() => import('./providers.js'));
 
 const PATIENT = ['PATIENT'];
 const PROVIDERS = ['DOCTOR', 'NURSE', 'LAB', 'PHARMACY', 'AMBULANCE', 'INSTITUTION'];

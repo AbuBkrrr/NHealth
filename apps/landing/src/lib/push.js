@@ -4,7 +4,14 @@ import { state } from './store.js';
 
 export async function registerSW() {
   if (!('serviceWorker' in navigator) || location.hostname === 'localhost' && !import.meta.env.PROD) return null;
-  try { return await navigator.serviceWorker.register('/sw.js'); } catch { return null; }
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    // Look for a new version now and then while the app stays open (cheap: /sw.js is a few KB).
+    const check = () => navigator.onLine && reg.update().catch(() => null);
+    setInterval(check, 30 * 60 * 1000);
+    window.addEventListener('online', check);
+    return reg;
+  } catch { return null; }
 }
 const b64ToU8 = (b) => { const p = '='.repeat((4 - (b.length % 4)) % 4); const s = atob((b + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...s].map((c) => c.charCodeAt(0))); };
 
