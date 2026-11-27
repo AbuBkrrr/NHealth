@@ -42,7 +42,11 @@ Treat "Shared" as a strong hint, not proof. The same person shows up as a new de
 - clear their browser data
 - switch browsers, for example from WhatsApp's built-in browser to Chrome
 
-**Location** comes from Cloudflare's visitor-location headers when Cloudflare's proxy is on. Otherwise it comes from a city-level IP lookup; set `GEOIP_LOOKUP=off` in `backend.env` to disable that. IP addresses are stored only as a one-way hash.
+**Precise location.** The pitch page shows a "Find verified care near you · Allow" card, and asks again when the visitor taps sign-up. If they allow it, the phone's GPS position is saved with that open, along with the accuracy the phone reports. Recent opens shows it as 📍 coordinates with a map link and "±8 m", green when within 10 m, and the Overview counts how many opens have a precise location and how many of those are within 10 m.
+
+Browsers only share GPS after the visitor taps "Allow", and privacy law requires that consent. Phones are usually accurate to 5–20 m outdoors and less precise indoors.
+
+**City-level location** comes from Cloudflare's visitor-location headers when Cloudflare's proxy is on. Otherwise it comes from a city-level IP lookup; set `GEOIP_LOOKUP=off` in `backend.env` to disable that. IP addresses are stored only as a one-way hash.
 
 ## 3. Leads
 

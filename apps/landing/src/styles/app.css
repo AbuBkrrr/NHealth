@@ -121,6 +121,8 @@ img, video, canvas { max-width: 100%; }
 .pitch-body { padding: 16px 16px 24px; max-width: 760px; margin: 0 auto; }
 .pitch-body .auth-role-selector { margin-top: -36px; position: relative; }
 .pitch-body .role-card { background: #fff; box-shadow: var(--shadow); }
+.pitch-loc { padding: 6px 14px; margin-bottom: 12px; }
+.pitch-loc .list-item { border-bottom: none; }
 .pitch .quick-action .label { display: block; }
 .pitch-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; white-space: normal; }
 .pitch-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

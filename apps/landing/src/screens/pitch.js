@@ -3,7 +3,7 @@ import { get, post } from '../lib/api.js';
 import { state } from '../lib/store.js';
 import { go, home } from '../lib/router.js';
 import { esc, $, toast, toastErr, field, readForm, modal, closeModal } from '../lib/ui.js';
-import { trackOpen, adPixels, adEvent, deviceId } from '../lib/marketing.js';
+import { trackOpen, adPixels, adEvent, deviceId, sharePreciseLocation, locationWasAsked } from '../lib/marketing.js';
 import { COUNTRIES } from './data.js';
 
 // Mockup components: quick-action tiles in role colours, list items with role avatars.
@@ -47,6 +47,7 @@ export async function pitchScreen(el, { slug } = {}) {
       <p>${esc(cfg.subheadline || 'Complete Health Ecosystem')}</p>
     </div>
     <div class="pitch-body">
+      ${open ? `<div class="card pitch-loc" id="loc"><div class="list-item"><div class="avatar institution-avatar">📍</div><div class="content"><div class="title">Find verified care near you</div><div class="pitch-desc">Allow your location to see the nearest doctors, pharmacies and ambulances.</div></div><div class="trailing"><button class="btn btn-institution btn-sm" data-loc>Allow</button></div></div></div>` : ''}
       ${state.user ? '<button class="btn btn-primary btn-block" data-go-app>Open my N-Health</button>' : `
       <div class="auth-role-selector">
         ${showPatients ? '<div class="role-card selected" data-signup="PATIENT" tabindex="0"><div class="icon">👤</div><div class="name">I need care</div><div class="desc">Create a free patient account</div></div>' : ''}
@@ -76,8 +77,14 @@ export async function pitchScreen(el, { slug } = {}) {
   el.onclick = async (e) => {
     const t = e.target.closest('button,a,[data-signup]');
     if (!t) return;
+    if (t.dataset.loc !== undefined) {
+      t.disabled = true; t.textContent = 'Locating…';
+      const acc = await sharePreciseLocation();
+      $('#loc', el).innerHTML = acc != null ? `<div class="list-item"><div class="avatar pharmacy-avatar">✅</div><div class="content"><div class="title">Location shared</div><div class="pitch-desc">Accurate to about ${acc} m. We'll show you care nearby.</div></div></div>` : '<div class="list-item"><div class="avatar">📍</div><div class="content"><div class="title">Location not shared</div><div class="pitch-desc">You can still sign up and search by city.</div></div></div>';
+      return;
+    }
     if (t.dataset.goApp !== undefined) return go(home());
-    if (t.dataset.signup) return go('/auth?mode=register&side=' + t.dataset.signup);
+    if (t.dataset.signup) { if (!locationWasAsked()) sharePreciseLocation(); return go('/auth?mode=register&side=' + t.dataset.signup); }
     if (t.dataset.login !== undefined) return go('/auth');
     if (t.dataset.wa !== undefined) return adEvent('Contact');
     if (t.dataset.share !== undefined) {

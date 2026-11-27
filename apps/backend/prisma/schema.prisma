@@ -958,7 +958,7 @@ model ProviderDocument {
   id           String    @id @default(uuid())
   userId       String
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type         String // LICENSE | CERTIFICATE | CAC | PRACTICE_PERMIT | INSURANCE | OTHER
+  type         String // IDENTITY | PROOF_OF_ADDRESS | LICENSE (all three required) | CERTIFICATE | CAC | PRACTICE_PERMIT | INSURANCE | VEHICLE | OTHER
   title        String
   fileUrl      String
   fileId       String?
@@ -1549,6 +1549,10 @@ model MarketingVisit {
   utmSource   String?
   utmMedium   String?
   utmCampaign String?
+  lat         Float? // precise position, only when the visitor allowed location
+  lng         Float?
+  accuracyM   Float? // accuracy reported by the phone, in metres
+  locatedAt   DateTime?
   userId      String? // set when this device later registered
   createdAt   DateTime       @default(now())
 

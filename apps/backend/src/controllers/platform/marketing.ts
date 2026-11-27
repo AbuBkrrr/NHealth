@@ -62,6 +62,23 @@ export async function recordOpen(req: Request, res: Response) {
   });
 }
 
+/**
+ * POST /api/mkt/locate { visitId, deviceId|signature, lat, lng, accuracy }
+ * Precise position, sent only after the visitor allowed location in their browser.
+ * Accepted only from the same device that made the open.
+ */
+export async function recordLocation(req: Request, res: Response) {
+  const b = req.body || {};
+  const dk = deviceKeyOf(b);
+  const lat = Number(b.lat), lng = Number(b.lng), acc = Number(b.accuracy);
+  if (!dk || !str(b.visitId, 60)) throw ApiError.badRequest('Missing visit');
+  if (!(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180)) throw ApiError.badRequest('Invalid position');
+  const v = await prisma.marketingVisit.findUnique({ where: { id: String(b.visitId) } });
+  if (!v || v.deviceKey !== dk.key) throw ApiError.notFound('Visit not found');
+  await prisma.marketingVisit.update({ where: { id: v.id }, data: { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, accuracyM: Number.isFinite(acc) ? Math.round(acc * 10) / 10 : null, locatedAt: new Date() } });
+  res.json({ ok: true });
+}
+
 /** POST /api/mkt/lead - "talk to us" form on the pitch page. */
 export async function createLead(req: Request, res: Response) {
   const b = req.body || {};
@@ -209,6 +226,8 @@ export async function overview(req: Request, res: Response) {
       conversionRate: devices ? Math.round((conversions.length / devices) * 1000) / 10 : 0,
       signupsByRole: count(conversions, (c) => c.role, 10),
       fallbackIds: visits.filter((v) => v.idSource === 'signature').length,
+      preciseOpens: visits.filter((v) => v.lat != null).length,
+      within10m: visits.filter((v) => v.lat != null && v.accuracyM != null && v.accuracyM <= 10).length,
     },
     perLink,
     breakdown: {
@@ -223,6 +242,7 @@ export async function overview(req: Request, res: Response) {
       id: v.id, at: v.createdAt, link: v.linkId ? linkById.get(v.linkId)?.label : '(no label)', deviceNo: v.deviceNo, openNo: v.openNo, newDevice: v.openNo === 1,
       deviceType: v.deviceType, model: v.model, os: v.os, browser: v.browser, inApp: v.inApp, city: v.city, region: v.region, country: v.country,
       timezone: v.timezone, language: v.language, screen: v.screen, utmSource: v.utmSource, registered: !!v.userId, idSource: v.idSource,
+      lat: v.lat, lng: v.lng, accuracyM: v.accuracyM,
     })),
     leads: leads.map((l) => ({ ...l, deviceKey: undefined, link: l.link?.label ?? '(no label)' })),
     topReferrers: referralTop.map((r: any) => ({ ...(referrers.find((u) => u.id === r.fromId) || { name: 'Unknown' }), referrals: r._count._all })),

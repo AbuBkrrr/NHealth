@@ -1,3 +1,4 @@
+import { PROVIDER_DOC_TYPES } from '../../services/providerDocs';
 import { Request, Response } from 'express';
 import { prisma } from '../../config/prisma';
 import { ApiError } from '../../utils/ApiError';
@@ -54,7 +55,7 @@ export async function listMyDocuments(req: Request, res: Response) {
 }
 /** POST /api/verification/documents { type, title, dataUri | fileUrl, expiresAt } */
 export async function uploadProviderDocument(req: Request, res: Response) {
-  const type = ['LICENSE', 'CERTIFICATE', 'CAC', 'PRACTICE_PERMIT', 'INSURANCE', 'VEHICLE', 'OTHER'].includes(req.body.type) ? req.body.type : 'OTHER';
+  const type = PROVIDER_DOC_TYPES.includes(req.body.type) ? req.body.type : 'OTHER';
   let fileUrl = str(req.body.fileUrl, 2000), fileId: string | undefined;
   if (req.body.dataUri) { const { buf, mime } = parseDataUri(req.body.dataUri); const f = await storeFile(buf, mime, `kyc/${uid(req)}`, true); fileUrl = f.url; fileId = f.fileId; }
   if (!fileUrl) throw ApiError.badRequest('Attach the document');

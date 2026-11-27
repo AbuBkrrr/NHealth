@@ -4,6 +4,7 @@ import { ApiError } from '../../utils/ApiError';
 import { notify } from '../../services/notify';
 import { invalidateUserState } from '../../middleware/auth';
 import { str, num, uid } from './util';
+import { missingProviderDocs } from '../../services/providerDocs';
 
 const audit = (req: Request, action: string, targetType: string, targetId: string, detail?: string) =>
   prisma.adminAuditLog.create({ data: { actorId: uid(req), action, targetType, targetId, detail } }).catch(() => null);
@@ -11,7 +12,7 @@ const audit = (req: Request, action: string, targetType: string, targetId: strin
 /** GET /api/admin/verifications?status=PENDING - providers awaiting verification with their documents and KYC. */
 export async function verificationQueue(req: Request, res: Response) {
   const status = String(req.query.status || 'PENDING').toUpperCase();
-  res.json(await prisma.user.findMany({
+  const users = await prisma.user.findMany({
     where: { verificationStatus: status as any, role: { in: ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE', 'INSTITUTION'] }, deletedAt: null },
     orderBy: { createdAt: 'asc' }, take: 200,
     select: { id: true, name: true, email: true, phone: true, role: true, kycStatus: true, verificationStatus: true, verificationNote: true, createdAt: true, country: true,
@@ -19,7 +20,8 @@ export async function verificationQueue(req: Request, res: Response) {
       doctorProfile: { select: { licenseNumber: true, specialty: true, hospital: true } }, nurseProfile: { select: { licenseNumber: true, specialty: true } },
       pharmacyProfile: { select: { licenseNumber: true, pharmacyName: true, address: true } }, labProfile: { select: { licenseNumber: true, labName: true, address: true } },
       ambulanceProfile: { select: { licenseNumber: true, vehicleNumber: true } }, institutionProfile: { select: { licenseNumber: true, name: true, type: true, address: true } } },
-  }));
+  });
+  res.json(users.map((u) => ({ ...u, missingDocuments: missingProviderDocs(u.providerDocuments) })));
 }
 /** POST /api/admin/verifications/:userId { decision: VERIFIED|REJECTED|SUSPENDED, note } */
 export async function decideVerification(req: Request, res: Response) {
@@ -27,6 +29,10 @@ export async function decideVerification(req: Request, res: Response) {
   if (!['VERIFIED', 'REJECTED', 'SUSPENDED', 'PENDING'].includes(decision)) throw ApiError.badRequest('Invalid decision');
   const u = await prisma.user.findUnique({ where: { id: req.params.userId } });
   if (!u) throw ApiError.notFound('User not found');
+  if (decision === 'VERIFIED') {
+    const missing = missingProviderDocs(await prisma.providerDocument.findMany({ where: { userId: u.id } }));
+    if (missing.length) throw ApiError.badRequest('Cannot approve yet. Missing or expired: ' + missing.join(', ') + '. Ask the provider to upload them under Profile → Verification.');
+  }
   if (decision === 'VERIFIED' && u.kycStatus !== 'APPROVED' && !req.body.overrideKyc) throw ApiError.badRequest('Identity (KYC) must be approved first, or tick override after manual checks');
   await prisma.user.update({ where: { id: u.id }, data: { verificationStatus: decision as any, verificationNote: str(req.body.note, 1000) ?? null, verifiedAt: decision === 'VERIFIED' ? new Date() : null } });
   await prisma.providerDocument.updateMany({ where: { userId: u.id, status: 'PENDING' }, data: { status: decision === 'VERIFIED' ? 'APPROVED' : decision === 'REJECTED' ? 'REJECTED' : 'PENDING', reviewedById: uid(req), reviewedAt: new Date(), reviewNote: str(req.body.note, 1000) } });

@@ -33,6 +33,9 @@ async function modelHint() {
   try { const v = await navigator.userAgentData?.getHighEntropyValues?.(['model']); return v?.model || undefined; } catch { return undefined; }
 }
 
+let lastOpen = null;
+let locationAsked = false;
+
 /** Records one open of a tracking link and remembers it for signup attribution (60 days). */
 export async function trackOpen(slug) {
   const q = new URLSearchParams(location.search);
@@ -46,6 +49,7 @@ export async function trackOpen(slug) {
     utm: { source: q.get('utm_source') || undefined, medium: q.get('utm_medium') || undefined, campaign: q.get('utm_campaign') || undefined },
   });
   const deviceKey = id ? 'd:' + id : 's:' + sig;
+  lastOpen = { visitId: r.visitId, deviceId: id || undefined, signature: sig };
   if (!ls.get('nh_mkt')) ls.set('nh_mkt', JSON.stringify({ slug, deviceKey, at: Date.now() }));
   else { try { const m = JSON.parse(ls.get('nh_mkt')); if (!m.slug && slug) ls.set('nh_mkt', JSON.stringify({ slug, deviceKey, at: m.at })); } catch { /* */ } }
   return { ...r, deviceKey };
@@ -105,3 +109,20 @@ export function adEvent(name) {
     window.ttq?.track?.(name === 'Lead' ? 'SubmitForm' : name);
   } catch { /* */ }
 }
+
+/**
+ * Asks the browser for a precise (GPS) position and attaches it to this device's open.
+ * The browser shows its own permission prompt; nothing is sent unless the visitor allows it.
+ * Resolves with the accuracy in metres, or null if refused/unavailable.
+ */
+export function sharePreciseLocation() {
+  if (!lastOpen || !navigator.geolocation) return Promise.resolve(null);
+  locationAsked = true;
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      try { await post('/mkt/locate', { ...lastOpen, lat: latitude, lng: longitude, accuracy }); resolve(Math.round(accuracy)); } catch { resolve(null); }
+    }, () => resolve(null), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  });
+}
+export const locationWasAsked = () => locationAsked;

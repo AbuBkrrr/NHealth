@@ -57,7 +57,7 @@ export function VerificationsPage() {
   return (
     <div>
       <h1 className="page-title">Provider verification</h1>
-      <p className="page-subtitle">Check licences with the issuing council (MDCN, PCN, MLSCN, NMCN, CAC…) before approving. Identity is verified by Didit.</p>
+      <p className="page-subtitle">Every provider must upload a government ID, proof of address and a health licence before approval. Check the licence with the issuing council (MDCN, PCN, MLSCN, NMCN…); identity is also checked by Didit.</p>
       <div className="toolbar">{['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'UNVERIFIED'].map((s) => <button key={s} className={s === status ? '' : 'outline'} onClick={() => setStatus(s)}>{s}</button>)}</div>
       {error && <div className="error-text">{error}</div>}
       {items.length === 0 ? <div className="card empty-state">Queue is empty.</div> : items.map((u) => {
@@ -72,9 +72,16 @@ export function VerificationsPage() {
                 <div style={{ marginTop: 6, fontSize: 13 }}>Licence: <b>{prof.licenseNumber || '—'}</b> {prof.specialty || prof.pharmacyName || prof.labName || prof.vehicleNumber || prof.name || ''} {prof.address || prof.hospital || ''}</div>
                 <div style={{ marginTop: 6, fontSize: 13 }}>KYC: <Status text={u.kycStatus} /> {kyc && <span>{kyc.fullName} · {kyc.documentType} · {kyc.documentCountry} · DOB {kyc.dateOfBirth}</span>}</div>
                 {u.verificationNote && <div style={{ fontSize: 12, marginTop: 4 }}>Note: {u.verificationNote}</div>}
+                <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {['Government-issued ID', 'Proof of address', 'Health / practising licence'].map((label) => {
+                    const missing = (u.missingDocuments || []).includes(label);
+                    return <span key={label} className={`badge ${missing ? 'badge-inactive' : 'badge-active'}`}>{missing ? '✗' : '✓'} {label}</span>;
+                  })}
+                </div>
+                {u.missingDocuments?.length > 0 && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--error)' }}>Approve unlocks when all three documents are uploaded.</div>}
               </div>
               <div className="row-actions">
-                <button onClick={() => decide(u.id, 'VERIFIED', u.kycStatus === 'APPROVED')}>Approve</button>
+                <button disabled={!!u.missingDocuments?.length} title={u.missingDocuments?.length ? 'Missing: ' + u.missingDocuments.join(', ') : 'Approve'} onClick={() => decide(u.id, 'VERIFIED', u.kycStatus === 'APPROVED')}>Approve</button>
                 <button className="outline" onClick={() => decide(u.id, 'REJECTED', true)}>Reject</button>
                 <button className="outline" onClick={() => decide(u.id, 'SUSPENDED', true)}>Suspend</button>
               </div>

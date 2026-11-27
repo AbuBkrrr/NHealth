@@ -37,6 +37,7 @@ r.get('/articles/:slug', h(core.getArticle));
 r.get('/mkt/config', h(mkt.publicConfig));
 r.post('/mkt/open', marketingLimiter, h(mkt.recordOpen));
 r.post('/mkt/lead', marketingLimiter, h(mkt.createLead));
+r.post('/mkt/locate', marketingLimiter, h(mkt.recordLocation));
 r.get('/mkt/unsubscribe', marketingLimiter, h(mkt.unsubscribe));
 
 // Unified provider profile

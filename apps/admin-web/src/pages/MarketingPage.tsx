@@ -84,6 +84,8 @@ function Overview({ ov }: { ov: any }) {
         <div className="stat-card"><div className="stat-number">{t.signups}</div><div className="stat-label">Sign-ups from links</div>
           <div className="mk-sub">{t.signupsByRole.map((r: any) => `${r.name}: ${r.n}`).join(' · ') || '—'}</div></div>
         <div className="stat-card"><div className="stat-number">{t.conversionRate}%</div><div className="stat-label">Devices that signed up</div></div>
+        <div className="stat-card"><div className="stat-number">{t.preciseOpens}</div><div className="stat-label">Opens with precise location</div>
+          <div className="mk-sub">Within 10 m: <b>{t.within10m}</b> · others city-level only</div></div>
       </div>
 
       <div className="card">
@@ -127,13 +129,14 @@ function Opens({ ov }: { ov: any }) {
   return (
     <div className="card">
       <h3>Recent opens</h3>
-      <p className="page-subtitle">Each device gets a number per link (#1, #2…) in the order it first appeared. "Same device · open #3" means that phone came back a third time.</p>
+      <p className="page-subtitle">Each device gets a number per link (#1, #2…) in the order it first appeared. "Same device · open #3" means that phone came back a third time. 📍 shows the exact position when the visitor allowed location, with the accuracy their phone reported (green when within 10 m); otherwise the location is city-level from the network.</p>
       <table><thead><tr><th>When</th><th>Link</th><th>Device</th><th>Open</th><th>Phone / browser</th><th>Opened in</th><th>Location</th><th>Language / timezone</th><th>Signed up</th></tr></thead>
         <tbody>{ov.recentOpens.map((o: any) => (
           <tr key={o.id}><td>{fmt(o.at)}</td><td>{o.link || '(no label)'}</td><td><b>#{o.deviceNo}</b>{o.idSource === 'signature' && <span className="mk-sub" title="Matched by signature, not ID"> ~</span>}</td>
             <td><span className={`mk-pill ${o.newDevice ? 'new' : 'same'}`}>{o.newDevice ? 'New device' : `Same device · open #${o.openNo}`}</span></td>
             <td>{[o.model, o.os, o.browser].filter(Boolean).join(' · ')}<div className="mk-sub">{o.deviceType}{o.screen ? ' · ' + o.screen : ''}</div></td>
-            <td>{o.inApp || 'Browser'}</td><td>{[o.city, o.region, o.country].filter(Boolean).join(', ') || '—'}</td>
+            <td>{o.inApp || 'Browser'}</td><td>{[o.city, o.region, o.country].filter(Boolean).join(', ') || '—'}
+              {o.lat != null ? <div><a href={`https://www.openstreetmap.org/?mlat=${o.lat}&mlon=${o.lng}#map=18/${o.lat}/${o.lng}`} target="_blank" rel="noreferrer">📍 {o.lat.toFixed(5)}, {o.lng.toFixed(5)}</a> <span className={`mk-pill ${o.accuracyM != null && o.accuracyM <= 10 ? 'new' : 'same'}`}>±{Math.round(o.accuracyM ?? 0)} m</span></div> : <div className="mk-sub">City only (location not shared)</div>}</td>
             <td>{o.language || '—'}<div className="mk-sub">{o.timezone}</div></td><td>{o.registered ? '✅' : ''}</td></tr>
         ))}</tbody></table>
       {ov.recentOpens.length === 0 && <div className="empty-state">No opens yet. Create a link and share it.</div>}

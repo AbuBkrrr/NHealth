@@ -7,7 +7,7 @@ import { createMap } from '../lib/map.js';
 import { t } from '../lib/i18n.js';
 
 const verifyBanner = () => (state.user.verificationStatus !== 'VERIFIED'
-  ? `<div class="banner warn">⚕️ ${state.user.verificationStatus === 'PENDING' ? 'Your account is under review. You can set up your profile meanwhile.' : 'Verify your identity and upload your licence to start serving patients.'}<button class="btn btn-sm btn-primary" data-go="/kyc">${state.user.kycStatus === 'APPROVED' ? 'Documents' : 'Verify'}</button></div>` : '');
+  ? `<div class="banner warn">⚕️ Your account is under review. Upload your ID, proof of address and health licence so we can verify you; you can set up your profile meanwhile.<button class="btn btn-sm btn-primary" data-go="/kyc">Documents</button></div>` : '');
 const stat = (n, l) => `<div class="provider-stat"><div class="number">${n}</div><div class="label">${l}</div></div>`;
 const welcome = (sub) => `<div class="welcome-text">${t('Hello')}, 👋 ${esc(state.user.name.split(' ')[0])}</div><div class="welcome-sub">${sub}</div>`;
 
