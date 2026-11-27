@@ -7,6 +7,7 @@ import * as sched from '../controllers/platform/schedule';
 import * as health from '../controllers/platform/health';
 import * as don from '../controllers/platform/donations';
 import * as inst from '../controllers/platform/institution';
+import * as er from '../controllers/platform/er';
 import * as ph from '../controllers/platform/pharmacyExt';
 import * as lab from '../controllers/platform/labExt';
 import * as priv from '../controllers/platform/privacy';
@@ -123,6 +124,18 @@ r.post('/insurance/policies/:id/pay', auth, requireRole('PATIENT'), sensitiveLim
 
 // Institution management
 const I = [auth, requireRole('INSTITUTION')];
+// Emergency: going to a hospital yourself (the hospital accepts and gets ready before you arrive)
+const PT = [auth, requireRole('PATIENT')];
+r.get('/er/hospitals', ...PT, h(er.nearbyHospitals));
+r.get('/er/arrivals', ...PT, h(er.myArrivals));
+r.post('/er/arrivals', ...PT, sensitiveLimiter, h(er.createArrival));
+r.post('/er/arrivals/:id/location', ...PT, h(er.patientLocation));
+r.post('/er/arrivals/:id/cancel', ...PT, h(er.cancelArrival));
+r.post('/er/arrivals/:id/arrived', ...PT, h(er.patientArrived));
+r.get('/institution/er', ...I, h(er.hospitalBoard));
+r.patch('/institution/er', ...I, h(er.updateBoard));
+r.post('/institution/er/:id/respond', ...I, requireVerifiedProvider, h(er.respondArrival));
+r.post('/institution/er/:id/status', ...I, h(er.hospitalStatus));
 r.get('/institution/affiliations', auth, h(inst.myAffiliations));
 r.post('/institution/affiliations/:id', auth, h(inst.respondAffiliation));
 r.get('/institution/profile', ...I, h(inst.getInstitution));

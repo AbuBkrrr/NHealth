@@ -17,7 +17,7 @@ const NAVS = {
   LAB: { cls: 'lab-nav', items: [['/lab/home', '🏠', 'Home'], ['/lab/tests', '🧪', 'Tests'], ['/lab/catalog', '📋', 'Catalog'], ['/provider/schedule', '🗓️', 'Schedule'], ['/messages', '💬', 'Messages'], ['/profile', '👤', 'Profile']] },
   NURSE: { cls: 'nurse-nav', items: [['/nurse/home', '🏠', 'Home'], ['/nurse/requests', '📋', 'Requests'], ['/provider/schedule', '🗓️', 'Schedule'], ['/messages', '💬', 'Messages'], ['/profile', '👤', 'Profile']] },
   AMBULANCE: { cls: 'ambulance-nav', items: [['/ambulance/home', '🏠', 'Home'], ['/ambulance/requests', '🚨', 'Trips'], ['/messages', '💬', 'Messages'], ['/profile', '👤', 'Profile']] },
-  INSTITUTION: { cls: 'institution-nav', items: [['/institution/home', '🏠', 'Home'], ['/institution/departments', '🏢', 'Departments'], ['/institution/staff', '👥', 'Staff'], ['/institution/patients', '🛏️', 'Patients'], ['/institution/reports', '📊', 'Reports'], ['/profile', '👤', 'Profile']] },
+  INSTITUTION: { cls: 'institution-nav', items: [['/institution/home', '🏠', 'Home'], ['/institution/departments', '🏢', 'Departments'], ['/institution/staff', '👥', 'Staff'], ['/institution/er', '🚨', 'Emergency'], ['/institution/patients', '🛏️', 'Patients'], ['/profile', '👤', 'Profile']] },
   ADMIN: { cls: 'admin-nav', items: [['/admin', '🛡️', 'Admin'], ['/messages', '💬', 'Messages'], ['/profile', '👤', 'Profile']] },
 };
 onNav((path) => {
@@ -114,7 +114,7 @@ const TAB_READS = {
   LAB: ['/lab/stats', '/lab/tests', '/lab-ops/catalog', AVAIL, MSG, PROF],
   NURSE: ['/nurse/stats', '/nurse/requests/mine', '/nurse/requests/available', AVAIL, MSG, PROF],
   AMBULANCE: ['/ambulance/stats', '/ambulance/requests/mine', '/ambulance/requests/available', MSG, PROF],
-  INSTITUTION: ['/institution/profile', '/institution/stats', '/institution/departments', '/institution/staff', '/institution/patients?status=&q=', '/institution/reports?days=30', MSG, PROF],
+  INSTITUTION: ['/institution/er', '/institution/profile', '/institution/stats', '/institution/departments', '/institution/staff', '/institution/patients?status=&q=', '/institution/reports?days=30', MSG, PROF],
 };
 /** After the first screen: download the person's other screens and their tabs' data in the background. */
 function warmUp() {
@@ -152,6 +152,8 @@ const DEFAULT_CONFIG = { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, e
     if (goM) history.replaceState(null, '', '/' + location.search + '#/go' + (goM[1] ? '/' + goM[1] : ''));
     if (q.get('topup')) { sessionStorage.setItem('nh_topup', q.get('topup')); history.replaceState(null, '', location.pathname + '#/patient/wallet'); }
     if (q.get('kyc')) history.replaceState(null, '', location.pathname + '#/kyc');
+    // Invite links: https://www.<domain>/?ref=CODE -> sign-up with the friend's code filled in
+    if (q.get('ref')) { try { localStorage.setItem('nh_ref', q.get('ref').toUpperCase().slice(0, 20)); } catch { /* */ } history.replaceState(null, '', location.pathname + (state.user ? '' : '#/auth?mode=register')); }
     if (q.get('paid')) { sessionStorage.setItem('nh_paid', q.get('paid')); history.replaceState(null, '', location.pathname + '#/patient/appointments'); }
     if (q.get('settle')) { sessionStorage.setItem('nh_settle', q.get('settle')); history.replaceState(null, '', location.pathname + '#/provider/earnings'); }
     render();

@@ -44,6 +44,11 @@ const mail = (r) => `${r}.${S}@test.io`;
   // ---------------- 1. Patient sign-up through the UI ----------------
   const pp = await newPage();
   await pp.goto(WEB + '/'); await pp.waitForTimeout(1500);
+  // Welcome shows only the two cards; after picking one, only that card stays above its form.
+  if (await pp.$('#auth-form')) fail('welcome shows two cards first', 'form visible before choosing'); else pass('welcome shows two cards first');
+  await pp.click('[data-side=PATIENT]'); await pp.waitForTimeout(300);
+  const cardsLeft = await pp.locator('.role-card').count();
+  if (cardsLeft === 1 && await pp.$('.role-card.picked')) pass('only the picked card stays'); else fail('only the picked card stays', String(cardsLeft));
   await pp.click('[data-mode=register]');
   await pp.fill('[name=name]', 'Amaka Obi'); await pp.fill('[name=email]', mail('patient')); await pp.fill('[name=phone]', '08031112222');
   await pp.fill('[name=password]', 'password123'); await pp.fill('[name=password2]', 'password123');

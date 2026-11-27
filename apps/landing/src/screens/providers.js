@@ -1,4 +1,4 @@
-import { get, post, patch, del, download } from '../lib/api.js';
+import { get, getFresh, post, patch, del, download } from '../lib/api.js';
 import { state } from '../lib/store.js';
 import { field as fld, readForm, esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, dt, relDay, dateOnly, timeOnly, ago, locate, fileToDataUri, pickFile } from '../lib/ui.js';
 import { on, emit } from '../lib/realtime.js';
@@ -20,7 +20,7 @@ export async function doctorHome(el) {
       <div class="quick-action doctor-action" data-go="/doctor/requests" tabindex="0"><span class="icon">📋</span><span class="label">Requests</span></div>
       <div class="quick-action doctor-action" data-go="/doctor/patients" tabindex="0"><span class="icon">👥</span><span class="label">Patients</span></div>
       <div class="quick-action doctor-action" data-go="/doctor/schedule" tabindex="0"><span class="icon">🗓️</span><span class="label">My calendar</span></div>
-      <div class="quick-action doctor-action" data-go="/doctor/lab-results" tabindex="0"><span class="icon">🔬</span><span class="label">Lab results</span></div>
+      <div class="quick-action doctor-action" data-go="/doctor/lab-results" tabindex="0"><span class="icon">🔬</span><span class="label">Test results</span></div>
       <div class="quick-action doctor-action" data-go="/referrals" tabindex="0"><span class="icon">↗️</span><span class="label">Referrals</span></div>
       <div class="quick-action doctor-action" data-go="/messages" tabindex="0"><span class="icon">💬</span><span class="label">Messages</span></div>
       <div class="quick-action doctor-action" data-go="/provider/earnings" tabindex="0"><span class="icon">💰</span><span class="label">Earnings</span></div>
@@ -98,13 +98,13 @@ export async function doctorPatientDetail(el, { id }) {
   };
   $('#lab', el).onclick = async () => {
     const cat = await get('/labs/catalog');
-    formModal('🔬 Order a lab test', [{ name: 'c', label: 'Test & lab', type: 'select', options: cat.map((c) => [c.id + '|' + c.lab.id, `${c.name} • ${c.lab.labName} • ${money(c.price)}`]), required: true }, { name: 'notes', label: 'Clinical notes for the lab', type: 'textarea' }], { submit: 'Order', onSubmit: async (v) => { const [catalogId, labId] = v.c.split('|'); await post('/doctor-ops/lab-requests', { patientId: p.id, labId, catalogId, notes: v.notes || undefined }); toast('✅ Test ordered - the result will come back to you'); } });
+    formModal('🔬 Order a test or scan', [{ name: 'c', label: 'Test & diagnostic center', type: 'select', options: cat.map((c) => [c.id + '|' + c.lab.id, `${c.name} • ${c.lab.labName} • ${money(c.price)}`]), required: true }, { name: 'notes', label: 'Clinical notes for the diagnostic center', type: 'textarea' }], { submit: 'Order', onSubmit: async (v) => { const [catalogId, labId] = v.c.split('|'); await post('/doctor-ops/lab-requests', { patientId: p.id, labId, catalogId, notes: v.notes || undefined }); toast('✅ Test ordered - the result will come back to you'); } });
   };
   el.addEventListener('click', (e) => { const b = e.target.closest('[data-pdf]'); if (b) download('/doctor/prescriptions/' + b.dataset.pdf + '/pdf', 'prescription.pdf').catch(toastErr); });
 }
 
 export async function doctorLabResults(el) {
-  el.innerHTML = appBar({ title: '🔬 Lab results', back: '/doctor/home', roleCls: 'doctor-title' }) + `<div id="l">${skeleton(3)}</div>`;
+  el.innerHTML = appBar({ title: '🔬 Test results', back: '/doctor/home', roleCls: 'doctor-title' }) + `<div id="l">${skeleton(3)}</div>`;
   const list = await get('/doctor-ops/lab-requests');
   $('#l', el).innerHTML = list.length ? list.map((x) => card(`${item({ avatarHtml: '<div class="avatar lab-avatar">🔬</div>', title: esc(x.testType) + ' • ' + esc(x.patient.user.name), sub: esc(x.lab.labName) + ' • ' + dt(x.createdAt), trailing: badge(x.status) })}${x.result ? (x.result.resultData?.results || []).map((r) => `<div class="kv"><span class="k">${esc(r.parameter)}</span><span class="v">${esc(r.value)} ${esc(r.unit || '')} ${r.flag && r.flag !== 'NORMAL' ? badge('FAILED', r.flag) : ''}</span></div>`).join('') + `<button class="btn btn-outline btn-sm btn-block mt8" data-pdf="${x.id}">⬇️ PDF</button>` : ''}`)).join('') : empty('🔬', 'Tests you order appear here with their results');
   el.addEventListener('click', (e) => { const b = e.target.closest('[data-pdf]'); if (b) download('/lab-results/' + b.dataset.pdf + '/pdf', 'lab-result.pdf').catch(toastErr); });
@@ -362,7 +362,7 @@ export async function labTests(el, _p, q) {
 
 export async function labCatalog(el) {
   el.innerHTML = appBar({ title: '📋 Test catalog', back: '/lab/home', roleCls: 'lab-title', actions: '<button class="action" id="add" style="color:var(--lab-color)">+ Add</button>' }) + `<div id="l">${skeleton(3)}</div>`;
-  const fields = (c = {}) => [{ name: 'name', label: 'Test name', value: c.name || '', required: true, placeholder: 'Full Blood Count (CBC)' }, { name: 'code', label: 'Code', value: c.code || '' }, { name: 'category', label: 'Category', type: 'select', options: ['Haematology', 'Chemistry', 'Microbiology', 'Serology', 'Hormones', 'Imaging', 'Molecular', 'Other'], value: c.category || 'Other' }, { name: 'price', label: 'Price (₦)', type: 'number', value: c.price ?? '', required: true }, { name: 'turnaroundHours', label: 'Turnaround (hours)', type: 'number', value: c.turnaroundHours ?? 24 }, { name: 'sampleType', label: 'Sample', value: c.sampleType || '', placeholder: 'Blood / Urine / Swab' }, { name: 'preparation', label: 'Patient preparation', value: c.preparation || '', placeholder: 'e.g. Fast 8-12 hours' }];
+  const fields = (c = {}) => [{ name: 'name', label: 'Test or scan name', value: c.name || '', required: true, placeholder: 'Full Blood Count, Chest X-ray, Pelvic ultrasound…' }, { name: 'code', label: 'Code', value: c.code || '' }, { name: 'category', label: 'Category', type: 'select', options: ['Haematology', 'Chemistry', 'Microbiology', 'Serology', 'Hormones', 'X-ray', 'Ultrasound / scan', 'CT scan', 'MRI', 'Mammography', 'ECG / Echo', 'Endoscopy', 'Molecular / PCR', 'Other'], value: c.category || 'Other' }, { name: 'price', label: 'Price (₦)', type: 'number', value: c.price ?? '', required: true }, { name: 'turnaroundHours', label: 'Turnaround (hours)', type: 'number', value: c.turnaroundHours ?? 24 }, { name: 'sampleType', label: 'Sample', value: c.sampleType || '', placeholder: 'Blood / Urine / Swab' }, { name: 'preparation', label: 'Patient preparation', value: c.preparation || '', placeholder: 'e.g. Fast 8-12 hours' }];
   const load = async () => {
     const list = await get('/lab-ops/catalog');
     $('#l', el).innerHTML = list.length ? card(list.map((c) => item({ avatarHtml: '<div class="avatar lab-avatar">🧪</div>', title: esc(c.name) + (c.isActive ? '' : ' <span class="muted">(hidden)</span>'), sub: `${esc(c.category || '')} • ${money(c.price)} • ⏱️ ${c.turnaroundHours}h`, attrs: `data-c='${esc(JSON.stringify(c))}'` })).join('')) : empty('📋', 'Add the tests you offer so patients and doctors can book them', '<button class="btn btn-lab btn-sm" id="seed">Add common tests</button>');
@@ -483,8 +483,9 @@ export async function ambulanceRequests(el, _p, q) {
 // =====================================================================
 const istat = (n, l) => `<div class="institution-stat"><div class="number">${n}</div><div class="label">${l}</div></div>`;
 export async function institutionHome(el) {
-  el.innerHTML = appBar({ title: brandTitle(), roleCls: 'institution-title' }) + verifyBanner() + `<div id="hd">${skeleton(1)}</div><div class="institution-stats" id="st"></div><div id="td"></div>
+  el.innerHTML = appBar({ title: brandTitle(), roleCls: 'institution-title' }) + verifyBanner() + `<div id="hd">${skeleton(1)}</div><div id="erb"></div><div class="institution-stats" id="st"></div><div id="td"></div>
     <div class="quick-actions">
+      <div class="quick-action emergency" data-go="/institution/er" tabindex="0"><span class="icon">🚨</span><span class="label">Emergency unit</span></div>
       <div class="quick-action institution-action" data-go="/institution/departments" tabindex="0"><span class="icon">🏢</span><span class="label">Departments</span></div>
       <div class="quick-action institution-action" data-go="/institution/staff" tabindex="0"><span class="icon">👥</span><span class="label">Staff</span></div>
       <div class="quick-action institution-action" data-go="/institution/patients" tabindex="0"><span class="icon">🛏️</span><span class="label">Patients</span></div>
@@ -494,10 +495,93 @@ export async function institutionHome(el) {
       <div class="quick-action institution-action" data-go="/institution/profile" tabindex="0"><span class="icon">⚙️</span><span class="label">Facility info</span></div>
       <div class="quick-action institution-action" data-go="/provider/earnings" tabindex="0"><span class="icon">💰</span><span class="label">Finance</span></div>
     </div>`;
+  getFresh('/institution/er').then((er) => {
+    const n = er.arrivals.filter((a) => ['REQUESTED', 'ACCEPTED'].includes(a.status)).length;
+    const box = $('#erb', el); if (!box) return;
+    box.innerHTML = n ? `<div class="banner" style="background:#FFEBEE;color:#B71C1C" data-go="/institution/er">🚨 <b>${n} emergency patient${n > 1 ? 's' : ''} on the way</b><button class="btn btn-sm btn-danger">Open</button></div>`
+      : er.settings.emergencyCare ? `<div class="banner info" data-go="/institution/er">${er.settings.erOpen ? '🟢 Taking emergency patients' : '🔴 Not taking emergency patients'} • 👨‍⚕️ ${er.settings.erDoctorsOnDuty} • 👩‍⚕️ ${er.settings.erNursesOnDuty} on duty<button class="btn btn-sm btn-outline">Update</button></div>` : '';
+  }).catch(() => null);
   const [p, s] = await Promise.all([get('/institution/profile'), get('/institution/stats')]);
   $('#hd', el).innerHTML = `<div class="welcome-text">🏥 ${esc(p.name)}</div><div class="welcome-sub">${esc([p.type, p.city, p.state].filter(Boolean).join(' • '))}</div>`;
   $('#st', el).innerHTML = istat(s.departments, 'Departments') + istat(s.doctors, 'Doctors') + istat(s.staff, 'Staff') + istat(`${s.bedsAvailable}/${s.beds}`, 'Beds free') + istat(s.occupancy + '%', 'Occupancy') + istat(s.patientsTotal, 'Patients');
   $('#td', el).innerHTML = card(cardHead('📅 Today') + `<div class="kv"><span class="k">🛏️ Admissions</span><span class="v">${s.admissionsToday}</span></div><div class="kv"><span class="k">🏠 Discharges</span><span class="v">${s.dischargesToday}</span></div><div class="kv"><span class="k">🚶 Outpatients</span><span class="v">${s.outpatientsToday}</span></div><div class="kv"><span class="k">📅 Appointments</span><span class="v">${s.appointmentsToday}</span></div><div class="kv"><span class="k">🛏️ Currently admitted</span><span class="v">${s.admitted}</span></div>`);
+}
+
+// ================= EMERGENCY UNIT (patients coming in by their own means) =================
+const ER_TYPE_LABEL = { MEDICAL: '🩺 Medical', ACCIDENT: '🚗 Accident / injury', MATERNITY: '🤰 Labour / maternity', CARDIAC: '❤️ Chest pain / heart', STROKE: '🧠 Stroke signs', BREATHING: '🫁 Breathing difficulty', CHILD: '👶 Sick child', BURN: '🔥 Burns', POISONING: '☠️ Poisoning', MENTAL: '💬 Mental health crisis' };
+const TRANSPORT_LABEL = { CAR: '🚗 car', TAXI: '🚕 taxi', BIKE: '🏍️ bike', WALK: '🚶 on foot', OTHER: 'own transport' };
+export async function institutionEr(el) {
+  el.innerHTML = appBar({ title: '🚨 Emergency unit', back: '/institution/home', roleCls: 'institution-title' }) + `<div id="board">${skeleton(2)}</div><div id="inc"></div>`;
+  let data = null;
+  const stepTimers = {};
+  const counter = (key, label, v) => `<div class="kv"><span class="k">${label}</span><span class="v stepper"><button type="button" data-step="${key}" data-d="-1" aria-label="Fewer">−</button><b id="v-${key}">${v}</b><button type="button" data-step="${key}" data-d="1" aria-label="More">+</button></span></div>`;
+  const drawBoard = () => {
+    const s = data.settings;
+    $('#board', el).innerHTML = (!s.emergencyCare ? `<div class="banner warn">Your facility is not listed for emergencies. Turn on "24-hour emergency care" so patients nearby can find you.<button class="btn btn-sm btn-primary" id="ec">Turn on</button></div>` : '')
+      + (!s.hasLocation ? `<div class="banner warn">Set your facility's location so patients see how far you are.<button class="btn btn-sm btn-primary" id="setloc">I am at the facility now</button></div>` : '')
+      + card(`<div class="row between"><div><b>${s.erOpen ? '🟢 Taking emergency patients' : '🔴 Not taking emergency patients'}</b><div class="small muted">Patients nearby see this before they choose where to go${s.erUpdatedAt ? ' • updated ' + ago(s.erUpdatedAt) : ''}</div></div>
+          <label class="check" style="margin:0"><input type="checkbox" id="open" ${s.erOpen ? 'checked' : ''} aria-label="Taking emergency patients"></label></div>
+        ${counter('erDoctorsOnDuty', '👨‍⚕️ Doctors on duty', s.erDoctorsOnDuty)}${counter('erNursesOnDuty', '👩‍⚕️ Nurses on duty', s.erNursesOnDuty)}${counter('bedsAvailable', '🛏️ Emergency beds free', s.bedsAvailable)}
+        <div class="small muted mt8">What your emergency unit handles</div>
+        <div class="er-chips">${data.services.map((x) => `<span class="chip ${s.erServices.includes(x) ? 'active' : ''}" data-svc="${esc(x)}" tabindex="0">${esc(x)}</span>`).join('')}</div>
+        <p class="small muted">Keep this current at every shift change. Patients rely on it in an emergency.</p>`, 'style="border:2px solid var(--institution-color)"');
+    const save = async (patchBody) => {
+      try { const r = await patch('/institution/er', patchBody); Object.keys(patchBody).forEach((k) => { data.settings[k] = r[k]; }); data.settings.erUpdatedAt = r.erUpdatedAt; drawBoard(); } catch (e) { toastErr(e); }
+    };
+    $('#open', el).onchange = (e) => save({ erOpen: e.target.checked });
+    // Counters save quietly a moment after the last tap, without redrawing (so quick taps are never lost).
+    $$('[data-step]', el).forEach((b) => (b.onclick = () => {
+      const k = b.dataset.step; const v = Math.max(0, (data.settings[k] || 0) + Number(b.dataset.d));
+      data.settings[k] = v; $('#v-' + k, el).textContent = v;
+      clearTimeout(stepTimers[k]);
+      stepTimers[k] = setTimeout(() => patch('/institution/er', { [k]: data.settings[k] }).then((r) => { data.settings.erUpdatedAt = r.erUpdatedAt; }).catch(toastErr), 700);
+    }));
+    $$('[data-svc]', el).forEach((c) => (c.onclick = () => { const x = c.dataset.svc; const list = data.settings.erServices.includes(x) ? data.settings.erServices.filter((y) => y !== x) : [...data.settings.erServices, x]; save({ erServices: list }); }));
+    $('#ec', el) && ($('#ec', el).onclick = () => save({ emergencyCare: true }));
+    $('#setloc', el) && ($('#setloc', el).onclick = async (e) => busy(e.target, async () => { const g = await locate({ timeout: 12000 }); await patch('/institution/profile', { lat: g.lat, lng: g.lng }); toast('📍 Location saved'); load(); }));
+  };
+  const field2 = (k, v) => (v ? `<span class="k">${k}</span><span>${esc(String(v))}</span>` : '');
+  const drawIncoming = () => {
+    const live = data.arrivals.filter((a) => ['REQUESTED', 'ACCEPTED', 'ARRIVED'].includes(a.status));
+    const past = data.arrivals.filter((a) => !live.includes(a));
+    const cardOf = (a) => {
+      const p = a.patient;
+      return card(`<div class="row"><div class="avatar" style="background:#FFEBEE">🚨</div><div class="grow"><div style="font-weight:600">${esc(p.name)}${a.forSomeoneElse ? ' <span class="small muted">(bringing someone)</span>' : ''}</div>
+          <div class="small muted">${esc(ER_TYPE_LABEL[a.type] || a.type)} • by ${TRANSPORT_LABEL[a.transport] || 'own transport'} • ${ago(a.createdAt)}</div></div>${badge(a.status)}</div>
+        ${['REQUESTED', 'ACCEPTED'].includes(a.status) ? `<div class="live-eta" data-eta="${a.id}"><b>${a.distanceKm != null ? (a.distanceKm < 1 ? Math.round(a.distanceKm * 1000) + ' m' : a.distanceKm + ' km') + ' away • ' : ''}about ${a.etaMinutes ?? '?'} min</b><div class="small muted">📡 ${a.locatedAt ? 'Position from ' + ago(a.locatedAt) : 'Waiting for position'}</div></div>` : ''}
+        ${a.notes ? `<div class="banner info">📝 ${esc(a.notes)}</div>` : ''}
+        <div class="er-med">${field2('Age / sex', [p.age != null ? p.age + ' yrs' : '', p.gender].filter(Boolean).join(' • '))}${field2('Blood group', p.bloodType)}${field2('Genotype', p.genotype)}${field2('Allergies', p.allergies)}${field2('Conditions', p.chronicConditions)}${field2('Medication', p.currentMedications)}${field2('Next of kin', [p.emergencyContact, p.emergencyPhone].filter(Boolean).join(' • '))}</div>
+        ${a.readyNote && a.status !== 'REQUESTED' ? `<div class="small muted">Told the patient: "${esc(a.readyNote)}"</div>` : ''}
+        ${a.declineReason && a.status === 'DECLINED' ? `<div class="small muted">Declined: ${esc(a.declineReason)}</div>` : ''}
+        <div class="row wrap mt8">
+          ${a.status === 'REQUESTED' ? `<button class="btn btn-success btn-sm grow" data-acc="${a.id}">✓ Accept & get ready</button><button class="btn btn-outline btn-sm" data-dec="${a.id}">Can't take</button>` : ''}
+          ${a.status === 'ACCEPTED' ? `<button class="btn btn-primary btn-sm grow" data-st="ARRIVED" data-id="${a.id}">📍 Patient arrived</button>` : ''}
+          ${a.status === 'ARRIVED' ? `<button class="btn btn-primary btn-sm grow" data-st="COMPLETED" data-id="${a.id}">✓ Handed over to the team</button>` : ''}
+          ${(a.contactPhone || p.phone) && ['REQUESTED', 'ACCEPTED'].includes(a.status) ? `<a class="btn btn-outline btn-sm" href="tel:${esc(a.contactPhone || p.phone)}">📞 Call</a>` : ''}
+        </div>`, ['REQUESTED', 'ACCEPTED'].includes(a.status) ? 'style="border-left:4px solid var(--emergency-red)"' : '');
+    };
+    $('#inc', el).innerHTML = `<div class="section-title" style="margin:12px 4px 6px">🚨 Coming in (${live.length})</div>`
+      + (live.length ? live.map(cardOf).join('') : card(empty('🏥', 'No emergency patients on their way. When someone chooses your hospital, they appear here with their medical summary and you get an alert.')))
+      + (past.length ? `<div class="section-title" style="margin:12px 4px 6px">Last 24 hours</div>` + past.map(cardOf).join('') : '');
+  };
+  const load = async () => { data = await getFresh('/institution/er'); drawBoard(); drawIncoming(); };
+  await load();
+  el.addEventListener('click', async (e) => {
+    const acc = e.target.closest('[data-acc]'), dec = e.target.closest('[data-dec]'), st = e.target.closest('[data-st]');
+    if (acc) return formModal('Accept & get ready', [{ name: 'readyNote', label: 'What should the patient do on arrival?', value: 'Come to the Emergency entrance. Our team is waiting for you.', required: true }], { submit: '✓ Accept', onSubmit: async (v) => { await post('/institution/er/' + acc.dataset.acc + '/respond', { accept: true, readyNote: v.readyNote }); toast('✅ Patient told you are ready'); load(); } });
+    if (dec) return formModal('Cannot take this patient', [{ name: 'reason', label: 'Reason (the patient sees this)', type: 'select', options: ['The emergency unit is full right now', 'No doctor available for this emergency', 'We do not handle this type of emergency', 'Equipment not available right now'] }], { submit: 'Send', onSubmit: async (v) => { await post('/institution/er/' + dec.dataset.dec + '/respond', { accept: false, reason: v.reason }); toast('The patient will choose another hospital'); load(); } });
+    if (st) await busy(st, async () => { await post('/institution/er/' + st.dataset.id + '/status', { status: st.dataset.st }); load(); });
+  });
+  const offs = [
+    on('er:new', () => { if (navigator.vibrate) navigator.vibrate([400, 100, 400, 100, 400]); toast('🚨 Emergency patient coming in'); load(); }),
+    on('er:updated', () => load()),
+    on('er:location', (d) => {
+      const box = el.querySelector(`[data-eta="${d.id}"]`); if (!box) return;
+      box.innerHTML = `<b>${d.distanceKm != null ? (d.distanceKm < 1 ? Math.round(d.distanceKm * 1000) + ' m' : d.distanceKm + ' km') + ' away • ' : ''}about ${d.etaMinutes ?? '?'} min</b><div class="small muted">📡 Position just now</div>`;
+    }),
+  ];
+  const tick = setInterval(() => navigator.onLine && load().catch(() => null), 30000); // in case live updates are blocked
+  return () => { offs.forEach((f) => f()); clearInterval(tick); };
 }
 
 export async function institutionProfile(el) {
@@ -530,7 +614,7 @@ export async function institutionStaff(el) {
     $('#l', el).innerHTML = list.length ? list.map((s) => `<div class="staff-card"><div class="row">${avatar(s.staffRole === 'NURSE' ? 'NURSE' : s.staffRole === 'DOCTOR' ? 'DOCTOR' : 'INSTITUTION', s.user?.avatarUrl)}<div class="staff-info grow"><div class="staff-name">${esc(s.name)} ${s.user?.verificationStatus === 'VERIFIED' ? '✅' : ''}</div><div class="staff-role">${esc(s.title || s.staffRole.replace('_', ' ').toLowerCase())}${s.department ? ' • ' + esc(s.department.name) : ''}</div></div><div class="staff-status">${badge(s.status)}</div></div>
       <div class="row mt8">${s.status === 'ACTIVE' ? `<button class="btn btn-outline btn-sm grow" data-ss="SUSPENDED" data-id="${s.id}">Suspend</button>` : s.status === 'SUSPENDED' ? `<button class="btn btn-outline btn-sm grow" data-ss="ACTIVE" data-id="${s.id}">Reactivate</button>` : ''}${s.status !== 'LEFT' ? `<button class="btn btn-outline btn-sm grow" data-ss="LEFT" data-id="${s.id}">Remove</button>` : ''}${s.user ? `<button class="btn btn-outline btn-sm" data-go="/chat/${s.user.id}">💬</button>` : ''}</div></div>`).join('') : empty('👥', 'Enrol doctors, nurses and staff by email. They join with their N-Health account.');
   };
-  $('#add', el).onclick = () => formModal('➕ Enrol staff', [{ name: 'name', label: 'Full name', required: true }, { name: 'email', label: 'Email', type: 'email', required: true }, { name: 'phone', label: 'Phone', type: 'tel' }, { name: 'staffRole', label: 'Role', type: 'select', options: [['DOCTOR', 'Doctor'], ['NURSE', 'Nurse'], ['PHARMACIST', 'Pharmacist'], ['LAB_SCIENTIST', 'Lab scientist'], ['ADMIN', 'Administrator'], ['OTHER', 'Other']] }, { name: 'title', label: 'Title', placeholder: 'Consultant Cardiologist' }, { name: 'departmentId', label: 'Department', type: 'select', options: [['', '—'], ...depts.map((d) => [d.id, d.name])] }], { submit: 'Send invitation', onSubmit: async (v) => { await post('/institution/staff', { ...v, departmentId: v.departmentId || undefined }); toast('✉️ Invitation sent'); load(); } });
+  $('#add', el).onclick = () => formModal('➕ Enrol staff', [{ name: 'name', label: 'Full name', required: true }, { name: 'email', label: 'Email', type: 'email', required: true }, { name: 'phone', label: 'Phone', type: 'tel' }, { name: 'staffRole', label: 'Role', type: 'select', options: [['DOCTOR', 'Doctor'], ['NURSE', 'Nurse'], ['PHARMACIST', 'Pharmacist'], ['LAB_SCIENTIST', 'Lab scientist / radiographer'], ['ADMIN', 'Administrator'], ['OTHER', 'Other']] }, { name: 'title', label: 'Title', placeholder: 'Consultant Cardiologist' }, { name: 'departmentId', label: 'Department', type: 'select', options: [['', '—'], ...depts.map((d) => [d.id, d.name])] }], { submit: 'Send invitation', onSubmit: async (v) => { await post('/institution/staff', { ...v, departmentId: v.departmentId || undefined }); toast('✉️ Invitation sent'); load(); } });
   el.addEventListener('click', async (e) => { const b = e.target.closest('[data-ss]'); if (b && (b.dataset.ss !== 'LEFT' || await confirmBox('Remove this staff member?', { danger: true, ok: 'Remove' }))) { await patch('/institution/staff/' + b.dataset.id, { status: b.dataset.ss }).catch(toastErr); load(); } });
   load();
 }

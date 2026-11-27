@@ -5,7 +5,7 @@ const ROLE_LABEL: Record<string, string> = {
   PATIENT: 'Patients',
   DOCTOR: 'Doctors',
   PHARMACY: 'Pharmacies',
-  LAB: 'Labs',
+  LAB: 'Diagnostic centers',
   AMBULANCE: 'Ambulances',
   NURSE: 'Nurses',
   ADMIN: 'Admins',

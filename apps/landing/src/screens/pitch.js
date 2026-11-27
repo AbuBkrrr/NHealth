@@ -10,7 +10,7 @@ import { COUNTRIES } from './data.js';
 const PATIENT = [
   ['🩺', 'Doctors', 'doctor-action', 'doctor-avatar', 'See a verified doctor', 'Book in-person visits on real calendars. Every provider is licence- and ID-checked.'],
   ['💊', 'Pharmacy', 'pharmacy-action', 'pharmacy-avatar', 'Medicines delivered', 'Order from nearby pharmacies. Prescription drugs only with a valid prescription.'],
-  ['🔬', 'Labs', 'lab-action', 'lab-avatar', 'Lab tests & results', 'Book tests and get results straight to you and your doctor.'],
+  ['🔬', 'Diagnostics', 'lab-action', 'lab-avatar', 'Tests, X-rays & scans', 'Book tests and get results straight to you and your doctor.'],
   ['👩‍⚕️', 'Nurses', 'nurse-action', 'nurse-avatar', 'Nurse at home', 'Home care visits, paid in cash or in the app.'],
   ['🚑', 'Ambulance', 'ambulance-action', 'ambulance-avatar', 'Emergency help fast', 'One tap sends the nearest ambulance your location.'],
   ['🏥', 'Facilities', 'institution-action', 'institution-avatar', 'Hospitals & clinics', 'Find verified facilities near you with their departments.'],
@@ -106,7 +106,7 @@ function leadForm(slug) {
       ${field({ name: 'name', label: 'Your name', required: true, autocomplete: 'name' })}
       ${field({ name: 'email', label: 'Email', type: 'email', autocomplete: 'email' })}
       ${field({ name: 'phone', label: 'Phone / WhatsApp', type: 'tel', autocomplete: 'tel' })}
-      ${field({ name: 'interest', label: 'I am', type: 'select', options: [['PATIENT', 'A patient / family member'], ['DOCTOR', 'A doctor'], ['NURSE', 'A nurse'], ['PHARMACY', 'A pharmacy'], ['LAB', 'A laboratory'], ['AMBULANCE', 'An ambulance service'], ['INSTITUTION', 'A hospital / clinic'], ['PARTNER', 'A partner / HMO / NGO'], ['INVESTOR', 'An investor']] })}
+      ${field({ name: 'interest', label: 'I am', type: 'select', options: [['PATIENT', 'A patient / family member'], ['DOCTOR', 'A doctor'], ['NURSE', 'A nurse'], ['PHARMACY', 'A pharmacy'], ['LAB', 'A diagnostic center'], ['AMBULANCE', 'An ambulance service'], ['INSTITUTION', 'A hospital / clinic'], ['PARTNER', 'A partner / HMO / NGO'], ['INVESTOR', 'An investor']] })}
       ${field({ name: 'organization', label: 'Organisation (optional)' })}
       ${field({ name: 'country', label: 'Country', type: 'select', options: COUNTRIES.map((c) => [c[0], c[1]]), value: guess })}
       ${field({ name: 'message', label: 'Message (optional)', type: 'textarea' })}

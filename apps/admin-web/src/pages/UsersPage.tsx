@@ -48,7 +48,7 @@ export function UsersPage() {
         <input placeholder="Search name or email" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         <select value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
           <option value="">All roles</option>
-          {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          {ROLES.map((r) => <option key={r} value={r}>{r === 'LAB' ? 'DIAGNOSTIC CENTER' : r}</option>)}
         </select>
         <select value={isActive} onChange={(e) => { setIsActive(e.target.value); setPage(1); }}>
           <option value="">All statuses</option>

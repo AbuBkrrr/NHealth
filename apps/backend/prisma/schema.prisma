@@ -233,6 +233,7 @@ model PatientProfile {
   orders            PharmacyOrder[]
   labTests          LabTest[]
   emergencyRequests EmergencyRequest[]
+  erArrivals        ErArrival[]
   donations         Donation[]
   insurancePolicies InsurancePolicy[]
   nurseRequests     NurseRequest[]
@@ -575,6 +576,37 @@ model EmergencyRequest {
 
   @@index([patientId])
   @@index([ambulanceId])
+}
+
+/// A patient going to a hospital emergency unit by their own means; the hospital accepts and prepares before they arrive.
+model ErArrival {
+  id             String             @id @default(uuid())
+  patientId      String
+  patient        PatientProfile     @relation(fields: [patientId], references: [id])
+  institutionId  String
+  institution    InstitutionProfile @relation(fields: [institutionId], references: [id])
+  type           String             @default("MEDICAL")
+  notes          String?
+  transport      String             @default("CAR") // CAR | TAXI | BIKE | WALK | OTHER
+  forSomeoneElse Boolean            @default(false)
+  status         String             @default("REQUESTED") // REQUESTED | ACCEPTED | DECLINED | ARRIVED | COMPLETED | CANCELLED
+  startLat       Float
+  startLng       Float
+  lat            Float?
+  lng            Float?
+  locatedAt      DateTime?
+  etaMinutes     Int?
+  readyNote      String?
+  declineReason  String?
+  respondedBy    String?
+  contactPhone   String?
+  createdAt      DateTime           @default(now())
+  acceptedAt     DateTime?
+  arrivedAt      DateTime?
+  closedAt       DateTime?
+
+  @@index([patientId, createdAt])
+  @@index([institutionId, status])
 }
 
 // ============ NURSE ============
@@ -1124,27 +1156,34 @@ model HealthDocument {
 }
 
 model InstitutionProfile {
-  id            String   @id @default(uuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name          String
-  type          String // HOSPITAL | CLINIC | DIAGNOSTIC | MATERNITY | SPECIALIST | OTHER
-  licenseNumber String
-  email         String?
-  phone         String?
-  address       String?
-  city          String?
-  state         String?
-  country       String   @default("NG")
-  lat           Float?
-  lng           Float?
-  bedsTotal     Int      @default(0)
-  bedsAvailable Int      @default(0)
-  emergencyCare Boolean  @default(false)
-  description   String?
-  rating        Float    @default(0)
-  reviewCount   Int      @default(0)
-  createdAt     DateTime @default(now())
+  id              String      @id @default(uuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  type            String // HOSPITAL | CLINIC | DIAGNOSTIC | MATERNITY | SPECIALIST | OTHER
+  licenseNumber   String
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  country         String      @default("NG")
+  lat             Float?
+  lng             Float?
+  bedsTotal       Int         @default(0)
+  bedsAvailable   Int         @default(0)
+  emergencyCare   Boolean     @default(false)
+  // Emergency board: what a patient driving in can count on right now (set by the hospital).
+  erOpen          Boolean     @default(true)
+  erDoctorsOnDuty Int         @default(0)
+  erNursesOnDuty  Int         @default(0)
+  erServices      String[]    @default([])
+  erUpdatedAt     DateTime?
+  erArrivals      ErArrival[]
+  description     String?
+  rating          Float       @default(0)
+  reviewCount     Int         @default(0)
+  createdAt       DateTime    @default(now())
 
   // % of an affiliated (ACTIVE staff) provider's net earnings paid to the institution's account; the rest goes to the provider.
   staffSharePercent Int                  @default(100)

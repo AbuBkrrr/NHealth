@@ -8,10 +8,10 @@ const bus = new EventTarget();
 export const on = (evt, fn) => { const h = (e) => fn(e.detail); bus.addEventListener(evt, h); return () => bus.removeEventListener(evt, h); };
 export const emit = (evt, data) => socket?.emit(evt, data);
 
-const FORWARD = ['notification', 'message:new', 'message:read', 'message:typing', 'appointment:new', 'appointment:updated', 'emergency:new', 'emergency:claimed', 'emergency:accepted', 'emergency:status', 'emergency:cancelled', 'emergency:alert', 'ambulance:location', 'order:new', 'order:updated', 'labresult:new', 'prescription:new', 'payment:confirmed', 'payment:new', 'nurse:new', 'nurse:claimed', 'nurse:accepted'];
+const FORWARD = ['notification', 'message:new', 'message:read', 'message:typing', 'appointment:new', 'appointment:updated', 'emergency:new', 'emergency:claimed', 'emergency:accepted', 'emergency:status', 'emergency:cancelled', 'emergency:alert', 'ambulance:location', 'order:new', 'order:updated', 'labresult:new', 'prescription:new', 'payment:confirmed', 'payment:new', 'nurse:new', 'nurse:claimed', 'nurse:accepted', 'er:new', 'er:updated', 'er:location'];
 
 // Live updates that change what screens show: saved reads are refreshed on next use.
-const QUIET = new Set(['message:typing', 'ambulance:location']);
+const QUIET = new Set(['message:typing', 'ambulance:location', 'er:location']);
 let attempt = 0;
 export async function connect() {
   disconnect();
