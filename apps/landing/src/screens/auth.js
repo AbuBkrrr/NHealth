@@ -1,6 +1,6 @@
 import { get, post, auth, ApiError } from '../lib/api.js';
 import { state } from '../lib/store.js';
-import { esc, $, $$, toast, toastErr, field, readForm, formModal, modal } from '../lib/ui.js';
+import { esc, $, $$, toast, toastErr, field, readForm, formModal, modal, logo } from '../lib/ui.js';
 import { startSession } from '../main.js';
 import { signupAttribution, adEvent } from '../lib/marketing.js';
 import { SPECIALTIES, PROVIDER_ROLES, INSTITUTION_TYPES, COUNTRIES, NG_STATES } from './data.js';
@@ -27,7 +27,7 @@ export function authScreen(el, _params = {}, query = {}) {
   const draw = () => {
     if (!s.side) {
       el.innerHTML = `<div class="auth-screen">
-        <div class="auth-header"><div class="icon">🏥</div><h2>Welcome to N-Health</h2><p>Who are you signing in as?</p></div>
+        <div class="auth-header"><div class="icon">${logo(64)}</div><h2>Welcome to N-Health</h2><p>Who are you signing in as?</p></div>
         <div class="auth-choose">
           <button type="button" class="role-card role-card-big" data-side="PATIENT">${CARDS.PATIENT}<span class="go">Continue as a patient →</span></button>
           <button type="button" class="role-card role-card-big provider" data-side="PROVIDER">${CARDS.PROVIDER}<span class="go">Continue as a provider →</span></button>
@@ -199,7 +199,7 @@ async function forgot() {
   });
 }
 
-export function legal(kind) {
+export function legalHtml(kind) {
   const terms = `<div class="modal-title">📜 Terms of Service</div><div class="muted" style="line-height:1.6">
     <p><b>1. Service.</b> N-Health connects patients with independent, verified healthcare providers. N-Health does not itself practise medicine. In an emergency always call your local emergency number (112 / 767 in Nigeria).</p>
     <p><b>2. Accounts.</b> You must give accurate information. Providers must hold valid licences and pass identity (KYC) and licence verification before serving patients.</p>
@@ -214,5 +214,10 @@ export function legal(kind) {
     <p><b>Why:</b> to deliver care you request, keep you safe, prevent fraud and meet legal duties. Providers see your records only when you book or are treated by them; every access is logged and visible to you in Settings → Privacy.</p>
     <p><b>Your rights:</b> access and download your data, correct it, withdraw consent, or delete your account at any time from Settings. Contact: privacy@nhealth.com.ng.</p>
     <p><b>We never sell your data.</b> Payment card details are handled only by our PCI-DSS certified payment partners.</p></div>`;
-  modal(kind === 'terms' ? terms : privacy);
+  return kind === 'terms' ? terms : privacy;
+}
+export const legal = (kind) => modal(legalHtml(kind));
+/** Public pages for the app stores and links: /#/legal/privacy and /#/legal/terms (also /privacy and /terms). */
+export function legalScreen(el, { kind }) {
+  el.innerHTML = `<div class="pp-hero">${logo(36)}<b>N-Health</b></div><div class="card legal-page">${legalHtml(kind === 'terms' ? 'terms' : 'privacy')}</div>`;
 }

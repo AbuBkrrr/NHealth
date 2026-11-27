@@ -88,7 +88,12 @@ export function appBar({ title, back, roleCls = '', actions = '', danger = false
   return `${statusBar()}<div class="app-bar" ${style}>${left}<div class="title ${roleCls}" ${danger ? 'style="color:white"' : ''}>${title}</div><div class="app-bar-actions">${actions === null ? '' : actions || defaultActions}</div></div>`;
 }
 // Original design: patients see N-Health, every provider sees N-Provider (purple).
-export const brandTitle = () => (state.user && state.user.role !== 'PATIENT' ? 'N-<span>Provider</span>' : 'N-<span>Health</span>');
+const LOGO_PATHS = '<path d="M206 96h100a14 14 0 0 1 14 14v96h96a14 14 0 0 1 14 14v72a14 14 0 0 1-14 14h-96v96a14 14 0 0 1-14 14H206a14 14 0 0 1-14-14v-96H96a14 14 0 0 1-14-14v-72a14 14 0 0 1 14-14h96v-96a14 14 0 0 1 14-14z" fill="#fff"/><path d="M112 256h88l24-52 36 108 28-72 14 16h98" fill="none" stroke="#1A73E8" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>';
+/** The public web address for links people share or scan (inside the App Store / Play Store app the page itself runs on localhost). */
+export const webOrigin = () => (window.Capacitor?.isNativePlatform?.() ? 'https://www.nhealth.com.ng' : location.origin);
+/** The N-Health logo (inline, so it shows offline and on 2G with no extra download). */
+export const logo = (size = 28, cls = '') => `<svg class="nh-logo ${cls}" viewBox="0 0 512 512" width="${size}" height="${size}" aria-hidden="true"><rect width="512" height="512" rx="116" fill="#1A73E8"/>${LOGO_PATHS}</svg>`;
+export const brandTitle = () => logo(26) + (state.user && state.user.role !== 'PATIENT' ? 'N-<span>Provider</span>' : 'N-<span>Health</span>');
 
 export function tabs(list, active, attr = 'data-tab') {
   return `<div class="tab-container">${list.map(([k, label]) => `<div class="tab ${k === active ? 'active' : ''}" ${attr}="${k}" tabindex="0">${label}</div>`).join('')}</div>`;

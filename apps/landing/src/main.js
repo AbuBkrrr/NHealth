@@ -5,6 +5,7 @@ import { state, setState, subscribe } from './lib/store.js';
 import { render, go, back, home, onNav, current, softRefresh, currentPattern } from './lib/router.js';
 import { connect, disconnect } from './lib/realtime.js';
 import { registerSW } from './lib/push.js';
+import { initInstallPrompt } from './lib/install.js';
 import { toast, esc, $ } from './lib/ui.js';
 import { t } from './lib/i18n.js';
 import { S, P, V } from './screens/index.js';
@@ -47,7 +48,10 @@ export async function startSession(token, user) {
   setState({ user });
   connect();
   refreshUnread();
-  go(home(user.role), { replace: true });
+  // Came from a provider's flyer/page: continue there after signing in.
+  let next = null;
+  try { next = sessionStorage.getItem('nh_after_login'); sessionStorage.removeItem('nh_after_login'); } catch { /* */ }
+  go(next && /^\/provider\/[\w-]+$/.test(next) ? next : home(user.role), { replace: true });
   warmUp();
 }
 export function logout(msg) {
@@ -150,10 +154,19 @@ const DEFAULT_CONFIG = { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, e
     // Tracking links / QR codes: https://www.<domain>/go/<slug>?utm_... -> pitch page
     const goM = location.pathname.match(/^\/go(?:\/([^/?#]+))?\/?$/);
     if (goM) history.replaceState(null, '', '/' + location.search + '#/go' + (goM[1] ? '/' + goM[1] : ''));
+    // Store listings link to https://www.<domain>/privacy and /terms
+    const legalM = location.pathname.match(/^\/(privacy|terms)\/?$/);
+    if (legalM) history.replaceState(null, '', '/#/legal/' + legalM[1]);
+    // Provider flyers / page links: https://www.<domain>/p/<providerId>?ref=CODE&src=flyer -> that provider's public page
+    const pM = location.pathname.match(/^\/p\/([\w-]{6,64})\/?$/);
+    if (pM) {
+      if (q.get('ref')) { try { localStorage.setItem('nh_ref', q.get('ref').toUpperCase().slice(0, 20)); } catch { /* */ } }
+      history.replaceState(null, '', '/#/p/' + pM[1] + (q.get('src') ? '?src=' + encodeURIComponent(q.get('src')) : ''));
+    }
     if (q.get('topup')) { sessionStorage.setItem('nh_topup', q.get('topup')); history.replaceState(null, '', location.pathname + '#/patient/wallet'); }
     if (q.get('kyc')) history.replaceState(null, '', location.pathname + '#/kyc');
     // Invite links: https://www.<domain>/?ref=CODE -> sign-up with the friend's code filled in
-    if (q.get('ref')) { try { localStorage.setItem('nh_ref', q.get('ref').toUpperCase().slice(0, 20)); } catch { /* */ } history.replaceState(null, '', location.pathname + (state.user ? '' : '#/auth?mode=register')); }
+    if (q.get('ref') && !pM) { try { localStorage.setItem('nh_ref', q.get('ref').toUpperCase().slice(0, 20)); } catch { /* */ } history.replaceState(null, '', location.pathname + (state.user ? '' : '#/auth?mode=register')); }
     if (q.get('paid')) { sessionStorage.setItem('nh_paid', q.get('paid')); history.replaceState(null, '', location.pathname + '#/patient/appointments'); }
     if (q.get('settle')) { sessionStorage.setItem('nh_settle', q.get('settle')); history.replaceState(null, '', location.pathname + '#/provider/earnings'); }
     render();
@@ -162,6 +175,7 @@ const DEFAULT_CONFIG = { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, e
     if (state.user) { warmUp(); syncOutbox(); }
   });
   registerSW();
+  initInstallPrompt();
 })();
 
 /** After returning from a card checkout: the server verifies the payment with the gateway before marking it paid. */

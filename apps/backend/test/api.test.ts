@@ -639,3 +639,26 @@ describe('identity form, role changes, blood banks and medicines', () => {
     expect(meds.body[0]).toMatchObject({ price: 1500, requiresPrescription: true, pharmacy: { name: 'Med ' + tag } });
   });
 });
+
+describe('provider flyers and public pages', () => {
+  it('shows a public page without sign-in, counts flyer scans once per device, and reports them to the provider', async () => {
+    const tag = uniq();
+    const ph = await register('PHARMACY', { pharmacyName: 'Flyer Pharmacy ' + tag, licenseNumber: 'PCN-F' + tag, address: '1 Ring Road' });
+    const pub = await request(app).get(`/api/public/providers/${ph.user.id}`);
+    expect(pub.status).toBe(200);
+    expect(pub.body).toMatchObject({ id: ph.user.id, role: 'PHARMACY', name: 'Flyer Pharmacy ' + tag, action: 'Order medicines' });
+    expect(pub.body.referralCode).toBeUndefined();
+    expect(pub.body.email).toBeUndefined();
+    expect(pub.body.phone).toBeUndefined();
+    // Patients have no public page
+    const pat = await register('PATIENT');
+    expect((await request(app).get(`/api/public/providers/${pat.user.id}`)).status).toBe(404);
+    const visit = (deviceId: string, source = 'flyer') => request(app).post(`/api/public/providers/${ph.user.id}/visit`).send({ deviceId, source });
+    await visit('dev-a-' + tag); await visit('dev-a-' + tag); await visit('dev-b-' + tag); await visit('dev-c-' + tag, 'link');
+    const me = await request(app).get('/api/flyer/me').set(auth(ph.token));
+    expect(me.status).toBe(200);
+    expect(me.body.stats).toMatchObject({ scans: 2, last30: 2, people: 3, joined: 0 });
+    expect(me.body.referralCode).toBeTruthy();
+    expect((await request(app).get('/api/flyer/me').set(auth(pat.token))).status).toBe(403);
+  });
+});

@@ -1,7 +1,7 @@
 // Route table: every screen of the app, guarded by role.
 import { route } from '../lib/router.js';
 import { state } from '../lib/store.js';
-import { authScreen } from './auth.js';
+import { authScreen, legalScreen } from './auth.js';
 import { pitchScreen } from './pitch.js';
 
 // Screens load in separate files per area, so a phone on 2G downloads only what it needs first.
@@ -20,6 +20,7 @@ export const S = lazyModule(() => import('./shared.js'));
 export const P = lazyModule(() => import('./patient.js'));
 export const V = lazyModule(() => import('./providers.js'));
 export const G = lazyModule(() => import('./gigs.js'));
+const F = lazyModule(() => import('./flyer.js'));
 const C = lazyModule(() => import('./common.js'));
 /** Provider home pages end with the invite card (patients have it inside their home). */
 const withInvite = (screen) => async (el, ...a) => {
@@ -31,6 +32,11 @@ const withInvite = (screen) => async (el, ...a) => {
     el.insertAdjacentHTML('beforeend', `<div class="card jobs-card"><div class="row"><div style="font-size:28px">💼</div><div class="grow"><b>Health jobs</b><div class="small muted">Recruit nurses, doctors, pharmacists, lab scientists and more${worker ? ', or find shifts and jobs yourself' : ''}.</div></div></div>
       <div class="row mt8"><button class="btn btn-primary btn-sm grow" data-go="/hiring">Post a job</button>${worker ? '<button class="btn btn-outline btn-sm grow" data-go="/jobs">Find jobs</button>' : ''}</div></div>`);
   }
+  // The provider's N-Health flyer: a QR code customers scan to land on their page.
+  if (el.isConnected && !el.querySelector('.flyer-card')) {
+    el.insertAdjacentHTML('beforeend', `<div class="card flyer-card"><div class="row"><div style="font-size:28px">📣</div><div class="grow"><b>Your N-Health flyer</b><div class="small muted">A flyer with your QR code. Customers scan it and land on your page to book or order.</div></div></div>
+      <button class="btn btn-primary btn-sm btn-block mt8" data-go="/flyer">Get my flyer</button></div>`);
+  }
   if (html && el.isConnected && !el.querySelector('.invite-card')) el.insertAdjacentHTML('beforeend', html);
   if (html) C.loadInviteStats(el);
   return r;
@@ -41,9 +47,11 @@ const PROVIDERS = ['DOCTOR', 'NURSE', 'LAB', 'PHARMACY', 'AMBULANCE', 'INSTITUTI
 
 // Public
 route('/auth', authScreen, { public: true, nav: false });
+route('/legal/:kind', legalScreen, { public: true, nav: false });
 route('/go', pitchScreen, { public: true, nav: false });
 route('/go/:slug', pitchScreen, { public: true, nav: false });
 route('/e/:token', P.publicCardScreen, { public: true, nav: false });
+route('/p/:id', F.publicProviderScreen, { public: true, nav: false });
 
 // Shared (all roles)
 route('/notifications', S.notificationsScreen);
@@ -57,6 +65,7 @@ route('/articles', S.articlesScreen);
 route('/articles/:slug', S.articleScreen);
 route('/affiliations', S.affiliationsScreen);
 route('/referrals', V.referralsScreen, { roles: PROVIDERS });
+route('/flyer', F.flyerScreen, { roles: PROVIDERS });
 route('/provider/schedule', S.scheduleScreen, { roles: ['DOCTOR', 'NURSE', 'LAB'] });
 route('/provider/earnings', S.earningsScreen, { roles: PROVIDERS });
 route('/provider/:userId', P.providerDetailScreen);

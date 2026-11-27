@@ -33,6 +33,9 @@ const DEFAULT_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:4173',
   'http://localhost:8081',
+  // The iPhone / Android app shells (Capacitor) load the web app from these origins.
+  'capacitor://localhost',
+  'https://localhost',
 ];
 
 /** CORS_ORIGIN may be "*" (dev only) or a comma-separated allow-list added to the defaults. */

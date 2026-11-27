@@ -100,6 +100,6 @@ Emergencies (ambulance tracking, and going to a hospital yourself with the hospi
 
 Nigerian facility directory (72,000+ facilities listed before they join; sources, licences, coverage and gaps): [docs/FACILITY_DIRECTORY.md](docs/FACILITY_DIRECTORY.md).
 
-Coins (1 coin = ₦10, shown as coins) and invite rewards: [docs/COINS_AND_INVITES.md](docs/COINS_AND_INVITES.md). Health jobs for providers and health workers: [docs/HEALTH_JOBS.md](docs/HEALTH_JOBS.md). Licences and registrations to confirm with a lawyer: [docs/REGULATORY_CHECKLIST.md](docs/REGULATORY_CHECKLIST.md).
+Coins (1 coin = ₦10, shown as coins) and invite rewards: [docs/COINS_AND_INVITES.md](docs/COINS_AND_INVITES.md). Health jobs for providers and health workers: [docs/HEALTH_JOBS.md](docs/HEALTH_JOBS.md). Licences and registrations to confirm with a lawyer: [docs/REGULATORY_CHECKLIST.md](docs/REGULATORY_CHECKLIST.md). Provider flyers with QR codes: [docs/PROVIDER_FLYERS.md](docs/PROVIDER_FLYERS.md). Install prompt, App Store and Google Play: [docs/APP_STORES.md](docs/APP_STORES.md).
 
 Own server: [docs/DOCKER_DEPLOY.md](docs/DOCKER_DEPLOY.md) for a server that already runs Docker apps (N-Health runs in its own containers, built by GitHub), or [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md) for a plain Debian server.

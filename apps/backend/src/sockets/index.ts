@@ -7,7 +7,7 @@ import { prisma } from '../config/prisma';
 export function initSockets(httpServer: HttpServer) {
   const origins = (env.corsOrigin || '').split(',').map((s) => s.trim()).filter(Boolean);
   const io = new Server(httpServer, {
-    cors: { origin: origins.includes('*') ? true : ['https://www.nhealth.com.ng', 'https://nhealth.com.ng', 'http://localhost:5173', ...origins] },
+    cors: { origin: origins.includes('*') ? true : ['https://www.nhealth.com.ng', 'https://nhealth.com.ng', 'http://localhost:5173', 'capacitor://localhost', 'https://localhost', ...origins] },
   });
 
   // Every socket must present the same JWT used for REST calls.

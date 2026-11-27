@@ -18,7 +18,8 @@ function precacheManifest() {
         if (f.isDirectory()) walk(p); else files.push('/' + path.relative(dir, p).split(path.sep).join('/'));
       });
       walk(dir);
-      const keep = files.filter((f) => /^\/(assets|icons)\//.test(f) || f === '/manifest.webmanifest').sort();
+      // Only the small icons the app itself shows; the big ones (install, store, splash) are fetched by the phone when needed.
+      const keep = files.filter((f) => /^\/assets\//.test(f) || /^\/icons\/(icon\.svg|icon-(32|96|192)\.png)$/.test(f) || f === '/manifest.webmanifest').sort();
       const version = crypto.createHash('sha256').update(keep.join('|') + fs.readFileSync(path.join(dir, 'index.html'))).digest('hex').slice(0, 12);
       const sw = path.join(dir, 'sw.js');
       const src = fs.readFileSync(sw, 'utf8');

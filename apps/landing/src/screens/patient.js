@@ -1,6 +1,6 @@
 import { get, getFresh, post, postLater, patch, del, download } from '../lib/api.js';
 import { state } from '../lib/store.js';
-import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile, coinValue } from '../lib/ui.js';
+import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile, coinValue, webOrigin } from '../lib/ui.js';
 import { on } from '../lib/realtime.js';
 import { go } from '../lib/router.js';
 import { createMap } from '../lib/map.js';
@@ -105,7 +105,7 @@ export async function walletScreen(el, _p, q) {
     const coinsWanted = Math.floor(Number($('#amt', el).value));
     if (!(coinsWanted >= 10)) throw new Error('Minimum top-up is 10 coins');
     const amount = coinsWanted * coinValue();
-    const r = await post('/credits/purchase/initiate', { amount, gateway: gw, currency: 'NGN', channel: pm, returnUrl: location.origin + '/' });
+    const r = await post('/credits/purchase/initiate', { amount, gateway: gw, currency: 'NGN', channel: pm, returnUrl: webOrigin() + '/' });
     sessionStorage.setItem('nh_topup', r.internalRef);
     if (r.checkoutUrl) location.href = r.checkoutUrl;
     else throw new Error('Checkout is unavailable for this gateway right now');
@@ -504,7 +504,7 @@ const LISTING_CATS = {
 const LISTING_ICON = { TEACHING_HOSPITAL: '🏛️', FEDERAL_MEDICAL_CENTRE: '🏥', GENERAL_HOSPITAL: '🏥', SPECIALIST_HOSPITAL: '🏥', HOSPITAL: '🏥', CLINIC: '🩺', PRIMARY_HEALTH_CENTRE: '🩺', HEALTH_POST: '🩺', MATERNITY: '🤱', DIAGNOSTIC: '🔬', BLOOD_BANK: '🩸', PHARMACY: '💊', DENTAL: '🦷', EYE: '👁️', NURSING_HOME: '🛏️', HMO: '🛡️', OTHER: '🏥' };
 export function listingCard(x, opts = {}) {
   const where = [x.address, x.lga, x.state].filter(Boolean).join(', ');
-  const invite = `Hello ${x.name}, patients are looking for you on N-Health. Join free and receive bookings: ${location.origin}/?ref=${encodeURIComponent(state.user?.referralCode || '')}`;
+  const invite = `Hello ${x.name}, patients are looking for you on N-Health. Join free and receive bookings: ${webOrigin()}/?ref=${encodeURIComponent(state.user?.referralCode || '')}`;
   return `<div class="card listing-card"><div class="row"><div class="avatar institution-avatar">${LISTING_ICON[x.category] || '🏥'}</div><div class="grow"><div style="font-weight:600">${esc(x.name)}</div>
       <div class="small muted">${esc(x.categoryLabel)}${x.ownership ? ' • ' + esc(x.ownership) : ''}${where ? ' • ' + esc(where) : ''}</div></div>${x.distanceKm != null ? `<div class="small" style="white-space:nowrap"><b>${x.distanceKm} km</b></div>` : ''}</div>
     ${x.bloodService === 'HOSPITAL' && opts.blood ? '<div class="small" style="color:#B71C1C;margin-top:4px">🩸 Hospital blood bank - call to confirm blood is available</div>' : x.bloodService === 'BLOOD_BANK' ? '<div class="small" style="color:#B71C1C;margin-top:4px">🩸 Blood bank / donation centre</div>' : ''}
@@ -863,7 +863,7 @@ export async function campaignScreen(el, { id }) {
     (c.donations?.length ? card(cardHead('💚 Recent donations') + c.donations.map((d) => item({ icon: '💚', title: esc(d.donor) + ' • ' + money(d.amount), sub: esc(d.message || '') + ' ' + ago(d.createdAt) })).join('')) : '') + (mine ? '<div id="pl"></div>' : '');
   $('#give', el)?.addEventListener('click', () => donateModal(c.id, c.title, () => campaignScreen(el, { id })));
   $('#pledge', el)?.addEventListener('click', () => formModal('🩸 Pledge to donate', [{ name: 'scheduledAt', label: 'When can you come?', type: 'datetime-local', required: true }], { submit: 'Pledge', onSubmit: async (v) => { const r = await post('/donations/pledges', { type: c.type, campaignId: c.id, scheduledAt: new Date(v.scheduledAt).toISOString() }); modal(`<div class="eligibility-result success"><div class="icon">💚</div><div class="title">Thank you!</div><div class="details">Contact <b>${esc(r.contact?.name || '')}</b>${r.contact?.phone ? ` on <a href="tel:${esc(r.contact.phone)}">${esc(r.contact.phone)}</a>` : ''} at ${esc(r.contact?.location || '')} to confirm.</div></div>`); } }));
-  $('#share', el).onclick = () => { const text = `${c.title} - help via N-Health: ${location.origin}/#/donations/campaign/${c.id}`; navigator.share ? navigator.share({ text }).catch(() => null) : navigator.clipboard?.writeText(text).then(() => toast('📋 Link copied')); };
+  $('#share', el).onclick = () => { const text = `${c.title} - help via N-Health: ${webOrigin()}/#/donations/campaign/${c.id}`; navigator.share ? navigator.share({ text }).catch(() => null) : navigator.clipboard?.writeText(text).then(() => toast('📋 Link copied')); };
   if (mine) {
     const pl = await get('/donations/campaigns/' + id + '/pledges');
     $('#pl', el).innerHTML = card(cardHead('🙋 Donors who pledged') + (pl.length ? pl.map((x) => `${item({ icon: '🙋', title: esc(x.donor.name), sub: (x.scheduledAt ? dt(x.scheduledAt) : '') + (x.donor.phone ? ' • ' + esc(x.donor.phone) : ''), trailing: badge(x.status) })}${x.status === 'SCHEDULED' ? `<div class="row mb8"><button class="btn btn-success btn-sm grow" data-done="${x.id}">✓ Donated</button><button class="btn btn-outline btn-sm grow" data-go="/chat/${x.donor.id}">💬</button></div>` : ''}`).join('') : empty('🙋', 'No pledges yet')));
@@ -937,7 +937,7 @@ export async function recordsScreen(el, _p, q) {
       };
     } else {
       const { token } = await get('/health/emergency-card');
-      const url = `${location.origin}/#/e/${token}`;
+      const url = `${webOrigin()}/#/e/${token}`;
       const p = state.user.patientProfile || {};
       tb.innerHTML = card(`<div class="center"><div style="font-weight:700">🆘 Emergency Medical ID</div><div class="muted small">First responders scan this to see only what saves your life</div></div><div class="qr" id="qr"></div>
         <div class="kv"><span class="k">Name</span><span class="v">${esc(state.user.name)}</span></div><div class="kv"><span class="k">Blood group</span><span class="v">${esc(p.bloodType || '—')}</span></div><div class="kv"><span class="k">Genotype</span><span class="v">${esc(p.genotype || '—')}</span></div><div class="kv"><span class="k">Allergies</span><span class="v">${esc(p.allergies || '—')}</span></div><div class="kv"><span class="k">Emergency contact</span><span class="v">${esc([p.emergencyContact, p.emergencyPhone].filter(Boolean).join(' • ') || '—')}</span></div>
