@@ -36,7 +36,7 @@ export async function homeScreen(el) {
       <div class="quick-action" data-go="/patient/records?tab=reminders" tabindex="0"><span class="icon">⏰</span><span class="label">Reminders</span></div>
       <div class="quick-action institution-action" data-go="/patient/institutions" tabindex="0"><span class="icon">🏨</span><span class="label">Facilities</span></div>
     </div>
-    <div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
+    <div id="fhp"></div><div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
   get('/patient/insurance').then((p) => { const a = p.find((x) => x.status === 'ACTIVE'); $('#ins', el) && ($('#ins', el).innerHTML = a ? `<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">✓ ${esc(a.plan?.name || a.provider)} Active</span>` : ''); }).catch(() => null);
   get('/patient/appointments').then((list) => {
@@ -53,6 +53,12 @@ export async function homeScreen(el) {
   }).catch(() => null);
   pos().then((p) => get('/directory?type=INSTITUTION&sort=distance' + (p ? `&lat=${p.lat}&lng=${p.lng}` : ''))).then((f) => {
     if (f.length) $('#fac', el).innerHTML = card(cardHead('🏥 Find Facility', '<a class="link" data-go="/patient/institutions" style="color:var(--institution-color)">Search</a>') + f.slice(0, 2).map((x) => item({ avatarHtml: '<div class="avatar institution-avatar">🏥</div>', title: esc(x.name), sub: (x.distanceKm != null ? '📍 ' + x.distanceKm + ' km • ' : '') + (x.rating ? '⭐ ' + x.rating : esc(x.title)), trailing: verifiedBadge(x.verified), attrs: `data-go="/provider/${x.userId}"` })).join(''), 'style="border:2px solid var(--institution-color)"');
+  }).catch(() => null);
+  get('/directory?verified=1&sort=rating').then((list) => {
+    const top = list.filter((x) => ['DOCTOR', 'NURSE'].includes(x.role)).slice(0, 2);
+    $('#fhp', el) && ($('#fhp', el).innerHTML = `<div class="card find-providers"><div class="card-header"><span class="card-title">🔍 Find Health Providers</span><a class="link" data-go="/patient/providers">Search</a></div>
+      <div class="fp-chips">${[['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacists'], ['AMBULANCE', '🚑 Ambulance'], ['LAB', '🔬 Labs']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/providers?type=${k}" tabindex="0">${l}</span>`).join('')}</div>
+      ${top.map((x) => item({ avatarHtml: avatar(x.role, x.avatarUrl), title: (x.role === 'DOCTOR' ? 'Dr. ' : x.role === 'NURSE' ? 'Nurse ' : '') + esc(x.name), sub: [x.title || x.specialty, x.hospital, x.rating ? '⭐ ' + Number(x.rating).toFixed(1) : ''].filter(Boolean).map(esc).join(' • '), trailing: x.verified ? '<span class="badge badge-success">Verified</span>' : '', attrs: `data-go="/provider/${x.userId}"` })).join('')}</div>`);
   }).catch(() => null);
   get('/articles').then((a) => { if (a[0]) $('#tip', el).innerHTML = card(item({ icon: '💡', title: esc(a[0].title), sub: esc(a[0].summary), attrs: `data-go="/articles/${a[0].slug}"` })); }).catch(() => null);
 }
