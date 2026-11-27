@@ -1,6 +1,7 @@
 // Route table: every screen of the app, guarded by role.
 import { route } from '../lib/router.js';
 import { authScreen } from './auth.js';
+import { pitchScreen } from './pitch.js';
 import * as S from './shared.js';
 import * as P from './patient.js';
 import * as V from './providers.js';
@@ -10,6 +11,8 @@ const PROVIDERS = ['DOCTOR', 'NURSE', 'LAB', 'PHARMACY', 'AMBULANCE', 'INSTITUTI
 
 // Public
 route('/auth', authScreen, { public: true, nav: false });
+route('/go', pitchScreen, { public: true, nav: false });
+route('/go/:slug', pitchScreen, { public: true, nav: false });
 route('/e/:token', P.publicCardScreen, { public: true, nav: false });
 
 // Shared (all roles)

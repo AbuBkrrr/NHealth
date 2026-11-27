@@ -1499,3 +1499,114 @@ model Payout {
   @@index([providerUserId, createdAt])
   @@index([status])
 }
+
+// ============================================================
+// Marketing: tracking links / QR codes, opens per device, leads, broadcasts
+// ============================================================
+
+/// A trackable link (shared as URL or QR code): https://www.<domain>/go/<slug>
+model MarketingLink {
+  id          String           @id @default(uuid())
+  slug        String           @unique
+  label       String
+  channel     String           @default("other") // qr, whatsapp, instagram, facebook, tiktok, x, linkedin, email, sms, flyer, radio, partner, other
+  campaign    String?
+  audience    String           @default("ALL") // ALL, PATIENT, PROVIDER, INSTITUTION
+  landing     String           @default("pitch") // pitch | signup
+  country     String?
+  notes       String?
+  active      Boolean          @default(true)
+  createdById String?
+  createdAt   DateTime         @default(now())
+  visits      MarketingVisit[]
+  leads       MarketingLead[]
+
+  @@index([campaign])
+}
+
+/// One open of a marketing page. deviceKey = browser's random ID, or a fallback signature.
+model MarketingVisit {
+  id          String         @id @default(uuid())
+  linkId      String?
+  link        MarketingLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  deviceKey   String
+  idSource    String         @default("id") // id | signature
+  deviceNo    Int            @default(1) // 1, 2, 3... per link (order the devices first appeared)
+  openNo      Int            @default(1) // nth open of this link by this device
+  ipHash      String?
+  country     String?
+  region      String?
+  city        String?
+  timezone    String?
+  language    String?
+  deviceType  String? // mobile | tablet | desktop
+  os          String?
+  browser     String?
+  model       String?
+  inApp       String? // WhatsApp, Instagram, Facebook, TikTok, X, LinkedIn, Snapchat...
+  screen      String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  userId      String? // set when this device later registered
+  createdAt   DateTime       @default(now())
+
+  @@index([linkId, createdAt])
+  @@index([deviceKey])
+  @@index([createdAt])
+}
+
+/// Someone who filled the "talk to us / get a demo" form on the pitch page.
+model MarketingLead {
+  id           String         @id @default(uuid())
+  linkId       String?
+  link         MarketingLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  deviceKey    String?
+  opensBefore  Int            @default(0)
+  name         String
+  email        String?
+  phone        String?
+  interest     String         @default("PATIENT") // PATIENT, DOCTOR, PHARMACY, LAB, NURSE, AMBULANCE, INSTITUTION, PARTNER, INVESTOR
+  organization String?
+  country      String?
+  city         String?
+  message      String?
+  consent      Boolean        @default(false)
+  status       String         @default("NEW") // NEW, CONTACTED, REGISTERED, LOST
+  userId       String?
+  unsubscribed Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([email])
+}
+
+/// Signup attributed to a marketing link (first touch on that device).
+model MarketingConversion {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  linkId    String?
+  deviceKey String?
+  role      String
+  country   String?
+  createdAt DateTime @default(now())
+
+  @@index([linkId])
+}
+
+/// Email/SMS broadcast to opted-in users and consenting leads.
+model MarketingBroadcast {
+  id          String   @id @default(uuid())
+  channel     String // email | sms
+  subject     String?
+  body        String
+  audience    Json
+  linkId      String?
+  total       Int      @default(0)
+  sent        Int      @default(0)
+  failed      Int      @default(0)
+  status      String   @default("QUEUED") // QUEUED, SENDING, DONE
+  createdById String?
+  createdAt   DateTime @default(now())
+}

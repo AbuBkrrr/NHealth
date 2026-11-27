@@ -313,3 +313,43 @@ describe('direct split payments & institution routing', () => {
     expect((await balanceOf(inst.user.id)).balance).toBe(-8000);
   });
 });
+
+describe('marketing links', () => {
+  it('tells repeat opens on one device apart from a shared link, and attributes the signup', async () => {
+    const { signToken } = await import('../src/utils/jwt');
+    const boss = await prisma.user.create({ data: { email: `mk-${uniq()}@test.io`, name: 'Boss', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const plain = await prisma.user.create({ data: { email: `mk-${uniq()}@test.io`, name: 'Ops', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: false } });
+    const t = signToken({ userId: boss.id, role: 'ADMIN' as any, isSuperAdmin: true, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    const t2 = signToken({ userId: plain.id, role: 'ADMIN' as any, isSuperAdmin: false, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    expect((await request(app).get('/api/admin-ops/marketing/overview').set(auth(t2))).status).toBe(403);
+
+    const created = await request(app).post('/api/admin-ops/marketing/links').set(auth(t)).send({ label: 'Flyers ' + uniq(), channel: 'qr' });
+    const link = created.body;
+    expect(created.status).toBe(201);
+    expect(link.url).toContain('/go/' + link.slug);
+    const phoneA = crypto.randomUUID(), phoneB = crypto.randomUUID();
+    const open = (deviceId: string, ua: string) => request(app).post('/api/mkt/open').set('User-Agent', ua).set('cf-ipcountry', 'NG').set('cf-ipcity', 'Lagos').send({ slug: link.slug, deviceId });
+    const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 Version/17.1 Mobile/15E148 Safari/604.1';
+    const r1 = await open(phoneA, iphone); const r2 = await open(phoneA, iphone); const r3 = await open(phoneA, iphone);
+    expect([r1.body.openNo, r2.body.openNo, r3.body.openNo]).toEqual([1, 2, 3]);
+    expect(r3.body.deviceNo).toBe(1);
+    let ov = (await request(app).get('/api/admin-ops/marketing/overview?linkId=' + link.id).set(auth(t))).body;
+    expect(ov.perLink[0].verdict).toBe('1 device, opened 3×');
+
+    const r4 = await open(phoneB, 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36 WhatsApp/2.24');
+    expect(r4.body).toMatchObject({ deviceNo: 2, openNo: 1, newDevice: true });
+    await request(app).post('/api/mkt/lead').send({ slug: link.slug, deviceId: phoneB, name: 'Bola', phone: '+2348030000000', consent: true }).expect(201);
+    const email = `mk-${uniq()}@test.io`;
+    await request(app).post('/api/auth/register').send({ email, password: 'password123', name: 'Bola', role: 'PATIENT', acceptTerms: true, mkt: { deviceKey: 'd:' + phoneB } }).expect(201);
+
+    ov = (await request(app).get('/api/admin-ops/marketing/overview?linkId=' + link.id).set(auth(t))).body;
+    const l = ov.perLink[0];
+    expect(l).toMatchObject({ opens: 4, devices: 2, repeatOpens: 2, verdict: 'Shared · 2 devices', signups: 1, leads: 1 });
+    expect(ov.leads[0].opensBefore).toBe(1);
+    const pixel = ov.recentOpens.find((o: any) => o.deviceNo === 2);
+    expect(pixel).toMatchObject({ inApp: 'WhatsApp', model: 'Pixel 7', registered: true });
+    const qr = await request(app).get(`/api/admin-ops/marketing/links/${link.id}/qr.svg`).set(auth(t));
+    expect(qr.status).toBe(200);
+    expect(qr.headers['content-type']).toContain('image/svg+xml');
+  });
+});

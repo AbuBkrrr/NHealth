@@ -2,6 +2,7 @@ import { post, ApiError } from '../lib/api.js';
 import { state } from '../lib/store.js';
 import { esc, $, $$, toast, toastErr, field, readForm, formModal, modal } from '../lib/ui.js';
 import { startSession } from '../main.js';
+import { signupAttribution, adEvent } from '../lib/marketing.js';
 import { SPECIALTIES, PROVIDER_ROLES, INSTITUTION_TYPES, COUNTRIES, NG_STATES } from './data.js';
 
 const guessCountry = () => {
@@ -9,8 +10,8 @@ const guessCountry = () => {
   return (COUNTRIES.find((c) => c[3] === tz) || COUNTRIES[0])[0];
 };
 
-export function authScreen(el) {
-  const s = { side: 'PATIENT', role: 'DOCTOR', mode: 'login' };
+export function authScreen(el, _params = {}, query = {}) {
+  const s = { side: query.side === 'PROVIDER' ? 'PROVIDER' : 'PATIENT', role: 'DOCTOR', mode: query.mode === 'register' ? 'register' : 'login' };
   const draw = () => {
     const provider = s.side === 'PROVIDER';
     const role = provider ? s.role : 'PATIENT';
@@ -100,8 +101,9 @@ export function authScreen(el) {
         const r = await post('/auth/register', {
           email: v.email, password: v.password, name: role === 'INSTITUTION' ? v.name : v.name, phone: v.phone || undefined, role,
           profile: role === 'PATIENT' ? {} : profile, country: c[0], currency: c[2], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || c[3],
-          locale: (navigator.language || 'en').slice(0, 2), acceptTerms: true, marketingOptIn: !!v.marketingOptIn, referralCode: v.referralCode || undefined,
+          locale: (navigator.language || 'en').slice(0, 2), acceptTerms: true, marketingOptIn: !!v.marketingOptIn, referralCode: v.referralCode || undefined, mkt: signupAttribution(),
         });
+        adEvent('CompleteRegistration');
         toast('🎉 Account created! Check your email for a verification code.');
         startSession(r.token, r.user);
       } catch (err) {
@@ -151,6 +153,7 @@ export function legal(kind) {
     <p><b>3. Coins.</b> N-Health coins are a closed-loop prepaid credit for healthcare services on the platform. They are not money, cannot be transferred between users and cannot be withdrawn as cash. Top-ups are processed by licensed payment partners.</p>
     <p><b>4. Escrow & refunds.</b> Some payments are held in escrow until you confirm the service. Appointments cancelled 12+ hours ahead, or declined by the provider, are refunded in coins.</p>
     <p><b>5. Conduct.</b> No harassment, fraud, fake campaigns or misuse of medical information. Fundraising campaigns are reviewed before going live.</p>
+    <p><b>Marketing measurement.</b> When you open an N-Health link or QR code, we record the open with a random ID your browser keeps (no name or contact details), your device type and approximate city, to see which campaigns work. Ad cookies load only if you accept them. Your IP address is stored only as a one-way hash.</p>
     <p><b>6. Liability.</b> Providers are responsible for the care they deliver. N-Health is liable only to the extent required by law.</p></div>`;
   const privacy = `<div class="modal-title">🔒 Privacy Policy</div><div class="muted" style="line-height:1.6">
     <p>We follow the Nigeria Data Protection Act (NDPA 2023) and GDPR principles.</p>

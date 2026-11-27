@@ -14,6 +14,7 @@ import { AdminsPage } from './pages/AdminsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { FinancePage, RevenuePage, IntegrationsPage } from './pages/FinancePages';
 import { OpsDashboardPage, VerificationsPage, KycPage, CampaignsPage, PayoutsPage, TicketsPage, CatalogPage } from './pages/OpsPages';
+import { MarketingPage } from './pages/MarketingPage';
 import { PatientHomePage } from './pages/PatientHomePage';
 import { DoctorDashboardPage } from './pages/DoctorDashboardPage';
 import { NurseDashboardPage } from './pages/NurseDashboardPage';
@@ -130,6 +131,14 @@ export default function App() {
               element={
                 <SuperAdminRoute>
                   <AdminsPage />
+                </SuperAdminRoute>
+              }
+            />
+            <Route
+              path="marketing"
+              element={
+                <SuperAdminRoute>
+                  <MarketingPage />
                 </SuperAdminRoute>
               }
             />

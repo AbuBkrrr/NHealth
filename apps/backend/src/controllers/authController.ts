@@ -1,3 +1,4 @@
+import { attributeSignup } from '../services/marketing';
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -54,6 +55,7 @@ const registerSchema = z.object({
   acceptTerms: z.boolean().optional(),
   marketingOptIn: z.boolean().optional(),
   referralCode: z.string().optional(),
+  mkt: z.object({ deviceKey: z.string().max(80).optional(), slug: z.string().max(60).optional() }).optional(),
 });
 
 const loginSchema = z.object({
@@ -259,6 +261,7 @@ export async function register(req: Request, res: Response) {
       },
     });
     await createRoleProfile(user.id, data.role, data.profile ?? {});
+    await attributeSignup(user, data.mkt);
     await sendEmailVerification(user.id, user.email).catch(() => null);
     await notify(user.id, 'system', 'Welcome to N-Health 🎉', PROVIDER_ROLES.includes(data.role)
       ? 'Complete identity verification and upload your licence to start receiving patients.'
