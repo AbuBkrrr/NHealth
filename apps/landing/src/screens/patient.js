@@ -1,4 +1,4 @@
-import { get, post, postLater, patch, del, download } from '../lib/api.js';
+import { get, getFresh, post, postLater, patch, del, download } from '../lib/api.js';
 import { state } from '../lib/store.js';
 import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile } from '../lib/ui.js';
 import { on } from '../lib/realtime.js';
@@ -122,7 +122,7 @@ export async function emergencyScreen(el) {
     ${card(item({ icon: '🆘', title: 'My Emergency Medical ID', sub: 'QR card with blood group, allergies & contacts for first responders', attrs: 'data-go="/patient/records?tab=card"' }) + item({ icon: '🩹', title: 'First aid while help is on the way', attrs: 'data-go="/articles/first-aid-emergencies"' }))}`;
   let map = null, offs = [];
   const draw = async () => {
-    const list = await get('/patient/emergency').catch(() => []);
+    const list = await getFresh('/patient/emergency').catch(() => []);
     const active = list.find((r) => ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'].includes(r.status));
     const body = $('#body', el);
     if (!active) {
@@ -147,28 +147,96 @@ export async function emergencyScreen(el) {
     }
     const steps = ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'];
     const idx = steps.indexOf(active.status);
+    cur = active;
+    const amb = active.ambulance && active.status !== 'REQUESTED' ? active.ambulance : null;
     body.innerHTML = card(`<div class="row"><div style="font-size:28px">${active.status === 'REQUESTED' ? '⏳' : '🚑'}</div><div class="grow">
-        <div style="font-weight:600;font-size:14px">${active.status === 'REQUESTED' ? 'Finding the nearest ambulance…' : active.status === 'ARRIVED' ? 'Ambulance has arrived' : 'Ambulance on the way'}</div>
-        <div class="muted">Requested ${ago(active.requestedAt)}${active.etaMinutes ? ' • ⏱️ ETA ' + active.etaMinutes + ' min' : ''}</div></div></div>
+        <div style="font-weight:600;font-size:14px">${active.status === 'REQUESTED' ? 'Finding the nearest ambulance…' : active.status === 'ARRIVED' ? 'Your ambulance has arrived' : 'Ambulance on the way'}</div>
+        <div class="muted" id="eline">Requested ${ago(active.requestedAt)}</div></div></div>
         <div class="progress-bar mt8"><div class="fill success" style="width:${((idx + 1) / steps.length) * 100}%"></div></div>
         <div class="row between small muted mt8">${['Sent', 'Accepted', 'En route', 'Arrived'].map((s, i) => `<span style="${i <= idx ? 'color:var(--success);font-weight:600' : ''}">${s}</span>`).join('')}</div>
+        ${amb ? `<div class="live-eta" id="live" aria-live="polite"></div>` : ''}
         <div class="map" id="emap"></div>
-        <div class="row"><a class="btn btn-danger btn-sm grow" href="tel:${nums[0]}">📞 Call ${nums[0]}</a><button class="btn btn-outline btn-sm grow" id="cancel" style="border-color:var(--error);color:var(--error)">Cancel request</button></div>`, 'style="border:2px solid var(--success)"');
-    $('#cancel', body).onclick = async () => { if (await confirmBox('Cancel the emergency request?', { ok: 'Yes, cancel', danger: true })) { await post('/patient/emergency/' + active.id + '/cancel').catch(toastErr); draw(); } };
+        ${amb ? `<div class="crew">
+          <div class="avatar ambulance-avatar">🚑</div>
+          <div class="grow"><div style="font-weight:600">${esc(amb.operatorName || amb.name || 'Ambulance crew')}</div>
+            <div class="small muted">${esc(amb.vehicleType || 'Ambulance')}${amb.rating ? ' • ⭐ ' + Number(amb.rating).toFixed(1) : ''}</div></div>
+          <span class="plate">${esc(amb.vehicleNumber)}</span></div>
+          <div class="row mt8">${amb.phone ? `<a class="btn btn-success btn-sm grow" href="tel:${esc(amb.phone)}">📞 Call crew</a>` : ''}<button class="btn btn-outline btn-sm grow" data-go="/chat/${amb.userId}">💬 Message</button></div>` : ''}
+        <div class="row mt8"><a class="btn btn-danger btn-sm grow" href="tel:${nums[0]}">📞 Call ${nums[0]}</a>${active.status === 'ARRIVED' ? '' : '<button class="btn btn-outline btn-sm grow" id="cancel" style="border-color:var(--error);color:var(--error)">Cancel request</button>'}</div>`, 'style="border:2px solid var(--success)"');
+    $('#cancel', body) && ($('#cancel', body).onclick = async () => { if (await confirmBox('Cancel the emergency request?', { ok: 'Yes, cancel', danger: true })) { await post('/patient/emergency/' + active.id + '/cancel').catch(toastErr); draw(); } });
     try {
       map?.destroy();
       map = await createMap($('#emap', body), [active.lat, active.lng], 14);
       map.setMarker('me', active.lat, active.lng, '📍', 'You');
-      map.fit();
+      if (amb && amb.lat != null) { track.reset(); placeAmbulance(amb.lat, amb.lng, amb.locatedAt ? new Date(amb.locatedAt).getTime() : Date.now(), true); }
+      else map.fit();
     } catch { /* map optional */ }
+    showLive();
+  };
+
+  // ---- Live tracking (like a ride app): position, distance, arrival time, last update ----
+  let cur = null;
+  const track = {
+    last: null, speed: null, at: null,
+    reset() { this.last = null; this.speed = null; this.at = null; },
+    add(lat, lng, at) {
+      if (this.last && at - this.last.at >= 4000) {
+        const km = distKm(this.last, { lat, lng });
+        const kmh = km / ((at - this.last.at) / 3600e3);
+        if (kmh > 3 && kmh < 140) this.speed = this.speed ? this.speed * 0.6 + kmh * 0.4 : kmh; // smoothed
+      }
+      this.last = { lat, lng, at }; this.at = at;
+    },
+  };
+  const placeAmbulance = (lat, lng, at = Date.now(), first = false) => {
+    if (!map || !cur) return;
+    track.add(lat, lng, at);
+    if (first) map.setMarker('amb', lat, lng, '🚑', 'Ambulance'); else map.moveMarker('amb', lat, lng, '🚑', 'Ambulance');
+    map.setLine('route', [lat, lng], [cur.lat, cur.lng]);
+    if (first) map.fit(); else if (!map.inView(lat, lng)) map.fit(true);
+    showLive();
+  };
+  const showLive = () => {
+    const box = $('#live', el);
+    if (!box || !cur) return;
+    if (cur.status === 'ARRIVED') { box.innerHTML = `<b>The crew is here.</b> Look out for vehicle <span class="plate">${esc(cur.ambulance?.vehicleNumber || '')}</span>`; return; }
+    if (!track.last) { box.innerHTML = `<b>${cur.etaMinutes ? 'Arriving in about ' + cur.etaMinutes + ' min' : 'Ambulance accepted'}</b><div class="small muted">Waiting for the ambulance's live location…</div>`; return; }
+    const km = distKm(track.last, cur);
+    const speed = Math.max(track.speed || 30, 15); // city driving when we have no speed yet
+    const min = Math.max(1, Math.round((km * 1.3 / speed) * 60)); // roads are ~30% longer than a straight line
+    const age = Math.round((Date.now() - track.at) / 1000);
+    const stale = age > 90;
+    box.innerHTML = `<b>${km < 0.15 ? 'Arriving now' : `${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'} away • about ${min} min`}</b>
+      <div class="small ${stale ? '' : 'muted'}" style="${stale ? 'color:var(--warning)' : ''}">${stale ? '⚠️ ' : '📡 '}Location updated ${age < 10 ? 'just now' : age < 60 ? age + ' s ago' : Math.round(age / 60) + ' min ago'}</div>`;
+    const line = $('#eline', el); if (line) line.textContent = `Requested ${ago(cur.requestedAt)} • ETA ${min} min`;
   };
   await draw();
+  // Keep the "updated X s ago" line moving, and check the server every 15 s in case live updates are blocked (weak network).
+  const tick = setInterval(showLive, 5000);
+  const poll = setInterval(async () => {
+    if (!cur || !navigator.onLine) return;
+    try {
+      const list = await getFresh('/patient/emergency');
+      const now = list.find((r) => r.id === cur.id);
+      if (!now || now.status !== cur.status) return draw();
+      const a = now.ambulance;
+      if (a?.lat != null && a.locatedAt && (!track.at || new Date(a.locatedAt).getTime() > track.at)) placeAmbulance(a.lat, a.lng, new Date(a.locatedAt).getTime());
+    } catch { /* offline: keep the last position */ }
+  }, 15000);
   offs = [
-    on('emergency:accepted', (d) => { toast('🚑 Ambulance accepted' + (d.etaMinutes ? ' - ETA ' + d.etaMinutes + ' min' : '')); draw().then(() => d.ambulance?.lat && map?.setMarker('amb', d.ambulance.lat, d.ambulance.lng, '🚑', d.ambulance.vehicleNumber)); }),
-    on('emergency:status', () => draw()),
-    on('ambulance:location', (d) => { map?.setMarker('amb', d.lat, d.lng, '🚑', 'Ambulance'); map?.fit(); }),
+    on('emergency:accepted', (d) => { toast('🚑 Ambulance accepted' + (d.etaMinutes ? ' - ETA ' + d.etaMinutes + ' min' : '')); if (navigator.vibrate) navigator.vibrate([200, 100, 200]); draw(); }),
+    on('emergency:status', (d) => { if (d?.status === 'ARRIVED') { toast('🚑 The ambulance has arrived'); if (navigator.vibrate) navigator.vibrate([300, 100, 300]); } draw(); }),
+    on('ambulance:location', (d) => { if (!d.requestId || d.requestId === cur?.id) placeAmbulance(d.lat, d.lng, d.at || Date.now()); }),
   ];
-  return () => { offs.forEach((f) => f()); map?.destroy(); };
+  return () => { offs.forEach((f) => f()); clearInterval(tick); clearInterval(poll); map?.destroy(); };
+}
+
+/** Straight-line distance in km between two {lat, lng} points. */
+function distKm(a, b) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
 
 // ================= APPOINTMENTS =================

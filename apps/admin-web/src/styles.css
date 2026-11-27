@@ -440,3 +440,4 @@ button { border-radius: var(--radius-sm); font-weight: 600; transition: var(--tr
 .mk-btn { border-radius: var(--radius-sm); border: 2px solid #E8ECF1; font-weight: 600; transition: var(--transition); }
 .mk-btn:hover { border-color: var(--primary); background: var(--primary-light); }
 .mk-url code { background: var(--surface); border-radius: var(--radius-sm); }
+.nav-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 9px; background: #D32F2F; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }

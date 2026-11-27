@@ -333,8 +333,15 @@ export async function listEmergencyRequests(req: Request, res: Response) {
   const requests = await prisma.emergencyRequest.findMany({
     where: { patientId: patient.id },
     orderBy: { requestedAt: 'desc' },
+    include: { ambulance: { select: { userId: true, vehicleNumber: true, vehicleType: true, operatorName: true, phone: true, rating: true, currentLat: true, currentLng: true, lastLocationAt: true, user: { select: { name: true, phone: true, avatarUrl: true } } } } },
   });
-  res.json(requests);
+  // The crew's details and live position are shown only while that ambulance is responding to this patient.
+  const LIVE = ['ACCEPTED', 'EN_ROUTE', 'ARRIVED'];
+  res.json(requests.map((r) => {
+    if (!r.ambulance || !LIVE.includes(r.status)) return { ...r, ambulance: r.ambulance ? { vehicleNumber: r.ambulance.vehicleNumber, operatorName: r.ambulance.operatorName } : null };
+    const a = r.ambulance;
+    return { ...r, ambulance: { userId: a.userId, vehicleNumber: a.vehicleNumber, vehicleType: a.vehicleType, operatorName: a.operatorName || a.user.name, name: a.user.name, phone: a.phone || a.user.phone, avatarUrl: a.user.avatarUrl, rating: a.rating, lat: a.currentLat, lng: a.currentLng, locatedAt: a.lastLocationAt } };
+  }));
 }
 
 export async function cancelEmergencyRequest(req: Request, res: Response) {

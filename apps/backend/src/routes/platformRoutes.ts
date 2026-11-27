@@ -203,6 +203,7 @@ r.get('/admin-ops/marketing/links', ...SA, h(mkt.listLinks));
 r.post('/admin-ops/marketing/links', ...SA, h(mkt.createLink));
 r.patch('/admin-ops/marketing/links/:id', ...SA, h(mkt.updateLink));
 r.get('/admin-ops/marketing/links/:id/qr.:fmt', ...SA, h(mkt.linkQr));
+r.get('/admin-ops/marketing/leads/summary', ...SA, h(mkt.leadSummary));
 r.patch('/admin-ops/marketing/leads/:id', ...SA, h(mkt.updateLead));
 r.get('/admin-ops/marketing/leads.csv', ...SA, h(mkt.leadsCsv));
 r.get('/admin-ops/marketing/settings', ...SA, h(mkt.getSettings));

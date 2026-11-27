@@ -417,9 +417,16 @@ export async function nurseRequests(el, _p, q) {
 // AMBULANCE
 // =====================================================================
 let watchId = null;
+let lastPost = 0;
+/** Shares the ambulance's position while on duty: live (socket) on every move, and saved on the server at least
+ *  every 15 s so the patient still sees it move when the live connection drops on a weak network. */
 function startSharing() {
   if (watchId != null || !navigator.geolocation) return;
-  watchId = navigator.geolocation.watchPosition((p) => emit('ambulance:location', { lat: p.coords.latitude, lng: p.coords.longitude }), () => null, { enableHighAccuracy: true, maximumAge: 5000 });
+  watchId = navigator.geolocation.watchPosition((p) => {
+    const pos = { lat: p.coords.latitude, lng: p.coords.longitude };
+    emit('ambulance:location', pos);
+    if (Date.now() - lastPost > 15000) { lastPost = Date.now(); post('/ambulance/location', pos).catch(() => null); }
+  }, () => null, { enableHighAccuracy: true, maximumAge: 5000 });
 }
 function stopSharing() { if (watchId != null) navigator.geolocation.clearWatch(watchId); watchId = null; }
 
@@ -444,6 +451,7 @@ export async function ambulanceHome(el) {
 
 export async function ambulanceRequests(el, _p, q) {
   let tab = q.tab || 'open', map = null;
+  get('/provider-profile').then((p) => p?.isAvailable && startSharing()).catch(() => null);
   el.innerHTML = appBar({ title: '🚨 Emergencies', back: '/ambulance/home', roleCls: 'ambulance-title' }) + tabs([['open', 'Open calls'], ['mine', 'My trips']], tab) + '<div id="tb"></div>';
   const NEXT = { ACCEPTED: [['EN_ROUTE', '🚑 En route']], EN_ROUTE: [['ARRIVED', '📍 Arrived']], ARRIVED: [['COMPLETED', '✓ Complete']] };
   const draw = async () => {
@@ -460,7 +468,7 @@ export async function ambulanceRequests(el, _p, q) {
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-acc],[data-as]'); if (!b) return;
     await busy(b, async () => {
-      if (b.dataset.acc) { const p = await locate({ timeout: 6000 }).catch(() => null); if (p) await post('/ambulance/location', p).catch(() => null); await post('/ambulance/requests/' + b.dataset.acc + '/accept'); toast('🚑 Accepted - navigate to the patient'); tab = 'mine'; $$('[data-tab]', el).forEach((y) => y.classList.toggle('active', y.dataset.tab === 'mine')); startSharing(); }
+      if (b.dataset.acc) { const p = await locate({ timeout: 6000 }).catch(() => null); if (p) await post('/ambulance/location', p).catch(() => null); await post('/ambulance/requests/' + b.dataset.acc + '/accept'); startSharing(); toast('🚑 Accepted - navigate to the patient'); tab = 'mine'; $$('[data-tab]', el).forEach((y) => y.classList.toggle('active', y.dataset.tab === 'mine')); startSharing(); }
       else await post('/ambulance/requests/' + b.dataset.id + '/status', { status: b.dataset.as });
       draw();
     });
