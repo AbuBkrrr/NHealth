@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi, AdminUser } from '../api/admin';
-import { getErrorMessage } from '../api/client';
+import { api, getErrorMessage } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
-const ROLES = ['PATIENT', 'DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE'];
+const ROLES = ['PATIENT', 'DOCTOR', 'NURSE', 'PHARMACY', 'LAB', 'AMBULANCE', 'INSTITUTION'];
+const roleLabel = (r: string) => ({ LAB: 'DIAGNOSTIC CENTER', INSTITUTION: 'HOSPITAL / CLINIC' } as Record<string, string>)[r] || r;
 
 export function UsersPage() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -26,6 +29,13 @@ export function UsersPage() {
   }, [role, search, isActive, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Super admins only: e.g. someone who signed up as a patient but is a nurse. They are signed out to apply it.
+  const changeRole = async (u: AdminUser, role: string) => {
+    if (!window.confirm(`Change ${u.name} from ${roleLabel(u.role)} to ${roleLabel(role)}?\n\nThey will be signed out, and a new provider must upload documents and be approved before serving patients.`)) return;
+    setBusyId(u.id);
+    try { await api.patch(`/admin/users/${u.id}/role`, { role }); load(); } catch (err) { alert(getErrorMessage(err)); } finally { setBusyId(null); }
+  };
 
   const toggleStatus = async (u: AdminUser) => {
     setBusyId(u.id);
@@ -48,7 +58,7 @@ export function UsersPage() {
         <input placeholder="Search name or email" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         <select value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
           <option value="">All roles</option>
-          {ROLES.map((r) => <option key={r} value={r}>{r === 'LAB' ? 'DIAGNOSTIC CENTER' : r}</option>)}
+          {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
         </select>
         <select value={isActive} onChange={(e) => { setIsActive(e.target.value); setPage(1); }}>
           <option value="">All statuses</option>
@@ -61,22 +71,26 @@ export function UsersPage() {
         {users.length === 0 ? (
           <div className="empty-state">No users match these filters.</div>
         ) : (
-          <table>
+          <table className="users-table">
             <thead>
               <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr>
             </thead>
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td><Link to={`/users/${u.id}`}>{u.name}</Link></td>
-                  <td>{u.email}</td>
-                  <td><span className="badge badge-role">{u.role}</span></td>
-                  <td>
+                  <td data-label="Name"><Link to={`/users/${u.id}`}>{u.name}</Link></td>
+                  <td data-label="Email" className="users-email">{u.email}</td>
+                  <td data-label="Role">{me?.isSuperAdmin && u.role !== 'ADMIN' ? (
+                    <select className="role-select" value={u.role} disabled={busyId === u.id} onChange={(e) => changeRole(u, e.target.value)} aria-label={`Role of ${u.name}`}>
+                      {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                    </select>
+                  ) : <span className="badge badge-role">{roleLabel(u.role)}</span>}</td>
+                  <td data-label="Status">
                     <span className={`badge ${u.isActive ? 'badge-active' : 'badge-inactive'}`}>
                       {u.isActive ? 'Active' : 'Suspended'}
                     </span>
                   </td>
-                  <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                  <td data-label="Joined">{new Date(u.createdAt).toLocaleDateString()}</td>
                   <td>
                     <button
                       className={u.isActive ? 'danger' : ''}

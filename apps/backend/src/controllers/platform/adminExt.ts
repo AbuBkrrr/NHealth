@@ -13,8 +13,10 @@ const audit = (req: Request, action: string, targetType: string, targetId: strin
 export async function verificationQueue(req: Request, res: Response) {
   const status = String(req.query.status || 'PENDING').toUpperCase();
   const users = await prisma.user.findMany({
-    where: { verificationStatus: status as any, role: { in: ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE', 'INSTITUTION'] }, deletedAt: null },
-    orderBy: { createdAt: 'asc' }, take: 200,
+    where: { verificationStatus: status as any, role: { in: ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE', 'INSTITUTION'] }, deletedAt: null,
+      ...(req.query.q ? { OR: [{ name: { contains: String(req.query.q), mode: 'insensitive' as const } }, { email: { contains: String(req.query.q), mode: 'insensitive' as const } }] } : {}) },
+    // Oldest first so nobody waits forever; 1,000 at a time, and the admin can search by name or email.
+    orderBy: { createdAt: 'asc' }, take: 1000,
     select: { id: true, name: true, email: true, phone: true, role: true, kycStatus: true, verificationStatus: true, verificationNote: true, createdAt: true, country: true,
       providerDocuments: true, kycVerifications: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, documentType: true, documentCountry: true, fullName: true, dateOfBirth: true } },
       doctorProfile: { select: { licenseNumber: true, specialty: true, hospital: true } }, nurseProfile: { select: { licenseNumber: true, specialty: true } },
@@ -57,7 +59,7 @@ export async function decideCampaign(req: Request, res: Response) {
 }
 export async function kycList(req: Request, res: Response) {
   res.json(await prisma.kycVerification.findMany({ orderBy: { createdAt: 'desc' }, take: 200, where: req.query.status ? { status: String(req.query.status) } : {},
-    select: { id: true, status: true, purpose: true, documentType: true, documentCountry: true, fullName: true, createdAt: true, user: { select: { id: true, name: true, email: true, role: true } } } }));
+    select: { id: true, provider: true, status: true, purpose: true, documentType: true, documentCountry: true, fullName: true, createdAt: true, user: { select: { id: true, name: true, email: true, role: true } } } }));
 }
 export async function platformStats(_req: Request, res: Response) {
   const since = new Date(Date.now() - 30 * 86400_000);
@@ -115,4 +117,33 @@ export async function replyTicket(req: Request, res: Response) {
   const t = await prisma.supportTicket.update({ where: { id: req.params.id }, data: { adminReply: str(req.body.reply, 5000), repliedById: uid(req), repliedAt: new Date(), status: req.body.close ? 'closed' : 'answered', closedAt: req.body.close ? new Date() : undefined } });
   if (t.userId) await notify(t.userId, 'system', 'Support replied', (t.adminReply || '').slice(0, 140), { email: true, data: { ticketId: t.id } });
   res.json(t);
+}
+
+/** GET /api/admin-ops/kyc/:id - one verification with the submitted form and documents (in-app submissions). */
+export async function kycDetail(req: Request, res: Response) {
+  const k = await prisma.kycVerification.findUnique({ where: { id: req.params.id }, include: { user: { select: { id: true, name: true, email: true, phone: true, role: true, kycStatus: true, createdAt: true } } } });
+  if (!k) throw ApiError.notFound('Verification not found');
+  res.json({ ...k, form: k.provider === 'manual' ? (k.decision as any)?.form || null : null, decision: k.provider === 'manual' ? undefined : k.decision });
+}
+
+/** POST /api/admin-ops/kyc/:id/decide { decision: APPROVED|DECLINED, note } - for in-app submissions. */
+export async function kycDecide(req: Request, res: Response) {
+  const decision = String(req.body?.decision || '').toUpperCase();
+  if (!['APPROVED', 'DECLINED'].includes(decision)) throw ApiError.badRequest('Choose approve or decline');
+  const k = await prisma.kycVerification.findUnique({ where: { id: req.params.id } });
+  if (!k || k.provider !== 'manual') throw ApiError.notFound('Verification not found');
+  if (k.status !== 'In Review') throw ApiError.conflict('This verification was already decided');
+  const note = String(req.body?.note || '').slice(0, 500);
+  await prisma.kycVerification.update({ where: { id: k.id }, data: { status: decision === 'APPROVED' ? 'Approved' : 'Declined', decision: { ...((k.decision as any) || {}), review: { by: req.user!.userId, at: new Date().toISOString(), decision, note } } as any } });
+  const user = await prisma.user.findUnique({ where: { id: k.userId } });
+  if (user) {
+    const data: any = { kycStatus: decision };
+    if (decision === 'APPROVED' && user.role !== 'PATIENT' && user.verificationStatus === 'UNVERIFIED') data.verificationStatus = 'PENDING';
+    await prisma.user.update({ where: { id: user.id }, data });
+    invalidateUserState(user.id);
+    await notify(user.id, 'kyc', decision === 'APPROVED' ? 'Identity verified ✅' : 'Identity verification declined',
+      decision === 'APPROVED' ? 'Your identity has been verified. All services are unlocked.' : `We could not verify your identity${note ? ': ' + note : ''}. Please submit again with clear photos of a valid ID.`, { email: true });
+  }
+  await prisma.adminAuditLog.create({ data: { actorId: req.user!.userId, action: 'KYC_' + decision, targetType: 'User', targetId: k.userId, detail: `kyc ${k.id}${note ? ': ' + note : ''}` } }).catch(() => null);
+  res.json({ ok: true });
 }

@@ -5,6 +5,7 @@ import { getFinance } from './settings';
 import { notify } from './notify';
 import { sendTransfer, gatewayReady, PayoutGateway } from './transfers';
 import { payeesFor, SplitPlan } from './splits';
+import { coinsText } from './coins';
 
 type Source = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'EMERGENCY' | 'POS_SALE';
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -123,7 +124,7 @@ export async function settleEmergencyTrip(requestId: string) {
     }
     const now = new Date();
     await prisma.payment.create({ data: { payerId: e.patient.userId, payableType: 'EMERGENCY', payableId: e.id, amount: fee, method: inApp ? 'WALLET' : 'CASH', status: 'CONFIRMED', reference, providerUserId: e.ambulance.userId, expiresAt: now, confirmedAt: now } });
-    await notify(e.patient.userId, 'payment', 'Ambulance fee', inApp ? `${fee.toLocaleString()} coins were paid for your ambulance trip.` : `Please pay the crew ${fee.toLocaleString()} for your ambulance trip.`);
+    await notify(e.patient.userId, 'payment', 'Ambulance fee', inApp ? `${coinsText(fee)} were paid for your ambulance trip.` : `Please pay the crew ${fee.toLocaleString()} for your ambulance trip.`);
   }
   return accrueForSource('EMERGENCY', e.id);
 }

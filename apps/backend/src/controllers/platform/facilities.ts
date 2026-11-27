@@ -13,6 +13,8 @@ export const CATEGORIES: Record<string, string> = {
   DENTAL: 'Dental', EYE: 'Eye care', NURSING_HOME: 'Nursing home', HMO: 'Health insurance (HMO)', OTHER: 'Other facility',
 };
 export const HOSPITALS = ['TEACHING_HOSPITAL', 'FEDERAL_MEDICAL_CENTRE', 'GENERAL_HOSPITAL', 'SPECIALIST_HOSPITAL', 'HOSPITAL'];
+/** Hospitals large enough to run their own blood bank / transfusion service (shown as "call to confirm"). */
+export const BLOOD_HOSPITALS = ['TEACHING_HOSPITAL', 'FEDERAL_MEDICAL_CENTRE', 'SPECIALIST_HOSPITAL', 'GENERAL_HOSPITAL'];
 /** Which listings each kind of N-Health account may claim. */
 const CLAIMABLE: Record<string, string[]> = {
   INSTITUTION: [...HOSPITALS, 'CLINIC', 'PRIMARY_HEALTH_CENTRE', 'HEALTH_POST', 'MATERNITY', 'DENTAL', 'EYE', 'NURSING_HOME', 'BLOOD_BANK', 'DIAGNOSTIC', 'OTHER'],
@@ -30,12 +32,15 @@ const pub = (f: any, lat?: number, lng?: number) => ({
   id: f.id, name: f.name, category: f.category, categoryLabel: CATEGORIES[f.category] || f.category, level: f.level, ownership: f.ownership, ownershipType: f.ownershipType,
   state: f.state, lga: f.lga, ward: f.ward, address: f.address, phone: f.phone, email: f.email, website: f.website, lat: f.lat, lng: f.lng, functional: f.functional,
   source: SOURCES[f.source] || f.source, onNhealth: !!f.claimedByUserId, userId: f.claimedByUserId || undefined,
+  bloodService: f.category === 'BLOOD_BANK' ? 'BLOOD_BANK' : BLOOD_HOSPITALS.includes(f.category) ? 'HOSPITAL' : undefined,
   distanceKm: lat !== undefined && lng !== undefined && f.lat != null && f.lng != null ? Math.round(km(lat, lng, f.lat, f.lng) * 10) / 10 : undefined,
 });
 
 async function find(req: Request, opts: { onlyUnclaimed?: boolean } = {}) {
   const q = str(req.query.q, 80);
-  const cats = String(req.query.category || '').split(',').map((s) => s.trim().toUpperCase()).filter((c) => CATEGORIES[c]);
+  const raw = String(req.query.category || '').split(',').map((s) => s.trim().toUpperCase());
+  // "BLOOD": blood banks and donation centres, plus the big hospitals that run their own blood bank.
+  const cats = [...new Set(raw.flatMap((c) => (c === 'BLOOD' ? ['BLOOD_BANK', ...BLOOD_HOSPITALS] : [c])))].filter((c) => CATEGORIES[c]);
   const state = str(req.query.state, 40);
   const lat = num(req.query.lat), lng = num(req.query.lng);
   const hmoOnly = cats.length === 1 && cats[0] === 'HMO';
@@ -180,4 +185,29 @@ export async function adminUpdate(req: Request, res: Response) {
   const d = editable(req.body || {});
   if (req.body?.unclaim === true) { d.claimedByUserId = null; d.claimedAt = null; }
   res.json(await prisma.facilityListing.update({ where: { id: req.params.id }, data: { ...d, addedById: uid(req) } }));
+}
+
+// ------------------------------------------------------------------ medicines
+/** GET /api/medicines/search?q=&lat=&lng= - a medicine in stock at pharmacies on N-Health, nearest / cheapest first. */
+export async function searchMedicines(req: Request, res: Response) {
+  const q = str(req.query.q, 80);
+  if (!q || q.length < 2) throw ApiError.badRequest('Type a medicine name');
+  const lat = num(req.query.lat), lng = num(req.query.lng);
+  const words = q.split(/\s+/).filter((w) => w.length > 1).slice(0, 4);
+  const items = await prisma.inventory.findMany({
+    where: {
+      stock: { gt: 0 }, OR: [{ expiryDate: null }, { expiryDate: { gt: new Date() } }],
+      AND: words.map((w) => ({ OR: [{ name: { contains: w, mode: 'insensitive' } }, { brand: { contains: w, mode: 'insensitive' } }, { description: { contains: w, mode: 'insensitive' } }] })),
+      pharmacy: { user: { isActive: true, deletedAt: null } },
+    },
+    take: 300,
+    include: { pharmacy: { select: { id: true, userId: true, pharmacyName: true, address: true, city: true, state: true, lat: true, lng: true, homeDelivery: true, user: { select: { verificationStatus: true } } } } },
+  });
+  const out = items.map((i) => ({
+    id: i.id, name: i.name, brand: i.brand, unit: i.unit, category: i.category, price: Number(i.price), inStock: i.stock, requiresPrescription: i.requiresPrescription,
+    pharmacy: { id: i.pharmacy.id, userId: i.pharmacy.userId, name: i.pharmacy.pharmacyName, address: [i.pharmacy.address, i.pharmacy.city, i.pharmacy.state].filter(Boolean).join(', '), homeDelivery: i.pharmacy.homeDelivery, verified: i.pharmacy.user.verificationStatus === 'VERIFIED' },
+    distanceKm: lat !== undefined && lng !== undefined && i.pharmacy.lat != null && i.pharmacy.lng != null ? Math.round(km(lat, lng, i.pharmacy.lat, i.pharmacy.lng) * 10) / 10 : null,
+  }));
+  out.sort((a, b) => Number(b.pharmacy.verified) - Number(a.pharmacy.verified) || (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9) || a.price - b.price);
+  res.json(out.slice(0, 60));
 }

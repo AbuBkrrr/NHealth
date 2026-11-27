@@ -397,12 +397,13 @@ describe('marketing precise location', () => {
 
 describe('emergency: going to a hospital yourself', () => {
   it('lists open hospitals near the patient, alerts the chosen one, and tells the patient when it is ready', async () => {
+    const o = Math.round(Math.random() * 3000) / 1000 + 1; // degrees east, unique per run
     const inst = await register('INSTITUTION', { name: 'ER Hospital ' + uniq(), type: 'HOSPITAL', licenseNumber: 'H-' + uniq() });
     const closed = await register('INSTITUTION', { name: 'Closed Hospital ' + uniq(), type: 'HOSPITAL', licenseNumber: 'H-' + uniq() });
     await prisma.user.updateMany({ where: { id: { in: [inst.user.id, closed.user.id] } }, data: { verificationStatus: 'VERIFIED' } });
     // Hospital sets its emergency board
-    await prisma.institutionProfile.update({ where: { userId: inst.user.id }, data: { lat: 6.5158, lng: 3.3898 } });
-    await prisma.institutionProfile.update({ where: { userId: closed.user.id }, data: { lat: 6.5100, lng: 3.3700, emergencyCare: true, erOpen: false } });
+    await prisma.institutionProfile.update({ where: { userId: inst.user.id }, data: { lat: 6.5158, lng: 3.3898 + o } });
+    await prisma.institutionProfile.update({ where: { userId: closed.user.id }, data: { lat: 6.5100, lng: 3.3700 + o, emergencyCare: true, erOpen: false } });
     const board = await request(app).patch('/api/institution/er').set(auth(inst.token)).send({ emergencyCare: true, erOpen: true, erDoctorsOnDuty: 2, erNursesOnDuty: 3, erServices: ['Trauma / accidents', 'Not a real service'] });
     expect(board.status).toBe(200);
     expect(board.body.erServices).toEqual(['Trauma / accidents']);
@@ -410,7 +411,7 @@ describe('emergency: going to a hospital yourself', () => {
     const pat = await register('PATIENT');
     const other = await register('PATIENT');
     expect((await request(app).get('/api/er/hospitals').set(auth(pat.token))).status).toBe(400); // location needed
-    const near = await request(app).get('/api/er/hospitals?lat=6.4990&lng=3.3550&type=ACCIDENT').set(auth(pat.token));
+    const near = await request(app).get(`/api/er/hospitals?lat=6.4990&lng=${3.355 + o}&type=ACCIDENT`).set(auth(pat.token));
     expect(near.status).toBe(200);
     const mine = near.body.find((h: any) => h.userId === inst.user.id);
     expect(mine).toMatchObject({ erOpen: true, erDoctorsOnDuty: 2, handlesType: true });
@@ -418,8 +419,8 @@ describe('emergency: going to a hospital yourself', () => {
     expect((await request(app).get('/api/er/hospitals?lat=6.5&lng=3.36').set(auth(inst.token))).status).toBe(403); // patients only
 
     const closedProfile = await prisma.institutionProfile.findUnique({ where: { userId: closed.user.id } });
-    expect((await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: closedProfile!.id, lat: 6.499, lng: 3.355 })).status).toBe(409);
-    const a = await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: mine.id, type: 'ACCIDENT', transport: 'TAXI', notes: 'deep cut', lat: 6.499, lng: 3.355 });
+    expect((await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: closedProfile!.id, lat: 6.499, lng: 3.355 + o })).status).toBe(409);
+    const a = await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: mine.id, type: 'ACCIDENT', transport: 'TAXI', notes: 'deep cut', lat: 6.499, lng: 3.355 + o });
     expect(a.status).toBe(201);
     expect(a.body).toMatchObject({ status: 'REQUESTED', type: 'ACCIDENT', transport: 'TAXI' });
     expect(a.body.etaMinutes).toBeGreaterThan(0);
@@ -433,7 +434,7 @@ describe('emergency: going to a hospital yourself', () => {
     expect((await request(app).post(`/api/institution/er/${a.body.id}/respond`).set(auth(closed.token)).send({ accept: true })).status).toBe(404);
 
     // Position on the way updates the arrival time; hospital accepts with a note for the patient
-    const loc = await request(app).post(`/api/er/arrivals/${a.body.id}/location`).set(auth(pat.token)).send({ lat: 6.512, lng: 3.385 });
+    const loc = await request(app).post(`/api/er/arrivals/${a.body.id}/location`).set(auth(pat.token)).send({ lat: 6.512, lng: 3.385 + o });
     expect(loc.body.etaMinutes).toBeLessThan(a.body.etaMinutes);
     const acc = await request(app).post(`/api/institution/er/${a.body.id}/respond`).set(auth(inst.token)).send({ accept: true, readyNote: 'Use the Emergency gate' });
     expect(acc.body).toMatchObject({ status: 'ACCEPTED', readyNote: 'Use the Emergency gate' });
@@ -447,7 +448,7 @@ describe('emergency: going to a hospital yourself', () => {
     expect((await request(app).post(`/api/er/arrivals/${a.body.id}/cancel`).set(auth(pat.token))).status).toBe(409);
 
     // A hospital that cannot take the patient says why
-    const a2 = await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: mine.id, lat: 6.499, lng: 3.355 });
+    const a2 = await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: mine.id, lat: 6.499, lng: 3.355 + o });
     const dec = await request(app).post(`/api/institution/er/${a2.body.id}/respond`).set(auth(inst.token)).send({ accept: false, reason: 'The emergency unit is full right now' });
     expect(dec.body).toMatchObject({ status: 'DECLINED', declineReason: 'The emergency unit is full right now' });
   });
@@ -456,6 +457,7 @@ describe('emergency: going to a hospital yourself', () => {
 describe('facility directory (listed before they join)', () => {
   it('finds listed facilities, lets the right account claim one once, and reports coverage to admins', async () => {
     const tag = uniq();
+    const o = Math.round(Math.random() * 3000) / 1000 + 1;
     const [hosp, pharm, hmo] = await Promise.all([
       prisma.facilityListing.create({ data: { source: 'GRID3', sourceId: 'T-' + tag, name: `Zeta Teaching Hospital ${tag}`, category: 'TEACHING_HOSPITAL', state: 'Lagos', lga: 'Surulere', lat: 6.5158, lng: 3.3898 } }),
       prisma.facilityListing.create({ data: { source: 'OSM', sourceId: 'P-' + tag, name: `Zeta Pharmacy ${tag}`, category: 'PHARMACY', state: 'Lagos', lat: 6.52, lng: 3.39 } }),
@@ -483,8 +485,8 @@ describe('facility directory (listed before they join)', () => {
 
     // Patients see nearby hospitals not on N-Health in an emergency (claimed ones are on N-Health already)
     const pat = await register('PATIENT');
-    await prisma.facilityListing.create({ data: { source: 'GRID3', sourceId: 'G-' + tag, name: `Zeta General Hospital ${tag}`, category: 'GENERAL_HOSPITAL', state: 'Lagos', lat: 6.50, lng: 3.36 } });
-    const un = await request(app).get('/api/er/unlisted?lat=6.499&lng=3.355').set(auth(pat.token));
+    await prisma.facilityListing.create({ data: { source: 'GRID3', sourceId: 'G-' + tag, name: `Zeta General Hospital ${tag}`, category: 'GENERAL_HOSPITAL', state: 'Lagos', lat: 6.50, lng: 3.36 + o } });
+    const un = await request(app).get(`/api/er/unlisted?lat=6.499&lng=${3.355 + o}`).set(auth(pat.token));
     expect(un.body.some((x: any) => x.name === `Zeta General Hospital ${tag}`)).toBe(true);
     expect(un.body.some((x: any) => x.id === hosp.id)).toBe(false);
 
@@ -501,5 +503,139 @@ describe('facility directory (listed before they join)', () => {
     expect((await request(app).post('/api/admin-ops/facilities').set(auth(t)).send({ name: `Zeta Blood Bank ${tag}`, category: 'BLOOD_BANK', state: 'Kano' })).status).toBe(409);
     const fix = await request(app).patch(`/api/admin-ops/facilities/${pharm.id}`).set(auth(t)).send({ phone: '0801 234 5678', hidden: true });
     expect(fix.body).toMatchObject({ phone: '0801 234 5678', hidden: true, addedById: boss.id });
+  });
+});
+
+describe('invite reward (coins)', () => {
+  it('gives the inviter 1 coin once, after the invited person confirms their email or phone', async () => {
+    const { rewardInviter, COIN_VALUE_NGN } = await import('../src/services/coins');
+    const inviter = await register('PATIENT');
+    const code = (await prisma.user.findUnique({ where: { id: inviter.user.id } }))!.referralCode!;
+    const email = `inv-${uniq()}@test.io`;
+    const r = await request(app).post('/api/auth/register').send({ email, password: 'password123', name: 'Ada Friend', role: 'PATIENT', acceptTerms: true, referralCode: code });
+    expect(r.status).toBe(201);
+    const friendId = r.body.user.id;
+    const bal = async () => Number((await prisma.creditLedger.findUnique({ where: { userId: inviter.user.id } }))?.balance || 0);
+    const before = await bal();
+    await rewardInviter(friendId); // not confirmed yet: nothing
+    expect(await bal()).toBe(before);
+    await prisma.user.update({ where: { id: friendId }, data: { emailVerifiedAt: new Date() } });
+    await rewardInviter(friendId);
+    await rewardInviter(friendId); // only once
+    expect(await bal()).toBe(before + 1 * COIN_VALUE_NGN); // 1 coin, kept as ₦10 inside
+    const s = await request(app).get('/api/invites/summary').set(auth(inviter.token));
+    expect(s.body).toMatchObject({ joined: 1, confirmed: 1, coinsEarned: 1, rewardCoins: 1 });
+    const cfg = await request(app).get('/api/config');
+    expect(cfg.body).toMatchObject({ coinValue: 10, inviteRewardCoins: 1 });
+  });
+});
+
+describe('health jobs (gigs)', () => {
+  it('lets a verified pharmacy recruit a pharmacist, alerts matching workers, and runs applications to hire', async () => {
+    const tag = uniq();
+    const ph = await register('PHARMACY', { pharmacyName: 'Gig Pharmacy ' + tag, licenseNumber: 'PCN-G' + tag, address: 'Yaba' });
+    await prisma.user.update({ where: { id: ph.user.id }, data: { verificationStatus: 'VERIFIED' } });
+    await prisma.pharmacyProfile.update({ where: { userId: ph.user.id }, data: { state: 'Lagos', city: 'Yaba' } });
+    const worker = await register('PATIENT');
+    const other = await register('PATIENT');
+    // The worker sets up a work profile and wants alerts in Lagos
+    expect((await request(app).post('/api/gigs/x/apply').set(auth(worker.token))).status).toBe(404);
+    const wp = await request(app).put('/api/work-profile').set(auth(worker.token)).send({ profession: 'PHARMACIST', licenseNumber: 'PCN-123', yearsExperience: 4, states: ['Lagos'], cvUrl: 'https://files.example/cv.pdf' });
+    expect(wp.body).toMatchObject({ profession: 'PHARMACIST', licenseBody: 'PCN', openToWork: true });
+
+    // A pharmacy cannot recruit doctors; a patient cannot post
+    const base = { profession: 'PHARMACIST', positions: 2, experience: 'MID', employmentType: 'PART_TIME', shifts: ['NIGHT', 'WEEKEND'], payMin: 150000, payMax: 250000, payPeriod: 'MONTH', benefits: ['Meals', 'Not real'], description: 'Night and weekend pharmacist for a busy community pharmacy in Yaba.' };
+    expect((await request(app).post('/api/gigs').set(auth(ph.token)).send({ ...base, profession: 'DOCTOR' })).status).toBe(400);
+    expect((await request(app).post('/api/gigs').set(auth(worker.token)).send(base)).status).toBe(403);
+    expect((await request(app).post('/api/gigs').set(auth(ph.token)).send({ ...base, payMin: 300000 })).status).toBe(400); // max < min
+    const g = await request(app).post('/api/gigs').set(auth(ph.token)).send(base);
+    expect(g.status).toBe(201);
+    expect(g.body).toMatchObject({ orgName: 'Gig Pharmacy ' + tag, orgType: 'PHARMACY', state: 'Lagos', positions: 2, benefits: ['Meals'] });
+    expect(g.body.alerted).toBeGreaterThanOrEqual(1); // other test runs may have left matching workers
+    expect(await prisma.notification.count({ where: { userId: worker.user.id, type: 'gig' } })).toBe(1);
+
+    // Workers find and apply; one application per person; no profile, no application
+    const list = await request(app).get('/api/gigs?profession=PHARMACIST&state=Lagos').set(auth(worker.token));
+    expect(list.body.some((x: any) => x.id === g.body.id && x.typeLabel === 'Part-time')).toBe(true);
+    expect((await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(other.token)).send({})).status).toBe(400);
+    expect((await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(ph.token)).send({})).status).toBe(400); // own job
+    const a = await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(worker.token)).send({ coverNote: 'I am available nights', expectedPay: 200000 });
+    expect(a.status).toBe(201);
+    expect((await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(worker.token)).send({})).status).toBe(409);
+
+    // Employer sees the applicant; contact details only after shortlisting; others cannot see
+    expect((await request(app).get(`/api/gigs/${g.body.id}/applicants`).set(auth(worker.token))).status).toBe(404);
+    let ap = (await request(app).get(`/api/gigs/${g.body.id}/applicants`).set(auth(ph.token))).body[0];
+    expect(ap.profile).toMatchObject({ professionLabel: 'Pharmacist', yearsExperience: 4, cvUrl: 'https://files.example/cv.pdf' });
+    expect(ap.applicant.email).toBeUndefined();
+    await request(app).patch(`/api/gigs/applications/${a.body.id}`).set(auth(ph.token)).send({ status: 'SHORTLISTED', employerNote: 'Interview Monday 10am' }).expect(200);
+    ap = (await request(app).get(`/api/gigs/${g.body.id}/applicants`).set(auth(ph.token))).body[0];
+    expect(ap.applicant.email).toBeDefined();
+    const mine = await request(app).get('/api/gigs/applications/mine').set(auth(worker.token));
+    expect(mine.body[0]).toMatchObject({ status: 'SHORTLISTED', employerNote: 'Interview Monday 10am' });
+    await request(app).patch(`/api/gigs/applications/${a.body.id}`).set(auth(ph.token)).send({ status: 'HIRED' }).expect(200);
+    const posted = await request(app).get('/api/gigs/mine/posted').set(auth(ph.token));
+    expect(posted.body[0]).toMatchObject({ applicants: 1, hired: 1, status: 'OPEN' }); // 2 positions, 1 hired
+
+    // Reports pause a job after 5; closing tells waiting applicants
+    for (let i = 0; i < 5; i++) await request(app).post(`/api/gigs/${g.body.id}/report`).set(auth(other.token)).send({ reason: 'asks for money' });
+    expect((await prisma.gig.findUnique({ where: { id: g.body.id } }))!.status).toBe('PAUSED');
+    expect((await request(app).patch(`/api/gigs/${g.body.id}`).set(auth(ph.token)).send({ status: 'OPEN' })).status).toBe(403);
+  });
+});
+
+describe('identity form, role changes, blood banks and medicines', () => {
+  it('reviews an in-app identity submission, lets only super admins change roles, and finds blood and medicines', async () => {
+    const tag = uniq();
+    const { signToken } = await import('../src/utils/jwt');
+    const boss = await prisma.user.create({ data: { email: `sa-${tag}@test.io`, name: 'Boss', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const plainAdmin = await prisma.user.create({ data: { email: `ad-${tag}@test.io`, name: 'Admin', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: false } });
+    const t = signToken({ userId: boss.id, role: 'ADMIN' as any, isSuperAdmin: true, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    const t2 = signToken({ userId: plainAdmin.id, role: 'ADMIN' as any, isSuperAdmin: false, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    const pat = await register('PATIENT');
+
+    // KYC form: all details and documents required; NIN has 11 digits; then an admin approves
+    expect((await request(app).post('/api/kyc/manual').set(auth(pat.token)).send({ fullName: 'Ada Obi' })).status).toBe(400);
+    const form = { fullName: 'Ada Obi', dateOfBirth: '1990-04-02', address: '12 Marina', state: 'Lagos', idType: 'NIN', idNumber: '1234', idFront: 'https://f.test/a.jpg', selfie: 'https://f.test/b.jpg', proofOfAddress: 'https://f.test/c.pdf' };
+    expect((await request(app).post('/api/kyc/manual').set(auth(pat.token)).send(form)).status).toBe(400);
+    const sub = await request(app).post('/api/kyc/manual').set(auth(pat.token)).send({ ...form, idNumber: '12345678901' });
+    expect(sub.body.status).toBe('IN_REVIEW');
+    expect((await prisma.user.findUnique({ where: { id: pat.user.id } }))!.kycStatus).toBe('IN_REVIEW');
+    const d = await request(app).get('/api/admin-ops/kyc/' + sub.body.id).set(auth(t2));
+    expect(d.body.form).toMatchObject({ fullName: 'Ada Obi', idNumber: '12345678901', files: { idFront: 'https://f.test/a.jpg' } });
+    expect((await request(app).post(`/api/admin-ops/kyc/${sub.body.id}/decide`).set(auth(t2)).send({ decision: 'APPROVED' })).status).toBe(200);
+    expect((await prisma.user.findUnique({ where: { id: pat.user.id } }))!.kycStatus).toBe('APPROVED');
+    expect((await request(app).post(`/api/admin-ops/kyc/${sub.body.id}/decide`).set(auth(t2)).send({ decision: 'DECLINED' })).status).toBe(409);
+
+    // Role change: super admin only; creates the profile; new provider goes to verification
+    expect((await request(app).patch(`/api/admin/users/${pat.user.id}/role`).set(auth(t2)).send({ role: 'NURSE' })).status).toBe(403);
+    const ch = await request(app).patch(`/api/admin/users/${pat.user.id}/role`).set(auth(t)).send({ role: 'NURSE' });
+    expect(ch.body).toMatchObject({ role: 'NURSE', verificationStatus: 'PENDING' });
+    expect(await prisma.nurseProfile.findUnique({ where: { userId: pat.user.id } })).not.toBeNull();
+    expect((await request(app).get('/api/auth/me').set(auth(pat.token))).status).toBe(401); // signed out to apply it
+    expect((await request(app).patch(`/api/admin/users/${boss.id}/role`).set(auth(t)).send({ role: 'PATIENT' })).status).toBe(400);
+
+    // Blood: blood banks and hospitals that run one (e.g. Kano); medicines in stock at pharmacies
+    const viewer = await register('PATIENT');
+    await prisma.facilityListing.createMany({ data: [
+      { source: 'GRID3', sourceId: 'K1-' + tag, name: `Kano Teaching Hospital ${tag}`, category: 'TEACHING_HOSPITAL', state: 'Kano', lat: 12.0, lng: 8.52 },
+      { source: 'NBSA', sourceId: 'K2-' + tag, name: `Kano Blood Centre ${tag}`, category: 'BLOOD_BANK', state: 'Kano', lat: 12.01, lng: 8.53 },
+      { source: 'GRID3', sourceId: 'K3-' + tag, name: `Kano Clinic ${tag}`, category: 'CLINIC', state: 'Kano', lat: 12.0, lng: 8.5 },
+    ] });
+    const blood = await request(app).get(`/api/facilities/search?category=BLOOD&state=Kano&q=${tag}`);
+    const names = blood.body.map((x: any) => x.name);
+    expect(names).toContain(`Kano Teaching Hospital ${tag}`);
+    expect(names).toContain(`Kano Blood Centre ${tag}`);
+    expect(names).not.toContain(`Kano Clinic ${tag}`);
+    expect(blood.body.find((x: any) => x.name.startsWith('Kano Teaching')).bloodService).toBe('HOSPITAL');
+    const ph = await register('PHARMACY', { pharmacyName: 'Med ' + tag, licenseNumber: 'M-' + tag, address: 'x' });
+    const pp = await prisma.pharmacyProfile.findUnique({ where: { userId: ph.user.id } });
+    await prisma.inventory.createMany({ data: [
+      { pharmacyId: pp!.id, name: `Amoxitag${tag} 500mg`, stock: 10, price: 1500, requiresPrescription: true },
+      { pharmacyId: pp!.id, name: `Amoxitag${tag} syrup`, stock: 0, price: 900 },
+    ] });
+    const meds = await request(app).get(`/api/medicines/search?q=amoxitag${tag}`).set(auth(viewer.token));
+    expect(meds.body).toHaveLength(1); // out-of-stock hidden
+    expect(meds.body[0]).toMatchObject({ price: 1500, requiresPrescription: true, pharmacy: { name: 'Med ' + tag } });
   });
 });

@@ -1,5 +1,6 @@
 // Route table: every screen of the app, guarded by role.
 import { route } from '../lib/router.js';
+import { state } from '../lib/store.js';
 import { authScreen } from './auth.js';
 import { pitchScreen } from './pitch.js';
 
@@ -18,12 +19,20 @@ function lazyModule(load) {
 export const S = lazyModule(() => import('./shared.js'));
 export const P = lazyModule(() => import('./patient.js'));
 export const V = lazyModule(() => import('./providers.js'));
+export const G = lazyModule(() => import('./gigs.js'));
 const C = lazyModule(() => import('./common.js'));
 /** Provider home pages end with the invite card (patients have it inside their home). */
 const withInvite = (screen) => async (el, ...a) => {
   const r = await screen(el, ...a);
   const html = await C.inviteCard();
+  // Recruiting (and, for doctors and nurses, finding work) from every provider home.
+  if (el.isConnected && !el.querySelector('.jobs-card')) {
+    const worker = ['DOCTOR', 'NURSE'].includes(state.user?.role);
+    el.insertAdjacentHTML('beforeend', `<div class="card jobs-card"><div class="row"><div style="font-size:28px">💼</div><div class="grow"><b>Health jobs</b><div class="small muted">Recruit nurses, doctors, pharmacists, lab scientists and more${worker ? ', or find shifts and jobs yourself' : ''}.</div></div></div>
+      <div class="row mt8"><button class="btn btn-primary btn-sm grow" data-go="/hiring">Post a job</button>${worker ? '<button class="btn btn-outline btn-sm grow" data-go="/jobs">Find jobs</button>' : ''}</div></div>`);
+  }
   if (html && el.isConnected && !el.querySelector('.invite-card')) el.insertAdjacentHTML('beforeend', html);
+  if (html) C.loadInviteStats(el);
   return r;
 };
 
@@ -65,6 +74,7 @@ route('/patient/orders', P.ordersScreen, { roles: PATIENT });
 route('/patient/labs', P.labsScreen, { roles: PATIENT });
 route('/patient/providers', P.providersScreen, { roles: PATIENT });
 route('/patient/institutions', P.institutionsScreen, { roles: PATIENT });
+route('/patient/find', P.findScreen, { roles: PATIENT });
 route('/patient/donations', P.donationsScreen);
 route('/patient/insurance', P.insuranceScreen, { roles: PATIENT });
 route('/patient/records', P.recordsScreen, { roles: PATIENT });
@@ -111,3 +121,10 @@ route('/institution/er', V.institutionEr, { roles: ['INSTITUTION'] });
 
 // Admin
 route('/admin', V.adminHome, { roles: ['ADMIN'] });
+
+// Health jobs
+route('/jobs', G.jobsScreen);
+route('/jobs/:id', G.jobScreen);
+route('/hiring', G.hiringScreen, { roles: PROVIDERS });
+route('/hiring/new', G.postJobScreen, { roles: PROVIDERS });
+route('/hiring/:id', G.applicantsScreen, { roles: PROVIDERS });

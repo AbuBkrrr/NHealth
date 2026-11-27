@@ -10,6 +10,7 @@ import { storeFile, parseDataUri } from '../../services/storage';
 import { distanceKm } from '../../utils/geo';
 import { getFinance } from '../../services/settings';
 import { str, num, uid, page } from './util';
+import { COIN_VALUE_NGN, INVITE_REWARD_COINS, toCoins } from '../../services/coins';
 
 /** GET /api/config - public runtime configuration for the apps. */
 export async function config(_req: Request, res: Response) {
@@ -18,7 +19,7 @@ export async function config(_req: Request, res: Response) {
     cashEnabled: fin.cashEnabled, commission: fin.commission,
     gateways: enabledGateways(), escrow: !!process.env.PAYSCROW_API_KEY, kyc: DIDIT_CONFIGURED(), vapidPublicKey: vapidPublicKey(),
     currencies: SUPPORTED_CURRENCIES, rates: await ratesPerNgn(), baseCurrency: 'NGN', serviceFeePercent: fin.patientServiceFeePercent,
-    posTaxPercent: fin.posTaxPercent, emergencyMinBalance: env.raw.EMERGENCY_MIN_BALANCE, googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+    posTaxPercent: fin.posTaxPercent, emergencyMinBalance: env.raw.EMERGENCY_MIN_BALANCE, coinValue: COIN_VALUE_NGN, inviteRewardCoins: INVITE_REWARD_COINS, googleClientId: process.env.GOOGLE_CLIENT_ID || null,
     emergencyNumbers: { NG: ['112', '767', '199'], GH: ['112', '193'], KE: ['999', '112'], ZA: ['10177', '112'], US: ['911'], GB: ['999', '112'], DEFAULT: ['112'] },
   });
 }
@@ -241,4 +242,15 @@ export async function updateProviderProfile(req: Request, res: Response) {
     await prisma.user.updateMany({ where: { id: uid(req), verificationStatus: 'VERIFIED' }, data: { verificationStatus: 'PENDING', verificationNote: 'Licence number changed - re-verification required' } });
   }
   res.json(row);
+}
+
+/** GET /api/invites/summary - how many people joined with my invite and the coins it earned me. */
+export async function inviteSummary(req: Request, res: Response) {
+  const me = uid(req);
+  const [joined, confirmed, rewards] = await Promise.all([
+    prisma.user.count({ where: { referredById: me } }),
+    prisma.user.count({ where: { referredById: me, OR: [{ emailVerifiedAt: { not: null } }, { phoneVerifiedAt: { not: null } }] } }),
+    prisma.creditTransaction.aggregate({ where: { userId: me, type: 'reward', reference: { startsWith: 'INVITE-' } }, _sum: { amount: true } }),
+  ]);
+  res.json({ joined, confirmed, coinsEarned: toCoins(Number(rewards._sum.amount || 0)), rewardCoins: INVITE_REWARD_COINS });
 }

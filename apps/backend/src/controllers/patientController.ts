@@ -10,6 +10,7 @@ import { getBalance } from '../services/creditsService';
 import { distanceKm } from '../utils/geo';
 import { getFinance } from '../services/settings';
 import { startDocument, drawField, drawTable, drawTotal, drawFooterNote, finishDocument, formatNaira } from '../utils/pdf';
+import { coinsText } from '../services/coins';
 
 /** Looks up the PatientProfile row for the logged-in user, or throws. */
 async function getPatientProfile(userId: string) {
@@ -303,7 +304,7 @@ export async function requestEmergency(req: Request, res: Response) {
   // Minimum coin balance guarantees ambulance operators get paid; life-threatening cases should still dial 112/767.
   const bal = await getBalance(req.user!.userId);
   if (bal < env.raw.EMERGENCY_MIN_BALANCE && !req.body.overrideBalance) {
-    throw ApiError.badRequest(`A minimum balance of ${env.raw.EMERGENCY_MIN_BALANCE.toLocaleString()} coins is required. Top up, or call 112 / 767 now.`);
+    throw ApiError.badRequest(`A minimum balance of ${coinsText(env.raw.EMERGENCY_MIN_BALANCE)} is required. Top up, or call 112 / 767 now.`);
   }
   const request = await prisma.emergencyRequest.create({
     data: { patientId: patient.id, lat: data.lat, lng: data.lng, notes: data.notes, type: req.body.type ? String(req.body.type) : 'MEDICAL',

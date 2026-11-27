@@ -76,7 +76,8 @@ The integration uses **Didit API v3**: `POST /v3/session/` to create a session a
 | `SERVICE_FEE_PERCENT` | 5 (initial value; super admins change fees in Admin → Fees & payouts) |
 | `POS_TAX_PERCENT` | 5 |
 | `EMERGENCY_MIN_BALANCE` | 5000 |
-| `REFERRAL_REWARD` | 500 |
+| `COIN_VALUE_NGN` | 10 (1 coin = ₦10) |
+| `INVITE_REWARD_COINS` | 1 (coins per friend who joins and confirms their email or phone) |
 | `REQUIRE_PROVIDER_VERIFICATION` | on in production |
 | `SCHEDULER_DISABLED=1` | set on all but one API replica |
 

@@ -1,12 +1,12 @@
 import { get, getFresh, post, postLater, patch, del, download } from '../lib/api.js';
 import { state } from '../lib/store.js';
-import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile } from '../lib/ui.js';
+import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile, coinValue } from '../lib/ui.js';
 import { on } from '../lib/realtime.js';
 import { go } from '../lib/router.js';
 import { createMap } from '../lib/map.js';
 import { t } from '../lib/i18n.js';
-import { loadBalance, payModal, reviewModal, emergencyNumbers, inviteCard } from './common.js';
-import { BLOOD, ORGANS, GENOTYPES } from './data.js';
+import { loadBalance, payModal, reviewModal, emergencyNumbers, inviteCard, loadInviteStats } from './common.js';
+import { BLOOD, ORGANS, GENOTYPES, NG_STATES } from './data.js';
 
 const upcoming = (a) => ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(a.status) && new Date(a.scheduledAt).getTime() > Date.now() - 2 * 3600e3;
 let myPos = null;
@@ -21,7 +21,7 @@ export async function homeScreen(el) {
     <div class="balance-card"><div class="balance-label">Coins Balance</div><div class="balance-amount" id="bal">…</div>
       <div style="font-size:11px;opacity:.85;margin-top:2px" id="ins"></div>
       <div class="balance-actions"><button class="btn-primary" data-go="/patient/wallet">💰 Coins</button><button class="btn-outline" data-go="/patient/wallet?tab=history">📊 History</button></div></div>
-    ${u.kycStatus !== 'APPROVED' ? '<div class="banner info">🪪 Verify your identity to unlock emergency dispatch, insurance and donations.<button class="btn btn-sm btn-primary" data-go="/kyc">Verify</button></div>' : ''}
+    ${u.kycStatus === 'IN_REVIEW' ? '<div class="banner info" data-go="/kyc">⏳ Your identity documents are being checked. We will notify you when it is done.</div>' : u.kycStatus !== 'APPROVED' ? '<div class="banner info">🪪 Verify your identity to unlock emergency dispatch, insurance and donations.<button class="btn btn-sm btn-primary" data-go="/kyc">Verify</button></div>' : ''}
     <div class="quick-actions">
       <div class="quick-action emergency" data-go="/patient/emergency" tabindex="0"><span class="icon">🚨</span><span class="label">${t('Emergency')}</span></div>
       <div class="quick-action" data-go="/patient/appointments" tabindex="0"><span class="icon">📅</span><span class="label">${t('Appointments')}</span></div>
@@ -35,9 +35,11 @@ export async function homeScreen(el) {
       <div class="quick-action" data-go="/patient/records" tabindex="0"><span class="icon">📁</span><span class="label">${t('Records')}</span></div>
       <div class="quick-action" data-go="/patient/records?tab=reminders" tabindex="0"><span class="icon">⏰</span><span class="label">Reminders</span></div>
       <div class="quick-action institution-action" data-go="/patient/institutions" tabindex="0"><span class="icon">🏨</span><span class="label">Facilities</span></div>
+      <div class="quick-action" data-go="/jobs" tabindex="0"><span class="icon">💼</span><span class="label">Health jobs</span></div>
     </div>
     <div id="fhp"></div>${inviteCard()}<div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
+  loadInviteStats(el);
   get('/patient/insurance').then((p) => { const a = p.find((x) => x.status === 'ACTIVE'); $('#ins', el) && ($('#ins', el).innerHTML = a ? `<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">✓ ${esc(a.plan?.name || a.provider)} Active</span>` : ''); }).catch(() => null);
   get('/patient/appointments').then((list) => {
     const up = list.filter(upcoming).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 3);
@@ -57,7 +59,7 @@ export async function homeScreen(el) {
   get('/directory?verified=1&sort=rating').then((list) => {
     const top = list.filter((x) => ['DOCTOR', 'NURSE'].includes(x.role)).slice(0, 2);
     $('#fhp', el) && ($('#fhp', el).innerHTML = `<div class="card find-providers"><div class="card-header"><span class="card-title">🔍 Find Health Providers</span><a class="link" data-go="/patient/providers">Search</a></div>
-      <div class="fp-chips">${[['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacists'], ['AMBULANCE', '🚑 Ambulance'], ['LAB', '🔬 Diagnostics']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/providers?type=${k}" tabindex="0">${l}</span>`).join('')}</div>
+      <div class="fp-chips">${[['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacists'], ['AMBULANCE', '🚑 Ambulance'], ['LAB', '🔬 Diagnostics']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/providers?type=${k}" tabindex="0">${l}</span>`).join('')}${[['BLOOD', '🩸 Blood banks'], ['MEDICINE', '💊 Medicines'], ['HMO', '🛡️ Insurance'], ['HOSPITAL', '🏥 Hospitals']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/find?type=${k}" tabindex="0">${l}</span>`).join('')}</div>
       ${top.map((x) => item({ avatarHtml: avatar(x.role, x.avatarUrl), title: (x.role === 'DOCTOR' ? 'Dr. ' : x.role === 'NURSE' ? 'Nurse ' : '') + esc(x.name), sub: [x.title || x.specialty, x.hospital, x.rating ? '⭐ ' + Number(x.rating).toFixed(1) : ''].filter(Boolean).map(esc).join(' • '), trailing: x.verified ? '<span class="badge badge-success">Verified</span>' : '', attrs: `data-go="/provider/${x.userId}"` })).join('')}</div>`);
   }).catch(() => null);
   get('/articles').then((a) => { if (a[0]) $('#tip', el).innerHTML = card(item({ icon: '💡', title: esc(a[0].title), sub: esc(a[0].summary), attrs: `data-go="/articles/${a[0].slug}"` })); }).catch(() => null);
@@ -69,12 +71,12 @@ export async function walletScreen(el, _p, q) {
   const gws = cfg.gateways || [];
   const pending = sessionStorage.getItem('nh_topup');
   el.innerHTML = appBar({ title: '💰 Coins', back: '/patient/home' }) + `
-    <div class="balance-card"><div class="balance-label">Available coins</div><div class="balance-amount" id="bal">…</div><div class="small" style="opacity:.8">1 coin = ₦1 • for healthcare services on N-Health</div></div>
+    <div class="balance-card"><div class="balance-label">Available coins</div><div class="balance-amount" id="bal">…</div><div class="small" style="opacity:.8">For healthcare services and products on N-Health</div></div>
     ${pending ? '<div class="banner info" id="pend">⏳ Confirming your payment…</div>' : ''}
     ${tabs([['fund', '💰 Top up'], ['history', '📊 History']], q.tab === 'history' ? 'history' : 'fund')}
     <div id="fund" class="${q.tab === 'history' ? 'hidden' : ''}">${card(`
-      <div class="form-group"><label>Amount (₦)</label><input type="number" id="amt" min="100" max="500000" inputmode="numeric" placeholder="e.g. 5000" value="${esc(q.amount || '')}"></div>
-      <div class="row wrap mb8">${[2000, 5000, 10000, 20000, 50000].map((v) => `<span class="chip" data-amt="${v}">${money(v, { convert: false })}</span>`).join('')}</div>
+      <div class="form-group"><label>Coins to buy</label><input type="number" id="amt" min="10" max="50000" step="1" inputmode="numeric" placeholder="e.g. 500" value="${esc(q.amount || '')}"><div class="hint" id="price">&nbsp;</div></div>
+      <div class="row wrap mb8">${[200, 500, 1000, 2000, 5000].map((v) => `<span class="chip" data-amt="${v}">🪙 ${v.toLocaleString()}</span>`).join('')}</div>
       <div class="card-title" style="font-size:13px;margin-bottom:6px">Payment gateway</div>
       ${gws.length ? `<div class="payment-options">${gws.map((g, i) => `<div class="payment-option ${i === 0 ? 'selected' : ''}" data-gw="${g}"><div class="icon">${g === 'paystack' ? '🟦' : g === 'flutterwave' ? '🟧' : '💳'}</div><div class="label">${g[0].toUpperCase() + g.slice(1)}</div></div>`).join('')}</div>` : '<div class="banner warn">Online top-up is being activated. Please check back shortly.</div>'}
       <div class="card-title" style="font-size:13px;margin:8px 0 6px">Payment method</div>
@@ -93,12 +95,16 @@ export async function walletScreen(el, _p, q) {
   refresh();
   let gw = gws[0], pm = 'card';
   $$('[data-tab]', el).forEach((tb) => (tb.onclick = () => { $$('[data-tab]', el).forEach((x) => x.classList.toggle('active', x === tb)); $('#fund', el).classList.toggle('hidden', tb.dataset.tab !== 'fund'); $('#history', el).classList.toggle('hidden', tb.dataset.tab !== 'history'); }));
-  $$('[data-amt]', el).forEach((c) => (c.onclick = () => { $('#amt', el).value = c.dataset.amt; }));
+  // The price of coins in naira is shown before paying (buyers must see what they will be charged).
+  const showPrice = () => { const n = Math.floor(Number($('#amt', el).value) || 0); $('#price', el).textContent = n > 0 ? `You pay ${money(n * coinValue(), { naira: true, convert: false })} by card, transfer or USSD` : '\u00a0'; };
+  $('#amt', el).oninput = showPrice; showPrice();
+  $$('[data-amt]', el).forEach((c) => (c.onclick = () => { $('#amt', el).value = c.dataset.amt; showPrice(); }));
   $$('[data-gw]', el).forEach((c) => (c.onclick = () => { gw = c.dataset.gw; $$('[data-gw]', el).forEach((x) => x.classList.toggle('selected', x === c)); }));
   $$('[data-pm]', el).forEach((c) => (c.onclick = () => { pm = c.dataset.pm; $$('[data-pm]', el).forEach((x) => x.classList.toggle('selected', x === c)); }));
   $('#pay', el).onclick = (e) => busy(e.target, async () => {
-    const amount = Number($('#amt', el).value);
-    if (!(amount >= 100)) throw new Error('Minimum top-up is ₦100');
+    const coinsWanted = Math.floor(Number($('#amt', el).value));
+    if (!(coinsWanted >= 10)) throw new Error('Minimum top-up is 10 coins');
+    const amount = coinsWanted * coinValue();
     const r = await post('/credits/purchase/initiate', { amount, gateway: gw, currency: 'NGN', channel: pm, returnUrl: location.origin + '/' });
     sessionStorage.setItem('nh_topup', r.internalRef);
     if (r.checkoutUrl) location.href = r.checkoutUrl;
@@ -496,16 +502,59 @@ const LISTING_CATS = {
   LAB: 'DIAGNOSTIC,BLOOD_BANK', PHARMACY: 'PHARMACY',
 };
 const LISTING_ICON = { TEACHING_HOSPITAL: '🏛️', FEDERAL_MEDICAL_CENTRE: '🏥', GENERAL_HOSPITAL: '🏥', SPECIALIST_HOSPITAL: '🏥', HOSPITAL: '🏥', CLINIC: '🩺', PRIMARY_HEALTH_CENTRE: '🩺', HEALTH_POST: '🩺', MATERNITY: '🤱', DIAGNOSTIC: '🔬', BLOOD_BANK: '🩸', PHARMACY: '💊', DENTAL: '🦷', EYE: '👁️', NURSING_HOME: '🛏️', HMO: '🛡️', OTHER: '🏥' };
-export function listingCard(x) {
+export function listingCard(x, opts = {}) {
   const where = [x.address, x.lga, x.state].filter(Boolean).join(', ');
   const invite = `Hello ${x.name}, patients are looking for you on N-Health. Join free and receive bookings: ${location.origin}/?ref=${encodeURIComponent(state.user?.referralCode || '')}`;
   return `<div class="card listing-card"><div class="row"><div class="avatar institution-avatar">${LISTING_ICON[x.category] || '🏥'}</div><div class="grow"><div style="font-weight:600">${esc(x.name)}</div>
       <div class="small muted">${esc(x.categoryLabel)}${x.ownership ? ' • ' + esc(x.ownership) : ''}${where ? ' • ' + esc(where) : ''}</div></div>${x.distanceKm != null ? `<div class="small" style="white-space:nowrap"><b>${x.distanceKm} km</b></div>` : ''}</div>
-    <div class="row mt8 wrap"><span class="badge" style="background:#f1f3f4;color:#555">Not on N-Health yet</span><span class="grow"></span>
+    ${x.bloodService === 'HOSPITAL' && opts.blood ? '<div class="small" style="color:#B71C1C;margin-top:4px">🩸 Hospital blood bank - call to confirm blood is available</div>' : x.bloodService === 'BLOOD_BANK' ? '<div class="small" style="color:#B71C1C;margin-top:4px">🩸 Blood bank / donation centre</div>' : ''}
+    <div class="row mt8 wrap">${x.onNhealth ? `<span class="badge badge-success">On N-Health ✓</span><span class="grow"></span><button class="btn btn-primary btn-sm" data-go="/provider/${x.userId}">Open</button>` : '<span class="badge" style="background:#f1f3f4;color:#555">Not on N-Health yet</span><span class="grow"></span>'}
       ${x.lat != null ? `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lng}">🧭 Directions</a>` : ''}
       ${x.phone ? `<a class="btn btn-outline btn-sm" href="tel:${esc(String(x.phone).split(',')[0].trim())}">📞 Call</a>` : ''}
       ${x.website ? `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="${esc(x.website)}">🌐</a>` : ''}
       <a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(invite)}" title="Invite them to N-Health">📨 Invite</a></div></div>`;
+}
+
+// ================= FIND: blood banks, insurance, medicines, hospitals, diagnostics =================
+const FIND = {
+  BLOOD: { chip: '🩸 Blood banks', title: '🩸 Blood banks & donation centres', cats: 'BLOOD', hint: 'Blood banks, donation centres and the hospitals that run their own blood bank. Call before you go.' },
+  HMO: { chip: '🛡️ Insurance', title: '🛡️ Health insurance (HMOs)', cats: 'HMO', hint: 'All HMOs accredited by NHIA, with their contacts.' },
+  MEDICINE: { chip: '💊 Medicines', title: '💊 Medicines', hint: 'Medicines in stock at pharmacies on N-Health. Prescription-only medicines need a prescription from your doctor.' },
+  HOSPITAL: { chip: '🏥 Hospitals', title: '🏥 Hospitals & clinics', cats: 'TEACHING_HOSPITAL,FEDERAL_MEDICAL_CENTRE,GENERAL_HOSPITAL,SPECIALIST_HOSPITAL,HOSPITAL,CLINIC,MATERNITY' },
+  DIAGNOSTIC: { chip: '🔬 Diagnostics', title: '🔬 Diagnostic centers', cats: 'DIAGNOSTIC' },
+};
+export async function findScreen(el, _p, q) {
+  let type = FIND[q.type] ? q.type : 'BLOOD', qv = q.q || '', st = '';
+  el.innerHTML = appBar({ title: '🔍 Find', back: '/patient/home' }) + `<div class="hscroll">${Object.entries(FIND).map(([k, v]) => `<span class="chip ${k === type ? 'active' : ''}" data-ft="${k}">${v.chip}</span>`).join('')}</div>
+    <div class="form-group"><input id="fq" placeholder="🔍 Search by name" value="${esc(qv)}"></div>
+    <div class="row mb8"><select id="fst" class="grow"><option value="">📍 Near me</option>${NG_STATES.map((x) => `<option>${x}</option>`).join('')}</select></div>
+    <div class="small muted" id="fh" style="margin:0 4px 8px"></div><div id="fl">${skeleton(3)}</div>`;
+  const load = async () => {
+    const f = FIND[type];
+    $('#fh', el).textContent = f.hint || '';
+    $('#fq', el).placeholder = type === 'MEDICINE' ? '🔍 Medicine name, e.g. Amoxicillin' : '🔍 Search by name';
+    const box = $('#fl', el); box.innerHTML = skeleton(3);
+    const p = st ? null : await pos();
+    if (type === 'MEDICINE') {
+      if (qv.trim().length < 2) { box.innerHTML = empty('💊', 'Type the name of a medicine to see which pharmacies have it in stock.'); return; }
+      const list = await get(`/medicines/search?q=${encodeURIComponent(qv.trim())}` + (p ? `&lat=${p.lat}&lng=${p.lng}` : '')).catch(() => []);
+      box.innerHTML = list.length ? list.map((m) => card(`<div class="row"><div class="avatar pharmacy-avatar">💊</div><div class="grow"><div style="font-weight:600">${esc(m.name)}${m.brand ? ' <span class="small muted">(' + esc(m.brand) + ')</span>' : ''}</div>
+          <div class="small muted">${esc(m.pharmacy.name)}${m.pharmacy.address ? ' • ' + esc(m.pharmacy.address) : ''}${m.distanceKm != null ? ' • ' + m.distanceKm + ' km' : ''}</div>
+          ${m.requiresPrescription ? '<div class="small" style="color:var(--warning)">℞ Prescription required</div>' : ''}</div><div style="text-align:right"><b>${money(m.price)}</b><div class="small muted">${m.inStock} in stock</div></div></div>
+          <div class="row mt8"><span class="grow small muted">${m.pharmacy.homeDelivery ? '🛵 Home delivery' : ''}</span><button class="btn btn-primary btn-sm" data-go="/patient/pharmacy/${m.pharmacy.id}">Order</button></div>`)).join('')
+        : empty('💊', 'No pharmacy on N-Health has this in stock yet. Try another name or brand.');
+      return;
+    }
+    if (!p && !st && qv.trim().length < 2 && type !== 'HMO') { box.innerHTML = empty('📍', 'Share your location or choose a state to see what is near you.'); return; }
+    const url = `/facilities/search?limit=40&category=${f.cats}` + (qv.trim().length >= 2 ? '&q=' + encodeURIComponent(qv.trim()) : '') + (st ? '&state=' + encodeURIComponent(st) : '') + (p ? `&lat=${p.lat}&lng=${p.lng}` : '');
+    const list = await get(url).catch(() => []);
+    box.innerHTML = (type === 'BLOOD' ? `<div class="banner info" data-go="/patient/donations">❤️ Need blood urgently? Post a blood request and nearby donors are alerted.</div>` : '')
+      + (list.length ? list.map((x) => listingCard(x, { blood: type === 'BLOOD' })).join('') + '<p class="small muted center">Data: GRID3 (CC BY 4.0), © OpenStreetMap contributors, NHIA, NBSA</p>' : empty('🔍', 'Nothing found here yet.'));
+  };
+  $$('[data-ft]', el).forEach((c) => (c.onclick = () => { type = c.dataset.ft; $$('[data-ft]', el).forEach((x) => x.classList.toggle('active', x === c)); load(); }));
+  let t; $('#fq', el).oninput = (e) => { clearTimeout(t); qv = e.target.value; t = setTimeout(load, 350); };
+  $('#fst', el).onchange = (e) => { st = e.target.value; load(); };
+  await load();
 }
 
 // ================= PROVIDERS & FACILITIES =================
@@ -779,9 +828,9 @@ export async function donationsScreen(el, _p, q) {
 }
 function donateModal(id, title, after) {
   formModal('❤️ Donate to ' + esc(title), [
-    { name: 'amount', label: 'Amount (coins)', type: 'number', required: true, min: 100, placeholder: '1000' },
+    { name: 'amount', label: 'Coins to donate', type: 'number', required: true, min: 10, placeholder: '100' },
     { name: 'message', label: 'Message of support (optional)' }, { name: 'anonymous', label: 'Donate anonymously', type: 'checkbox' },
-  ], { submit: 'Donate', intro: '<p class="muted mb8">Paid from your coins. 100% goes to the cause.</p>', onSubmit: async (v) => { await post('/donations/campaigns/' + id + '/donate', v); toast('💚 Thank you for your donation!'); loadBalance(); after?.(); } });
+  ], { submit: 'Donate', intro: '<p class="muted mb8">Paid from your coins. 100% goes to the cause.</p>', onSubmit: async (v) => { await post('/donations/campaigns/' + id + '/donate', { ...v, amount: Math.floor(Number(v.amount)) * coinValue() }); toast('💚 Thank you for your donation!'); loadBalance(); after?.(); } });
 }
 function createCampaign(after) {
   formModal('📣 Request donations', [
@@ -790,10 +839,10 @@ function createCampaign(after) {
     { name: 'description', label: 'Story / details', type: 'textarea', rows: 4, required: true },
     { name: 'beneficiaryName', label: 'Beneficiary' },
     { name: 'bloodType', label: 'Blood group needed', type: 'select', options: [['', '—'], ...BLOOD] }, { name: 'organ', label: 'Organ needed', type: 'select', options: [['', '—'], ...ORGANS] },
-    { name: 'unitsNeeded', label: 'Units / donors needed', type: 'number' }, { name: 'goalAmount', label: 'Goal amount (₦) - for money campaigns', type: 'number' },
+    { name: 'unitsNeeded', label: 'Units / donors needed', type: 'number' }, { name: 'goalAmount', label: state.user.role === 'PATIENT' ? 'Goal in coins - for money campaigns' : 'Goal amount (₦) - for money campaigns', type: 'number' },
     { name: 'urgency', label: 'Urgency', type: 'select', options: ['NORMAL', 'URGENT', 'CRITICAL'] }, { name: 'location', label: 'Hospital / location' },
     { name: 'contactName', label: 'Contact person' }, { name: 'contactPhone', label: 'Contact phone', type: 'tel' }, { name: 'deadline', label: 'Needed by', type: 'date' },
-  ], { submit: 'Submit for review', intro: '<div class="banner info">To protect donors, campaigns are reviewed by N-Health before going live (usually within 24h). Institutions go live instantly.</div>', onSubmit: async (v) => {
+  ], { submit: 'Submit for review', intro: '<div class="banner info">To protect donors, campaigns are reviewed by N-Health before going live (usually within 24h). Institutions go live instantly.</div>', onSubmit: async (v) => { if (state.user.role === 'PATIENT' && v.goalAmount) v.goalAmount = Number(v.goalAmount) * coinValue();
     const b = { ...v }; Object.keys(b).forEach((k) => b[k] === '' && delete b[k]);
     if (b.deadline) b.deadline = new Date(b.deadline).toISOString();
     const p = await pos(); if (p) Object.assign(b, { lat: p.lat, lng: p.lng });

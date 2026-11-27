@@ -8,14 +8,23 @@ export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 // ---------- Formatting (user's currency, locale & timezone) ----------
 const SYMBOL = { NGN: '₦', USD: '$', GBP: '£', EUR: '€', GHS: 'GH₵', KES: 'KSh', ZAR: 'R', XOF: 'CFA', EGP: 'E£', UGX: 'USh', TZS: 'TSh', RWF: 'RF' };
-export function money(amountNgn, { currency, convert = true } = {}) {
+// Coins: patients see every price and balance in coins only (1 coin = coinValue naira, set by the server).
+// Amounts are kept in naira inside the app; this is only how they are shown.
+export const coinValue = () => Number(state.config?.coinValue) || 10;
+export const toCoins = (amountNgn) => Number(amountNgn || 0) / coinValue();
+const fmtCoins = (c) => c.toLocaleString(undefined, { maximumFractionDigits: Math.abs(c) < 100 && c % 1 ? 1 : 0 });
+export const coinText = (amountNgn) => { const c = toCoins(amountNgn); return '🪙 ' + fmtCoins(c) + (Math.abs(c) === 1 ? ' coin' : ' coins'); };
+/** A price. Patients see coins; providers (paid in naira to their bank) see naira. naira:true forces naira (card/cash at the till). */
+export function money(amountNgn, { currency, convert = true, naira = false } = {}) {
+  if (!naira && (!state.user || state.user.role === 'PATIENT')) return coinText(amountNgn);
   const cur = currency || state.user?.currency || 'NGN';
   const rate = convert && cur !== 'NGN' ? state.config?.rates?.[cur] : 1;
   const v = Number(amountNgn || 0) * (rate || 1);
   try { return new Intl.NumberFormat(state.user?.locale || 'en-NG', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: rate ? cur : 'NGN', maximumFractionDigits: v >= 1000 ? 0 : 2 }).format(v); }
   catch { return (SYMBOL[cur] || cur + ' ') + v.toLocaleString(); }
 }
-export const coins = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+/** A coin balance (stored in naira inside the app) as a number of coins. */
+export const coins = (n) => fmtCoins(toCoins(n));
 const tz = () => state.user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Lagos';
 export function dt(v, opts = { dateStyle: 'medium', timeStyle: 'short' }) {
   if (!v) return '';
@@ -197,10 +206,11 @@ export function fileToDataUri(file, { maxDim = 1600, quality = 0.82 } = {}) {
     r.readAsDataURL(file);
   });
 }
-export function pickFile(accept = 'image/*') {
+export function pickFile(accept = 'image/*', { capture } = {}) {
   return new Promise((resolve) => {
     const i = document.createElement('input');
     i.type = 'file'; i.accept = accept;
+    if (capture) i.setAttribute('capture', capture); // 'user' opens the front camera on phones
     i.onchange = () => resolve(i.files?.[0] || null);
     i.click();
   });

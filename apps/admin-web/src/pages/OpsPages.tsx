@@ -44,7 +44,10 @@ export function OpsDashboardPage() {
 // ---------------------------------------------------------------------------
 export function VerificationsPage() {
   const [status, setStatus] = useState('PENDING');
-  const { items, error, reload } = useList<any>('/admin-ops/verifications?status=' + status);
+  const [q, setQ] = useState('');
+  const [qd, setQd] = useState('');
+  useEffect(() => { const t = setTimeout(() => setQd(q.trim()), 300); return () => clearTimeout(t); }, [q]);
+  const { items, error, reload } = useList<any>('/admin-ops/verifications?status=' + status + (qd ? '&q=' + encodeURIComponent(qd) : ''));
   const decide = async (id: string, decision: string, kycOk: boolean) => {
     const note = decision === 'VERIFIED' ? '' : window.prompt('Reason (sent to the provider):') || '';
     let overrideKyc = false;
@@ -58,7 +61,8 @@ export function VerificationsPage() {
     <div>
       <h1 className="page-title">Provider verification</h1>
       <p className="page-subtitle">Every provider must upload a government ID, proof of address and a health licence before approval. Check the licence with the issuing council (MDCN, PCN, MLSCN, NMCN…); identity is also checked by Didit.</p>
-      <div className="toolbar">{['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'UNVERIFIED'].map((s) => <button key={s} className={s === status ? '' : 'outline'} onClick={() => setStatus(s)}>{s}</button>)}</div>
+      <div className="toolbar">{['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'UNVERIFIED'].map((s) => <button key={s} className={s === status ? '' : 'outline'} onClick={() => setStatus(s)}>{s}</button>)}<input placeholder="Search name or email" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <p className="page-subtitle">{items.length} {status.toLowerCase()} • oldest first</p>
       {error && <div className="error-text">{error}</div>}
       {items.length === 0 ? <div className="card empty-state">Queue is empty.</div> : items.map((u) => {
         const prof = u.doctorProfile || u.nurseProfile || u.pharmacyProfile || u.labProfile || u.ambulanceProfile || u.institutionProfile || {};
@@ -101,16 +105,56 @@ export function VerificationsPage() {
 
 // ---------------------------------------------------------------------------
 export function KycPage() {
-  const { items, error } = useList<any>('/admin-ops/kyc');
+  const [status, setStatus] = useState('In Review');
+  const { items, error, reload } = useList<any>('/admin-ops/kyc' + (status ? '?status=' + encodeURIComponent(status) : ''));
+  const [open, setOpen] = useState<any>(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const show = async (id: string) => { try { setOpen((await api.get('/admin-ops/kyc/' + id)).data); setNote(''); } catch (e) { alert(getErrorMessage(e)); } };
+  const decide = async (decision: string) => {
+    if (decision === 'DECLINED' && !note.trim()) return alert('Tell the person why (they see this note), e.g. "The ID photo is blurry".');
+    setBusy(true);
+    try { await api.post(`/admin-ops/kyc/${open.id}/decide`, { decision, note }); setOpen(null); reload(); } catch (e) { alert(getErrorMessage(e)); } finally { setBusy(false); }
+  };
+  const f = open?.form;
+  const FILES: [string, string][] = [['idFront', 'ID - front'], ['idBack', 'ID - back'], ['selfie', 'Selfie with ID'], ['proofOfAddress', 'Proof of address']];
   return (
     <div>
-      <h1 className="page-title">Identity verifications (Didit)</h1>
-      <p className="page-subtitle">Latest KYC sessions. Decisions arrive by signed webhook.</p>
+      <h1 className="page-title">Identity verifications (KYC)</h1>
+      <p className="page-subtitle">In-app submissions wait here for review: check the name, date of birth and ID number against the photos, and that the selfie matches the ID. Didit checks are decided automatically.</p>
+      <div className="toolbar">{[['In Review', 'To review'], ['Approved', 'Approved'], ['Declined', 'Declined'], ['', 'All']].map(([k, l]) => <button key={l} className={k === status ? '' : 'outline'} onClick={() => setStatus(k)}>{l}</button>)}</div>
       {error && <div className="error-text">{error}</div>}
       <div className="card" style={{ padding: 0 }}>
-        <table><thead><tr><th>When</th><th>User</th><th>Role</th><th>Purpose</th><th>Document</th><th>Name on ID</th><th>Status</th></tr></thead>
-          <tbody>{items.map((k) => <tr key={k.id}><td>{fmt(k.createdAt)}</td><td>{k.user?.name}<br /><small>{k.user?.email}</small></td><td>{k.user?.role}</td><td>{k.purpose}</td><td>{k.documentType} {k.documentCountry}</td><td>{k.fullName}</td><td><Status text={k.status} /></td></tr>)}</tbody></table>
+        <table><thead><tr><th>When</th><th>User</th><th>Role</th><th>Method</th><th>Document</th><th>Name on ID</th><th>Status</th><th></th></tr></thead>
+          <tbody>{items.map((k) => <tr key={k.id}><td>{fmt(k.createdAt)}</td><td>{k.user?.name}<br /><small>{k.user?.email}</small></td><td>{k.user?.role}</td><td>{k.provider === 'manual' ? 'Form + documents' : 'Didit'}</td><td>{k.documentType} {k.documentCountry}</td><td>{k.fullName}</td><td><Status text={k.status} /></td>
+            <td>{k.provider === 'manual' && <button className={k.status === 'In Review' ? '' : 'outline'} onClick={() => show(k.id)}>{k.status === 'In Review' ? 'Review' : 'View'}</button>}</td></tr>)}</tbody></table>
+        {!items.length && <div className="empty-state" style={{ padding: 20 }}>Nothing here.</div>}
       </div>
+      {open && (
+        <div className="modal-backdrop" onClick={() => setOpen(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 820 }}>
+            <h3>{open.user?.name} <small style={{ fontWeight: 400 }}>{open.user?.email} • {open.user?.role}</small></h3>
+            {f ? (
+              <>
+                <table><tbody>
+                  {[['Full name', f.fullName], ['Date of birth', f.dateOfBirth], ['Sex', f.gender], ['Phone', f.phone], ['Address', [f.address, f.city, f.lga, f.state].filter(Boolean).join(', ')], ['ID', `${open.documentType} • ${f.idNumber}`], ['ID expiry', f.idExpiry]].filter(([, v]) => v).map(([k, v]) => <tr key={k}><td style={{ width: 140, color: 'var(--text-secondary)' }}>{k}</td><td><b>{v}</b></td></tr>)}
+                </tbody></table>
+                <div className="kyc-files">{FILES.filter(([k]) => f.files?.[k]).map(([k, l]) => (
+                  <a key={k} href={f.files[k]} target="_blank" rel="noreferrer" className="kyc-file">
+                    {/\.pdf($|\?)/i.test(f.files[k]) ? <div className="kyc-pdf">📄 PDF</div> : <img src={f.files[k]} alt={l} />}<span>{l}</span>
+                  </a>))}
+                </div>
+              </>
+            ) : <p className="page-subtitle">No form data.</p>}
+            {open.status === 'In Review' ? (
+              <>
+                <label style={{ display: 'block', marginTop: 10, fontSize: 13 }}>Note to the person (required when declining)<textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} style={{ width: '100%' }} placeholder='e.g. "The ID photo is blurry - please retake it in good light"' /></label>
+                <div className="toolbar"><button disabled={busy} onClick={() => decide('APPROVED')}>✓ Approve identity</button><button className="danger" disabled={busy} onClick={() => decide('DECLINED')}>Decline</button><button className="outline" onClick={() => setOpen(null)}>Close</button></div>
+              </>
+            ) : <div className="toolbar"><span className="page-subtitle">Decided: {open.status}</span><button className="outline" onClick={() => setOpen(null)}>Close</button></div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
