@@ -61,7 +61,7 @@ export async function startTransaction(input: StartTransactionInput) {
   const payload = {
     currencyCode: 'NGN',
     merchantChargePercentage: 50,
-    webhookNotificationUrl: `${process.env.PUBLIC_API_URL || 'https://n-health-backend-production.up.railway.app'}/api/webhooks/payscrow`,
+    webhookNotificationUrl: `${(process.env.PUBLIC_URL || process.env.PUBLIC_API_URL || 'https://api.nhealth.com.ng').replace(/\/$/, '')}/api/webhooks/payscrow`,
     ...input,
   };
 

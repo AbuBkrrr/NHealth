@@ -150,6 +150,9 @@ importers:
       prisma:
         specifier: ^5.22.0
         version: 5.22.0
+      qrcode:
+        specifier: 1.5.4
+        version: 1.5.4
       socket.io:
         specifier: ^4.7.5
         version: 4.8.3
@@ -184,6 +187,9 @@ importers:
       '@types/node':
         specifier: ^20.14.0
         version: 20.19.43
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
       '@types/supertest':
         specifier: 6.0.2
         version: 6.0.2
@@ -2006,6 +2012,9 @@ packages:
 
   '@types/q@1.5.8':
     resolution: {integrity: sha512-hroOstUScF6zhIi+5+x0dzqrHA1EJi+Irri6b1fxolMTqqHIV/Cg77EtnQcZqZCu8hR3mX2BzIxN4/GzI68Kfw==}
+
+  '@types/qrcode@1.5.6':
+    resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
 
   '@types/qs@6.15.1':
     resolution: {integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==}
@@ -10134,6 +10143,10 @@ snapshots:
   '@types/prop-types@15.7.15': {}
 
   '@types/q@1.5.8': {}
+
+  '@types/qrcode@1.5.6':
+    dependencies:
+      '@types/node': 22.20.2
 
   '@types/qs@6.15.1': {}
 

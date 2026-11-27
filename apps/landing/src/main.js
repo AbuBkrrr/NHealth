@@ -94,6 +94,9 @@ navigator.serviceWorker?.addEventListener?.('message', (e) => { if (e.data?.type
   setTimeout(() => {
     netBanner();
     const q = new URLSearchParams(location.search);
+    // Tracking links / QR codes: https://www.<domain>/go/<slug>?utm_... -> pitch page
+    const goM = location.pathname.match(/^\/go(?:\/([^/?#]+))?\/?$/);
+    if (goM) history.replaceState(null, '', '/' + location.search + '#/go' + (goM[1] ? '/' + goM[1] : ''));
     if (q.get('topup')) { sessionStorage.setItem('nh_topup', q.get('topup')); history.replaceState(null, '', location.pathname + '#/patient/wallet'); }
     if (q.get('kyc')) history.replaceState(null, '', location.pathname + '#/kyc');
     if (q.get('paid')) { sessionStorage.setItem('nh_paid', q.get('paid')); history.replaceState(null, '', location.pathname + '#/patient/appointments'); }

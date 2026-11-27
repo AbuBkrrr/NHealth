@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireRole, requireVerifiedProvider } from '../middleware/auth';
 import { asyncHandler as h } from '../utils/asyncHandler';
-import { sensitiveLimiter } from '../middleware/rateLimit';
+import { sensitiveLimiter, marketingLimiter } from '../middleware/rateLimit';
 import * as core from '../controllers/platform/core';
 import * as sched from '../controllers/platform/schedule';
 import * as health from '../controllers/platform/health';
@@ -16,6 +16,7 @@ import * as labCore from '../controllers/labController';
 import * as fin from '../controllers/platform/finance';
 import * as direct from '../controllers/platform/directPay';
 import * as integ from '../controllers/platform/integrations';
+import * as mkt from '../controllers/platform/marketing';
 import { requireSuperAdmin } from '../middleware/auth';
 
 /**
@@ -31,6 +32,12 @@ r.get('/config', h(core.config));
 r.get('/public/emergency-card/:token', h(health.publicEmergencyCard));
 r.get('/articles', h(core.listArticles));
 r.get('/articles/:slug', h(core.getArticle));
+
+// Marketing (public): pitch-page config, link opens, lead form, unsubscribe
+r.get('/mkt/config', h(mkt.publicConfig));
+r.post('/mkt/open', marketingLimiter, h(mkt.recordOpen));
+r.post('/mkt/lead', marketingLimiter, h(mkt.createLead));
+r.get('/mkt/unsubscribe', marketingLimiter, h(mkt.unsubscribe));
 
 // Unified provider profile
 r.get('/provider-profile', auth, h(core.getProviderProfile));
@@ -187,6 +194,20 @@ r.delete('/admin-ops/catalog/:kind/:id', ...A, h(adm.catalogDelete));
 r.post('/admin-ops/rates', ...A, h(adm.setRate));
 r.get('/admin-ops/tickets', ...A, h(adm.listTickets));
 r.post('/admin-ops/tickets/:id/reply', ...A, h(adm.replyTicket));
+
+// Marketing (super admin): links & QR codes, opens per device, leads, broadcasts, pixels
+const SA = [auth, requireRole('ADMIN'), requireSuperAdmin];
+r.get('/admin-ops/marketing/overview', ...SA, h(mkt.overview));
+r.get('/admin-ops/marketing/links', ...SA, h(mkt.listLinks));
+r.post('/admin-ops/marketing/links', ...SA, h(mkt.createLink));
+r.patch('/admin-ops/marketing/links/:id', ...SA, h(mkt.updateLink));
+r.get('/admin-ops/marketing/links/:id/qr.:fmt', ...SA, h(mkt.linkQr));
+r.patch('/admin-ops/marketing/leads/:id', ...SA, h(mkt.updateLead));
+r.get('/admin-ops/marketing/leads.csv', ...SA, h(mkt.leadsCsv));
+r.get('/admin-ops/marketing/settings', ...SA, h(mkt.getSettings));
+r.put('/admin-ops/marketing/settings', ...SA, h(mkt.putSettings));
+r.get('/admin-ops/marketing/broadcasts', ...SA, h(mkt.listBroadcasts));
+r.post('/admin-ops/marketing/broadcasts', ...SA, sensitiveLimiter, h(mkt.broadcast));
 
 // Finance (fees are super-admin only)
 r.get('/admin-ops/finance', ...A, h(fin.getFinanceSettings));

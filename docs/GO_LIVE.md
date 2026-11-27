@@ -3,18 +3,20 @@
 Do the steps in order. Each step ends with a **✔ check**. Do not move on until the check passes.
 
 You need:
-- your Railway project (backend + web services)
+- your server (102.68.85.97), set up with `docs/DOCKER_DEPLOY.md`
 - the Paystack, Flutterwave, Resend, Didit and PayScrow dashboards
 - Termii and Cloudinary accounts (sign-up is free)
 - access to the DNS settings for `nhealth.com.ng`
 
-Throughout this guide, `API` means `https://n-health-backend-production.up.railway.app`. If you put the backend on a custom domain (for example `https://api.nhealth.com.ng`), use that instead everywhere.
+Throughout this guide, `API` means `https://api.nhealth.com.ng`.
+
+**Where settings go:** every "Variables" step below means a line in `/opt/nhealth/backend.env` on the server (`nano /opt/nhealth/backend.env`). After editing, apply with `cd /opt/nhealth && docker compose up -d`.
 
 ---
 
 ## Step 0 — Back up and prepare (10 min)
 
-1. Railway → your **Postgres** service → **Backups** → **Create backup**.
+1. On the server, run a backup: `/etc/cron.daily/nhealth-backup`.
 2. Generate a strong JWT secret, but only if `JWT_SECRET` is not already set. Changing it logs every user out.
 
    ```bash
@@ -27,19 +29,19 @@ Throughout this guide, `API` means `https://n-health-backend-production.up.railw
    npx web-push generate-vapid-keys
    ```
 
-**✔ check:** the backup is listed in Railway.
+**✔ check:** `ls -lh /var/backups/nhealth` lists the new backup.
 
 ---
 
 ## Step 1 — Resend (transactional email) (15 min)
 
-The previous backend never sent email, so even if a `RESEND_API_KEY` exists on Railway it was unused until now.
+The previous backend never sent email, so even if you had a `RESEND_API_KEY` before, it was unused until now.
 
 1. Resend → **Domains** → **Add domain** → `nhealth.com.ng`. Region: closest to your users (EU West or US East).
 2. Add the DNS records Resend shows in your DNS provider: **MX** and **TXT (SPF)** on `send.nhealth.com.ng`, and **TXT (DKIM)** on `resend._domainkey`.
 3. Wait until the domain shows **Verified**. This usually takes minutes, but can take up to 24 hours.
 4. Resend → **API Keys** → **Create**. Permission: *Sending access*, domain `nhealth.com.ng`. Copy the key (`re_…`).
-5. Railway → backend service → **Variables**:
+5. On the server, in `/opt/nhealth/backend.env`:
    - `RESEND_API_KEY=re_…`
    - `EMAIL_FROM=N-Health <no-reply@nhealth.com.ng>`
 
@@ -58,7 +60,7 @@ The previous backend never sent email, so even if a `RESEND_API_KEY` exists on R
    - Turn **ON** "Enable transfers". Payouts to providers use this.
    - Turn **OFF** "Confirm transfers before sending" (the OTP prompt). Otherwise automatic payouts stall waiting for an OTP.
 4. **Transfers → Fund balance**: top up your Paystack transfer balance. Payouts are paid from this balance. Collections settle to your bank, so top it up before each payout day (or choose "settle to balance" in Settings → Payouts).
-5. Railway → backend → Variables:
+5. On the server, in `/opt/nhealth/backend.env`:
    - `PAYSTACK_SECRET_KEY=sk_live_…`
    - `PAYSTACK_PUBLIC_KEY=pk_live_…`
 
@@ -76,7 +78,7 @@ The previous backend only checked Flutterwave webhooks. It never created or veri
    - URL: `API/api/webhooks/flutterwave`
    - **Secret hash**: choose a long random string. Tick *Receive webhook response in JSON format* and the transfer events.
 4. If you will pay providers through Flutterwave: **Transfers → enable** and fund your NGN balance. Also whitelist the server IP if Flutterwave asks.
-5. Railway → backend → Variables:
+5. On the server, in `/opt/nhealth/backend.env`:
    - `FLUTTERWAVE_SECRET_KEY=FLWSECK-…`
    - `FLUTTERWAVE_PUBLIC_KEY=FLWPUBK-…`
    - `FLUTTERWAVE_WEBHOOK_HASH=` the same secret hash you entered in Flutterwave. Keep it if it is already set and matches.
@@ -87,7 +89,7 @@ The previous backend only checked Flutterwave webhooks. It never created or veri
 
 ## Step 4 — PayScrow (escrow for appointments, orders and lab tests) (15 min)
 
-PayScrow was already integrated. Confirm these values on Railway:
+PayScrow was already integrated. Confirm these values in `/opt/nhealth/backend.env`:
 
 1. PayScrow dashboard → **API keys** → `PAYSCROW_API_KEY` (live broker key). `PAYSCROW_BASE_URL` is only needed if PayScrow gave you a non-default URL. The default is `https://api.payscrow.net`.
 2. PayScrow → **Webhooks**: set the URL to `API/api/webhooks/payscrow` and copy the signing secret into `PAYSCROW_WEBHOOK_SECRET`.
@@ -110,7 +112,7 @@ The backend is set up for **Didit API v3**:
    - Copy the **API key**.
    - Webhook URL: `API/api/webhooks/didit`
    - Copy the **webhook secret**.
-4. Railway → backend → Variables:
+4. On the server, in `/opt/nhealth/backend.env`:
    - `DIDIT_API_KEY=…`
    - `DIDIT_WEBHOOK_SECRET=…`
    - `DIDIT_WORKFLOW_ID=…` (patients)
@@ -125,7 +127,7 @@ The backend is set up for **Didit API v3**:
 
 1. Termii → **Sender ID** → request `N-Health`. Use case: transactional OTP and alerts. Approval can take 1–3 days.
 2. Top up your SMS balance.
-3. Railway → backend → Variables:
+3. On the server, in `/opt/nhealth/backend.env`:
    - `TERMII_API_KEY=…`
    - `TERMII_SENDER_ID=N-Health`
 
@@ -138,7 +140,7 @@ The backend is set up for **Didit API v3**:
 Without this, uploads are saved on the server disk and lost on every redeploy.
 
 1. Cloudinary → Dashboard → copy **Cloud name**, **API key** and **API secret**.
-2. Railway → backend → Variables:
+2. On the server, in `/opt/nhealth/backend.env`:
    - `CLOUDINARY_CLOUD_NAME`
    - `CLOUDINARY_API_KEY`
    - `CLOUDINARY_API_SECRET`
@@ -164,17 +166,15 @@ Without this, uploads are saved on the server disk and lost on every redeploy.
 
 ## Step 9 — Deploy
 
-1. Merge the pull request into `main`. Railway redeploys the backend.
-2. Watch the backend **Deploy Logs**:
-   - `[migrate] Existing schema without history detected - baselining.` appears only on the first deploy.
-   - Then `All migrations have been successfully applied.`
+1. Install or update N-Health on the server (`docs/DOCKER_DEPLOY.md`). After any change to `backend.env`, run `cd /opt/nhealth && docker compose up -d`. To deploy newer code, run `nhealth-update`.
+2. Watch the API logs with `docker logs -f nhealth-api`:
+   - `All migrations have been successfully applied.`
    - Then `N-Health API listening`.
-3. **Web app service** (`apps/landing`): in Railway, set the *build* variable `VITE_API_URL=API`, then redeploy. Point `www.nhealth.com.ng` at this service.
-4. **Admin console service**: set `VITE_API_URL=API/api` and redeploy. Point `admin.nhealth.com.ng` at it.
-5. Create your super admin. Railway → backend → **Shell**:
+3. The web app (`www`) and the admin console (`admin`) come with the images. Nothing else to deploy.
+4. The setup script creates your super admin if you pass `ADMIN_EMAIL` and `ADMIN_PASSWORD`. To create one later:
 
    ```bash
-   cd apps/backend && ADMIN_EMAIL=you@yourdomain.com ADMIN_PASSWORD='a-long-unique-password' ADMIN_NAME='Your Name' node scripts/create-admin.cjs
+   docker exec -e ADMIN_EMAIL=you@yourdomain.com -e ADMIN_PASSWORD='a-long-unique-password' -e ADMIN_NAME='Your Name' nhealth-api node scripts/create-admin.cjs
    ```
 
 **✔ check:**
@@ -245,8 +245,8 @@ Use your own patient account and a test provider account.
 ## Step 12 — Launch housekeeping
 
 - **Data protection:** register with the **Nigeria Data Protection Commission (NDPC)** as a data controller. Publish the Terms and Privacy pages (they are already in the app).
-- **Monitoring:** add an uptime monitor (UptimeRobot or Better Stack) on `API/health` and on the web app. Turn on Railway log alerts for `Unhandled error` and `[webhook:`.
-- **Backups:** enable daily Postgres backups and keep 30 days.
+- **Monitoring:** add an uptime monitor (UptimeRobot or Better Stack) on `API/health` and on the web app. Check `docker logs nhealth-api` for `Unhandled error` and `[webhook:` lines.
+- **Backups:** nightly backups run automatically (`/var/backups/nhealth`, 14 days). Copy them off the server weekly: `scp root@102.68.85.97:/var/backups/nhealth/* .`
 - **Finance routine:** before each payout day, check that your Paystack transfer balance covers Admin → Fees & payouts → *Available* total. Check Admin → **Revenue** weekly.
 - **Vercel:** the old `admin-web` project fails on every commit. Delete it, or point it at `apps/admin-web` with build command `pnpm --filter @nhealth/admin-web build` and output `apps/admin-web/dist`.
 - **Mobile apps:** in `apps/mobile`, run `eas build -p android --profile production` (and `-p ios`), then submit to the stores.

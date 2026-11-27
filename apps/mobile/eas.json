@@ -2,8 +2,8 @@
   "cli": { "version": ">= 7.0.0" },
   "build": {
     "development": { "developmentClient": true, "distribution": "internal" },
-    "preview": { "distribution": "internal", "env": { "EXPO_PUBLIC_API_URL": "https://n-health-backend-production.up.railway.app/api" } },
-    "production": { "autoIncrement": true, "env": { "EXPO_PUBLIC_API_URL": "https://n-health-backend-production.up.railway.app/api" } }
+    "preview": { "distribution": "internal", "env": { "EXPO_PUBLIC_API_URL": "https://api.nhealth.com.ng/api" } },
+    "production": { "autoIncrement": true, "env": { "EXPO_PUBLIC_API_URL": "https://api.nhealth.com.ng/api" } }
   },
   "submit": { "production": {} }
 }

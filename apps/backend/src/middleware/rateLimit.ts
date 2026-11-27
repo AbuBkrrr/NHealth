@@ -11,3 +11,5 @@ export const authLimiter = rateLimit({ ...base, windowMs: 15 * 60_000, limit: 30
 export const otpLimiter = rateLimit({ ...base, windowMs: 15 * 60_000, limit: 10, skip: isTest });
 /** Uploads and money-moving endpoints. */
 export const sensitiveLimiter = rateLimit({ ...base, windowMs: 60_000, limit: 30, skip: isTest });
+/** Public marketing endpoints (page opens, lead form). */
+export const marketingLimiter = rateLimit({ ...base, windowMs: 60_000, limit: 40, skip: isTest });

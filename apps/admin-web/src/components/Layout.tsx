@@ -25,6 +25,9 @@ export function Layout() {
         ))}
         {user?.isSuperAdmin && (
           <>
+            <NavLink to="/marketing" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+              Marketing
+            </NavLink>
             <NavLink to="/admins" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
               Admin Accounts
             </NavLink>
