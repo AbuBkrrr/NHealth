@@ -66,7 +66,7 @@ const loginSchema = z.object({
 });
 
 /** Creates the role-specific profile row for a freshly registered user. */
-async function createRoleProfile(userId: string, role: Role, profile: Record<string, any> = {}) {
+export async function createRoleProfile(userId: string, role: Role, profile: Record<string, any> = {}) {
   switch (role) {
     case 'PATIENT':
       return prisma.patientProfile.create({

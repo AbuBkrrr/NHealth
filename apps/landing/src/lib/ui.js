@@ -206,10 +206,11 @@ export function fileToDataUri(file, { maxDim = 1600, quality = 0.82 } = {}) {
     r.readAsDataURL(file);
   });
 }
-export function pickFile(accept = 'image/*') {
+export function pickFile(accept = 'image/*', { capture } = {}) {
   return new Promise((resolve) => {
     const i = document.createElement('input');
     i.type = 'file'; i.accept = accept;
+    if (capture) i.setAttribute('capture', capture); // 'user' opens the front camera on phones
     i.onchange = () => resolve(i.files?.[0] || null);
     i.click();
   });

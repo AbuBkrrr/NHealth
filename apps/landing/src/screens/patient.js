@@ -6,7 +6,7 @@ import { go } from '../lib/router.js';
 import { createMap } from '../lib/map.js';
 import { t } from '../lib/i18n.js';
 import { loadBalance, payModal, reviewModal, emergencyNumbers, inviteCard, loadInviteStats } from './common.js';
-import { BLOOD, ORGANS, GENOTYPES } from './data.js';
+import { BLOOD, ORGANS, GENOTYPES, NG_STATES } from './data.js';
 
 const upcoming = (a) => ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(a.status) && new Date(a.scheduledAt).getTime() > Date.now() - 2 * 3600e3;
 let myPos = null;
@@ -21,7 +21,7 @@ export async function homeScreen(el) {
     <div class="balance-card"><div class="balance-label">Coins Balance</div><div class="balance-amount" id="bal">…</div>
       <div style="font-size:11px;opacity:.85;margin-top:2px" id="ins"></div>
       <div class="balance-actions"><button class="btn-primary" data-go="/patient/wallet">💰 Coins</button><button class="btn-outline" data-go="/patient/wallet?tab=history">📊 History</button></div></div>
-    ${u.kycStatus !== 'APPROVED' ? '<div class="banner info">🪪 Verify your identity to unlock emergency dispatch, insurance and donations.<button class="btn btn-sm btn-primary" data-go="/kyc">Verify</button></div>' : ''}
+    ${u.kycStatus === 'IN_REVIEW' ? '<div class="banner info" data-go="/kyc">⏳ Your identity documents are being checked. We will notify you when it is done.</div>' : u.kycStatus !== 'APPROVED' ? '<div class="banner info">🪪 Verify your identity to unlock emergency dispatch, insurance and donations.<button class="btn btn-sm btn-primary" data-go="/kyc">Verify</button></div>' : ''}
     <div class="quick-actions">
       <div class="quick-action emergency" data-go="/patient/emergency" tabindex="0"><span class="icon">🚨</span><span class="label">${t('Emergency')}</span></div>
       <div class="quick-action" data-go="/patient/appointments" tabindex="0"><span class="icon">📅</span><span class="label">${t('Appointments')}</span></div>
@@ -59,7 +59,7 @@ export async function homeScreen(el) {
   get('/directory?verified=1&sort=rating').then((list) => {
     const top = list.filter((x) => ['DOCTOR', 'NURSE'].includes(x.role)).slice(0, 2);
     $('#fhp', el) && ($('#fhp', el).innerHTML = `<div class="card find-providers"><div class="card-header"><span class="card-title">🔍 Find Health Providers</span><a class="link" data-go="/patient/providers">Search</a></div>
-      <div class="fp-chips">${[['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacists'], ['AMBULANCE', '🚑 Ambulance'], ['LAB', '🔬 Diagnostics']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/providers?type=${k}" tabindex="0">${l}</span>`).join('')}</div>
+      <div class="fp-chips">${[['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacists'], ['AMBULANCE', '🚑 Ambulance'], ['LAB', '🔬 Diagnostics']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/providers?type=${k}" tabindex="0">${l}</span>`).join('')}${[['BLOOD', '🩸 Blood banks'], ['MEDICINE', '💊 Medicines'], ['HMO', '🛡️ Insurance'], ['HOSPITAL', '🏥 Hospitals']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/find?type=${k}" tabindex="0">${l}</span>`).join('')}</div>
       ${top.map((x) => item({ avatarHtml: avatar(x.role, x.avatarUrl), title: (x.role === 'DOCTOR' ? 'Dr. ' : x.role === 'NURSE' ? 'Nurse ' : '') + esc(x.name), sub: [x.title || x.specialty, x.hospital, x.rating ? '⭐ ' + Number(x.rating).toFixed(1) : ''].filter(Boolean).map(esc).join(' • '), trailing: x.verified ? '<span class="badge badge-success">Verified</span>' : '', attrs: `data-go="/provider/${x.userId}"` })).join('')}</div>`);
   }).catch(() => null);
   get('/articles').then((a) => { if (a[0]) $('#tip', el).innerHTML = card(item({ icon: '💡', title: esc(a[0].title), sub: esc(a[0].summary), attrs: `data-go="/articles/${a[0].slug}"` })); }).catch(() => null);
@@ -502,16 +502,59 @@ const LISTING_CATS = {
   LAB: 'DIAGNOSTIC,BLOOD_BANK', PHARMACY: 'PHARMACY',
 };
 const LISTING_ICON = { TEACHING_HOSPITAL: '🏛️', FEDERAL_MEDICAL_CENTRE: '🏥', GENERAL_HOSPITAL: '🏥', SPECIALIST_HOSPITAL: '🏥', HOSPITAL: '🏥', CLINIC: '🩺', PRIMARY_HEALTH_CENTRE: '🩺', HEALTH_POST: '🩺', MATERNITY: '🤱', DIAGNOSTIC: '🔬', BLOOD_BANK: '🩸', PHARMACY: '💊', DENTAL: '🦷', EYE: '👁️', NURSING_HOME: '🛏️', HMO: '🛡️', OTHER: '🏥' };
-export function listingCard(x) {
+export function listingCard(x, opts = {}) {
   const where = [x.address, x.lga, x.state].filter(Boolean).join(', ');
   const invite = `Hello ${x.name}, patients are looking for you on N-Health. Join free and receive bookings: ${location.origin}/?ref=${encodeURIComponent(state.user?.referralCode || '')}`;
   return `<div class="card listing-card"><div class="row"><div class="avatar institution-avatar">${LISTING_ICON[x.category] || '🏥'}</div><div class="grow"><div style="font-weight:600">${esc(x.name)}</div>
       <div class="small muted">${esc(x.categoryLabel)}${x.ownership ? ' • ' + esc(x.ownership) : ''}${where ? ' • ' + esc(where) : ''}</div></div>${x.distanceKm != null ? `<div class="small" style="white-space:nowrap"><b>${x.distanceKm} km</b></div>` : ''}</div>
-    <div class="row mt8 wrap"><span class="badge" style="background:#f1f3f4;color:#555">Not on N-Health yet</span><span class="grow"></span>
+    ${x.bloodService === 'HOSPITAL' && opts.blood ? '<div class="small" style="color:#B71C1C;margin-top:4px">🩸 Hospital blood bank - call to confirm blood is available</div>' : x.bloodService === 'BLOOD_BANK' ? '<div class="small" style="color:#B71C1C;margin-top:4px">🩸 Blood bank / donation centre</div>' : ''}
+    <div class="row mt8 wrap">${x.onNhealth ? `<span class="badge badge-success">On N-Health ✓</span><span class="grow"></span><button class="btn btn-primary btn-sm" data-go="/provider/${x.userId}">Open</button>` : '<span class="badge" style="background:#f1f3f4;color:#555">Not on N-Health yet</span><span class="grow"></span>'}
       ${x.lat != null ? `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lng}">🧭 Directions</a>` : ''}
       ${x.phone ? `<a class="btn btn-outline btn-sm" href="tel:${esc(String(x.phone).split(',')[0].trim())}">📞 Call</a>` : ''}
       ${x.website ? `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="${esc(x.website)}">🌐</a>` : ''}
       <a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(invite)}" title="Invite them to N-Health">📨 Invite</a></div></div>`;
+}
+
+// ================= FIND: blood banks, insurance, medicines, hospitals, diagnostics =================
+const FIND = {
+  BLOOD: { chip: '🩸 Blood banks', title: '🩸 Blood banks & donation centres', cats: 'BLOOD', hint: 'Blood banks, donation centres and the hospitals that run their own blood bank. Call before you go.' },
+  HMO: { chip: '🛡️ Insurance', title: '🛡️ Health insurance (HMOs)', cats: 'HMO', hint: 'All HMOs accredited by NHIA, with their contacts.' },
+  MEDICINE: { chip: '💊 Medicines', title: '💊 Medicines', hint: 'Medicines in stock at pharmacies on N-Health. Prescription-only medicines need a prescription from your doctor.' },
+  HOSPITAL: { chip: '🏥 Hospitals', title: '🏥 Hospitals & clinics', cats: 'TEACHING_HOSPITAL,FEDERAL_MEDICAL_CENTRE,GENERAL_HOSPITAL,SPECIALIST_HOSPITAL,HOSPITAL,CLINIC,MATERNITY' },
+  DIAGNOSTIC: { chip: '🔬 Diagnostics', title: '🔬 Diagnostic centers', cats: 'DIAGNOSTIC' },
+};
+export async function findScreen(el, _p, q) {
+  let type = FIND[q.type] ? q.type : 'BLOOD', qv = q.q || '', st = '';
+  el.innerHTML = appBar({ title: '🔍 Find', back: '/patient/home' }) + `<div class="hscroll">${Object.entries(FIND).map(([k, v]) => `<span class="chip ${k === type ? 'active' : ''}" data-ft="${k}">${v.chip}</span>`).join('')}</div>
+    <div class="form-group"><input id="fq" placeholder="🔍 Search by name" value="${esc(qv)}"></div>
+    <div class="row mb8"><select id="fst" class="grow"><option value="">📍 Near me</option>${NG_STATES.map((x) => `<option>${x}</option>`).join('')}</select></div>
+    <div class="small muted" id="fh" style="margin:0 4px 8px"></div><div id="fl">${skeleton(3)}</div>`;
+  const load = async () => {
+    const f = FIND[type];
+    $('#fh', el).textContent = f.hint || '';
+    $('#fq', el).placeholder = type === 'MEDICINE' ? '🔍 Medicine name, e.g. Amoxicillin' : '🔍 Search by name';
+    const box = $('#fl', el); box.innerHTML = skeleton(3);
+    const p = st ? null : await pos();
+    if (type === 'MEDICINE') {
+      if (qv.trim().length < 2) { box.innerHTML = empty('💊', 'Type the name of a medicine to see which pharmacies have it in stock.'); return; }
+      const list = await get(`/medicines/search?q=${encodeURIComponent(qv.trim())}` + (p ? `&lat=${p.lat}&lng=${p.lng}` : '')).catch(() => []);
+      box.innerHTML = list.length ? list.map((m) => card(`<div class="row"><div class="avatar pharmacy-avatar">💊</div><div class="grow"><div style="font-weight:600">${esc(m.name)}${m.brand ? ' <span class="small muted">(' + esc(m.brand) + ')</span>' : ''}</div>
+          <div class="small muted">${esc(m.pharmacy.name)}${m.pharmacy.address ? ' • ' + esc(m.pharmacy.address) : ''}${m.distanceKm != null ? ' • ' + m.distanceKm + ' km' : ''}</div>
+          ${m.requiresPrescription ? '<div class="small" style="color:var(--warning)">℞ Prescription required</div>' : ''}</div><div style="text-align:right"><b>${money(m.price)}</b><div class="small muted">${m.inStock} in stock</div></div></div>
+          <div class="row mt8"><span class="grow small muted">${m.pharmacy.homeDelivery ? '🛵 Home delivery' : ''}</span><button class="btn btn-primary btn-sm" data-go="/patient/pharmacy/${m.pharmacy.id}">Order</button></div>`)).join('')
+        : empty('💊', 'No pharmacy on N-Health has this in stock yet. Try another name or brand.');
+      return;
+    }
+    if (!p && !st && qv.trim().length < 2 && type !== 'HMO') { box.innerHTML = empty('📍', 'Share your location or choose a state to see what is near you.'); return; }
+    const url = `/facilities/search?limit=40&category=${f.cats}` + (qv.trim().length >= 2 ? '&q=' + encodeURIComponent(qv.trim()) : '') + (st ? '&state=' + encodeURIComponent(st) : '') + (p ? `&lat=${p.lat}&lng=${p.lng}` : '');
+    const list = await get(url).catch(() => []);
+    box.innerHTML = (type === 'BLOOD' ? `<div class="banner info" data-go="/patient/donations">❤️ Need blood urgently? Post a blood request and nearby donors are alerted.</div>` : '')
+      + (list.length ? list.map((x) => listingCard(x, { blood: type === 'BLOOD' })).join('') + '<p class="small muted center">Data: GRID3 (CC BY 4.0), © OpenStreetMap contributors, NHIA, NBSA</p>' : empty('🔍', 'Nothing found here yet.'));
+  };
+  $$('[data-ft]', el).forEach((c) => (c.onclick = () => { type = c.dataset.ft; $$('[data-ft]', el).forEach((x) => x.classList.toggle('active', x === c)); load(); }));
+  let t; $('#fq', el).oninput = (e) => { clearTimeout(t); qv = e.target.value; t = setTimeout(load, 350); };
+  $('#fst', el).onchange = (e) => { st = e.target.value; load(); };
+  await load();
 }
 
 // ================= PROVIDERS & FACILITIES =================

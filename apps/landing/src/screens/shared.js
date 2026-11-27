@@ -264,12 +264,30 @@ export async function kycScreen(el) {
     EXPIRED: '<div class="banner warn">⌛ Your session expired. Start again.</div>',
   };
   const last = s.sessions?.[0];
+  const formOpen = !['APPROVED', 'IN_REVIEW'].includes(st);
   el.innerHTML = appBar({ title: '🪪 Verification', back: true, roleCls: roleCls() }) +
-    card(cardHead('Identity (KYC)') + `<p class="muted mb8">We use <b>Didit</b> to verify your government-issued ID (NIN slip, international passport, driver's licence, voter's card or national ID card) with a quick selfie liveness check. N-Health stores only the result, document type and last 4 digits.</p>
-      ${box[st] || ''}
-      ${last?.documentType ? `<div class="kv"><span class="k">Document</span><span class="v">${esc(last.documentType)} ${last.documentLast4 ? '•••• ' + esc(last.documentLast4) : ''} ${esc(last.documentCountry || '')}</span></div>` : ''}
-      ${st !== 'APPROVED' ? `<button class="btn btn-primary btn-block mt8" id="start" ${s.configured ? '' : 'disabled'}>${st === 'PENDING' ? 'Continue verification' : 'Verify my identity'}</button>${s.configured ? '' : '<p class="muted small center mt8">Identity verification is being set up - please check back soon.</p>'}
-      ${st === 'PENDING' || st === 'IN_REVIEW' ? '<button class="btn btn-outline btn-block mt8" id="refresh">Check status</button>' : ''}` : ''}`) +
+    card(cardHead('Identity (KYC)') + `
+      ${box[st] && st !== 'PENDING' ? box[st] : ''}
+      ${st === 'IN_REVIEW' ? `<p class="small muted">Submitted ${last ? dateOnly(last.createdAt) : ''}${last?.documentType ? ' • ' + esc(last.documentType) + (last.documentLast4 ? ' •••• ' + esc(last.documentLast4) : '') : ''}. You will get a notification when it is done.</p>` : ''}
+      ${st === 'DECLINED' && s.reviewNote ? `<div class="banner warn">Reason: ${esc(s.reviewNote)}</div>` : ''}
+      ${formOpen ? `<p class="muted mb8">Verify your identity once to unlock emergency dispatch, insurance and donations. Fill in your details as they appear on your ID and add clear photos. Your documents are stored privately and seen only by N-Health's verification team.</p>
+      <form id="kycf" novalidate>
+        ${field({ name: 'fullName', label: 'Full name (as on your ID)', required: true, value: state.user.name || '' })}
+        <div class="form-row">${field({ name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true })}${field({ name: 'gender', label: 'Sex', type: 'select', options: [['', '—'], 'Female', 'Male'] })}</div>
+        ${field({ name: 'phone', label: 'Phone number', type: 'tel', value: state.user.phone || '' })}
+        ${field({ name: 'address', label: 'Home address', required: true })}
+        <div class="form-row">${field({ name: 'city', label: 'City / town' })}${field({ name: 'state', label: 'State', type: 'select', required: true, options: [['', 'Choose…'], ...NG_STATES] })}</div>
+        ${field({ name: 'lga', label: 'LGA' })}
+        ${field({ name: 'idType', label: 'ID type', type: 'select', required: true, options: [['NIN', 'National ID (NIN slip or card)'], ['PASSPORT', 'International passport'], ['DRIVERS_LICENCE', "Driver's licence"], ['VOTERS_CARD', "Voter's card"]] })}
+        <div class="form-row">${field({ name: 'idNumber', label: 'ID number', required: true, inputmode: 'numeric', placeholder: '11-digit NIN' })}${field({ name: 'idExpiry', label: 'Expiry date (if any)', type: 'date' })}</div>
+        <div class="kyc-uploads">
+          ${[['idFront', '🪪 Front of your ID', 'image/*,application/pdf', ''], ['idBack', '🪪 Back of your ID (if it has one)', 'image/*,application/pdf', ''], ['selfie', '🤳 Selfie holding your ID', 'image/*', 'user'], ['proofOfAddress', '🏠 Proof of address (utility bill or bank statement, last 3 months)', 'image/*,application/pdf', '']].map(([k, l, acc, cap]) => `<button type="button" class="kyc-up" data-kup="${k}" data-acc="${acc}" data-cap="${cap}"><span class="ic">⬜</span><span class="grow">${l}${k === 'idBack' ? '' : ' <span style="color:var(--error)">*</span>'}</span><span class="small muted" id="kn_${k}">Add</span></button>`).join('')}
+        </div>
+        <label class="check"><input type="checkbox" name="consent"> <span>I confirm these details are true and agree that N-Health may check them to verify my identity.</span></label>
+        <button class="btn btn-primary btn-block mt8" type="submit">Submit for verification</button>
+      </form>
+      ${s.configured ? `<div class="divider">or</div><button class="btn btn-outline btn-block" id="start">⚡ Instant check with Didit (ID scan + face match)</button>` : ''}` : ''}
+      ${st === 'PENDING' || (st === 'IN_REVIEW' && last?.provider !== 'manual') ? '<button class="btn btn-outline btn-block mt8" id="refresh">Check status</button>' : ''}`) +
     (isProvider() ? card(cardHead('⚕️ Verification documents', badge(s.verificationStatus)) + `
       ${s.verificationNote ? `<div class="banner warn">${esc(s.verificationNote)}</div>` : ''}
       <p class="muted mb8">Before your profile goes live, upload these three documents (PDF or photo). An N-Health compliance officer checks them, and your licence with the issuing council (MDCN, PCN, MLSCN, NMCN…).</p>
@@ -282,6 +300,30 @@ export async function kycScreen(el) {
     if (r.url) location.href = r.url; else { toast('✅ Already verified'); kycScreen(el); }
   }));
   $('#refresh', el)?.addEventListener('click', (e) => busy(e.target, async () => { await post('/kyc/refresh'); await refreshMe(); kycScreen(el); }));
+  const files = {};
+  el.querySelectorAll('[data-kup]').forEach((b) => b.addEventListener('click', async () => {
+    const f = await pickFile(b.dataset.acc, { capture: b.dataset.cap || undefined }); if (!f) return;
+    const k = b.dataset.kup;
+    $('#kn_' + k, el).textContent = 'Uploading…';
+    try {
+      const up = await post('/uploads', { dataUri: await fileToDataUri(f), folder: 'kyc', private: true });
+      files[k] = up.url; b.querySelector('.ic').textContent = '✅'; $('#kn_' + k, el).textContent = 'Added';
+    } catch (err) { $('#kn_' + k, el).textContent = 'Try again'; toastErr(err); }
+  }));
+  $('#kycf', el)?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = readForm(e.target);
+    const need = [['fullName', 'your full name'], ['dateOfBirth', 'your date of birth'], ['address', 'your address'], ['state', 'your state'], ['idNumber', 'your ID number']].find(([k]) => !v[k]);
+    if (need) return toast('⚠️ Please add ' + need[1]);
+    for (const [k, l] of [['idFront', 'a photo of the front of your ID'], ['selfie', 'a selfie holding your ID'], ['proofOfAddress', 'your proof of address']]) if (!files[k]) return toast('⚠️ Please add ' + l);
+    if (!v.consent) return toast('⚠️ Please confirm your details are true');
+    await busy(e.target.querySelector('[type=submit]'), async () => {
+      await post('/kyc/manual', { ...v, ...files, idExpiry: v.idExpiry || undefined });
+      await refreshMe().catch(() => null);
+      toast('✅ Submitted - we will verify it shortly');
+      kycScreen(el);
+    });
+  });
   el.querySelectorAll('[data-up]').forEach((btn) => btn.addEventListener('click', async () => {
     const f = await pickFile('image/*,application/pdf'); if (!f) return;
     let dataUri; try { dataUri = await fileToDataUri(f); } catch (e) { return toastErr(e); }

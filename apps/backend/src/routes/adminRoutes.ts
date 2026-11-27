@@ -12,6 +12,7 @@ router.get('/stats', asyncHandler(admin.getStats));
 router.get('/users', asyncHandler(admin.listUsers));
 router.get('/users/:id', asyncHandler(admin.getUserDetail));
 router.patch('/users/:id/status', asyncHandler(admin.setUserStatus));
+router.patch('/users/:id/role', requireSuperAdmin, asyncHandler(admin.changeUserRole));
 
 // Everything below manages admin accounts themselves - super admin only.
 router.get('/admins', requireSuperAdmin, asyncHandler(admin.listAdmins));

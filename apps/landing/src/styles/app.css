@@ -245,3 +245,10 @@ body[data-side=provider] .invite-card{border-color:var(--provider-primary,#7C4DF
 .chk-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px}
 .chk-grid .check{margin:2px 0}
 @media (max-width:380px){.gig-filters{grid-template-columns:1fr}}
+
+/* KYC form uploads */
+.kyc-uploads{display:flex;flex-direction:column;gap:6px;margin:6px 0 10px}
+.kyc-up{display:flex;align-items:center;gap:8px;padding:10px;border:1px dashed #c7c7d1;border-radius:12px;background:#fff;font:inherit;text-align:left;cursor:pointer}
+.kyc-up .ic{font-size:18px}
+.chk-grid .check{display:flex;align-items:center;gap:6px;flex-direction:row}
+.chk-grid .check input{width:auto;margin:0}

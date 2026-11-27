@@ -74,6 +74,7 @@ route('/patient/orders', P.ordersScreen, { roles: PATIENT });
 route('/patient/labs', P.labsScreen, { roles: PATIENT });
 route('/patient/providers', P.providersScreen, { roles: PATIENT });
 route('/patient/institutions', P.institutionsScreen, { roles: PATIENT });
+route('/patient/find', P.findScreen, { roles: PATIENT });
 route('/patient/donations', P.donationsScreen);
 route('/patient/insurance', P.insuranceScreen, { roles: PATIENT });
 route('/patient/records', P.recordsScreen, { roles: PATIENT });

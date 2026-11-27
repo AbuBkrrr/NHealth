@@ -47,6 +47,7 @@ r.get('/facilities/search', marketingLimiter, h(fac.search));
 r.get('/facilities/mine', auth, h(fac.myListing));
 r.get('/facilities/:id', marketingLimiter, h(fac.getListing));
 r.post('/facilities/:id/claim', auth, sensitiveLimiter, h(fac.claim));
+r.get('/medicines/search', auth, h(fac.searchMedicines));
 
 // Unified provider profile
 r.get('/provider-profile', auth, h(core.getProviderProfile));
@@ -59,6 +60,7 @@ r.post('/uploads', auth, sensitiveLimiter, h(core.upload));
 r.get('/kyc/status', auth, h(kyc.kycStatus));
 r.post('/kyc/session', auth, sensitiveLimiter, h(kyc.startKyc));
 r.post('/kyc/refresh', auth, h(kyc.refreshKyc));
+r.post('/kyc/manual', auth, sensitiveLimiter, h(kyc.submitManualKyc));
 r.get('/verification/documents', auth, h(priv.listMyDocuments));
 r.post('/verification/documents', auth, requireRole(...PROVIDERS), sensitiveLimiter, h(priv.uploadProviderDocument));
 
@@ -227,6 +229,8 @@ r.post('/admin-ops/verifications/:userId', ...A, h(adm.decideVerification));
 r.get('/admin-ops/campaigns', ...A, h(adm.campaignQueue));
 r.post('/admin-ops/campaigns/:id', ...A, h(adm.decideCampaign));
 r.get('/admin-ops/kyc', ...A, h(adm.kycList));
+r.get('/admin-ops/kyc/:id', ...A, h(adm.kycDetail));
+r.post('/admin-ops/kyc/:id/decide', ...A, h(adm.kycDecide));
 r.get('/admin-ops/payouts', ...A, h(adm.payoutsOwed));
 r.get('/admin-ops/catalog/:kind', ...A, h(adm.catalogList));
 r.post('/admin-ops/catalog/:kind', ...A, h(adm.catalogUpsert));

@@ -176,3 +176,50 @@ export async function listAuditLog(req: Request, res: Response) {
   });
   res.json(logs);
 }
+
+// ---------- Change a user's role (super admin only) ----------
+const ROLE_CHOICES = ['PATIENT', 'DOCTOR', 'NURSE', 'PHARMACY', 'LAB', 'AMBULANCE', 'INSTITUTION'] as const;
+const PROVIDER_ROLE_CHOICES = ['DOCTOR', 'NURSE', 'PHARMACY', 'LAB', 'AMBULANCE', 'INSTITUTION'];
+
+/**
+ * PATCH /api/admin/users/:id/role { role } - e.g. someone who signed up as a patient but is a nurse.
+ * Creates the profile for the new role if missing (their other profiles are kept), signs them out
+ * everywhere so the change applies, and sends new providers through licence verification.
+ */
+export async function changeUserRole(req: Request, res: Response) {
+  const role = String(req.body?.role || '').toUpperCase();
+  if (!(ROLE_CHOICES as readonly string[]).includes(role)) throw ApiError.badRequest('Choose a role');
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) throw ApiError.notFound('User not found');
+  if (target.id === req.user!.userId) throw ApiError.badRequest('You cannot change your own role');
+  if (target.role === 'ADMIN') throw ApiError.badRequest('Manage admin accounts under Admin Accounts');
+  if (target.role === role) return res.json({ id: target.id, role });
+
+  const { createRoleProfile } = await import('./authController');
+  const has: Record<string, () => Promise<unknown>> = {
+    PATIENT: () => prisma.patientProfile.findUnique({ where: { userId: target.id } }),
+    DOCTOR: () => prisma.doctorProfile.findUnique({ where: { userId: target.id } }),
+    NURSE: () => prisma.nurseProfile.findUnique({ where: { userId: target.id } }),
+    PHARMACY: () => prisma.pharmacyProfile.findUnique({ where: { userId: target.id } }),
+    LAB: () => prisma.labProfile.findUnique({ where: { userId: target.id } }),
+    AMBULANCE: () => prisma.ambulanceProfile.findUnique({ where: { userId: target.id } }),
+    INSTITUTION: () => prisma.institutionProfile.findUnique({ where: { userId: target.id } }),
+  };
+  if (!(await has[role]())) await createRoleProfile(target.id, role as any, role === 'INSTITUTION' ? { name: target.name } : {});
+  const toProvider = PROVIDER_ROLE_CHOICES.includes(role);
+  const updated = await prisma.user.update({
+    where: { id: target.id },
+    data: {
+      role: role as any, tokenVersion: { increment: 1 },
+      // A new provider must upload documents and be approved before serving patients.
+      ...(toProvider && target.verificationStatus !== 'VERIFIED' ? { verificationStatus: 'PENDING' as any } : {}),
+    },
+    select: { id: true, role: true, verificationStatus: true },
+  });
+  const { invalidateUserState } = await import('../middleware/auth');
+  invalidateUserState(target.id);
+  await logAction(req.user!.userId, 'CHANGE_ROLE', 'User', target.id, `${target.role} -> ${role}`);
+  const { notify } = await import('../services/notify');
+  await notify(target.id, 'account', 'Your account type changed', `An N-Health administrator changed your account to ${role.toLowerCase()}. Sign in again to continue.${toProvider && updated.verificationStatus !== 'VERIFIED' ? ' Upload your ID, proof of address and licence under Profile → Verification to be approved.' : ''}`, { email: true }).catch(() => null);
+  res.json(updated);
+}
