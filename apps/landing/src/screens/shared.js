@@ -1,6 +1,6 @@
 import { get, post, postLater, pendingWrites, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
-import { esc, $, $$, appBar, card, cardHead, item, avatar, badge, empty, skeleton, toast, toastErr, formModal, modal, confirmBox, busy, dt, ago, relDay, dateOnly, timeOnly, money, coins, fileToDataUri, pickFile, field, readForm, tabs, closeModal } from '../lib/ui.js';
+import { esc, $, $$, appBar, card, cardHead, item, avatar, badge, empty, skeleton, toast, toastErr, formModal, modal, confirmBox, busy, dt, ago, relDay, dateOnly, timeOnly, money, coins, fileToDataUri, pickFile, field, readForm, tabs, closeModal, webOrigin } from '../lib/ui.js';
 import { on, emit } from '../lib/realtime.js';
 import { go, home } from '../lib/router.js';
 import { enablePush } from '../lib/push.js';
@@ -173,7 +173,7 @@ export async function profileScreen(el) {
   $('#tos', el).onclick = (e) => { e.preventDefault(); legal('terms'); };
   $('#pp', el).onclick = (e) => { e.preventDefault(); legal('privacy'); };
   $('#ref', el).onclick = async () => {
-    const text = `Join me on N-Health - doctors, pharmacies, labs and emergency help in one app. Use my code ${me.referralCode}: ${location.origin}`;
+    const text = `Join me on N-Health - doctors, pharmacies, labs and emergency help in one app. Use my code ${me.referralCode}: ${webOrigin()}`;
     if (navigator.share) navigator.share({ title: 'N-Health', text }).catch(() => null); else { await navigator.clipboard?.writeText(text); toast('📋 Invite copied'); }
   };
   $('#ve', el)?.addEventListener('click', verifyEmail);
@@ -296,7 +296,7 @@ export async function kycScreen(el) {
       ${docs.filter((d) => !REQUIRED_DOCS.some(([t]) => t === d.type) || d.status === 'REJECTED').map((d) => item({ icon: '📄', title: esc(d.title), sub: esc(DOC_LABEL[d.type] || d.type) + ' • ' + dateOnly(d.createdAt) + (d.reviewNote ? ' • ' + esc(d.reviewNote) : ''), trailing: badge(d.status) })).join('')}
       <button class="btn btn-outline btn-block mt8" data-up="">⬆️ Upload another document</button>`) : '');
   $('#start', el)?.addEventListener('click', (e) => busy(e.target, async () => {
-    const r = await post('/kyc/session', { returnUrl: location.origin + '/?kyc=done' });
+    const r = await post('/kyc/session', { returnUrl: webOrigin() + '/?kyc=done' });
     if (r.url) location.href = r.url; else { toast('✅ Already verified'); kycScreen(el); }
   }));
   $('#refresh', el)?.addEventListener('click', (e) => busy(e.target, async () => { await post('/kyc/refresh'); await refreshMe(); kycScreen(el); }));
@@ -492,7 +492,7 @@ export async function earningsScreen(el, _p, q) {
   }));
   $('#settle', el)?.addEventListener('click', () => formModal('💳 Pay your balance', [{ name: 'amount', label: 'Amount (₦)', type: 'number', value: Math.ceil(e.owed), required: true }, ...(e.settleGateways.length > 1 ? [{ name: 'gateway', label: 'Pay with', type: 'select', options: e.settleGateways }] : [])], {
     submit: 'Continue to payment', intro: '<p class="muted mb8">This covers commission on cash jobs. You can also just keep working - commission on in-app jobs is deducted automatically.</p>',
-    onSubmit: async (v) => { const r = await post('/earnings/settle', { amount: Number(v.amount), gateway: v.gateway, returnUrl: location.origin + '/' }); sessionStorage.setItem('nh_settle', r.internalRef); if (r.checkoutUrl) location.href = r.checkoutUrl; else throw new Error('Checkout unavailable'); },
+    onSubmit: async (v) => { const r = await post('/earnings/settle', { amount: Number(v.amount), gateway: v.gateway, returnUrl: webOrigin() + '/' }); sessionStorage.setItem('nh_settle', r.internalRef); if (r.checkoutUrl) location.href = r.checkoutUrl; else throw new Error('Checkout unavailable'); },
   }));
   $('#how', el).onclick = () => modal(`<div class="modal-title">How earnings work</div><div class="muted" style="line-height:1.6">
     <p><b>In-app payments</b> (coins): the patient pays N-Health. When you complete the job, your fee minus ${rate ?? ''}% commission is added to your balance and becomes available after ${pol.holdHours}h.</p>

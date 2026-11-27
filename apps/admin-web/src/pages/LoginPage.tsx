@@ -28,6 +28,7 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
+        <img src="/icon.svg" alt="" width={56} height={56} style={{ display: "block", margin: "0 auto 8px", borderRadius: 14 }} />
         <h1>N-Health</h1>
         <p className="subtitle">Admin Panel</p>
         {error && <div className="error-text">{error}</div>}

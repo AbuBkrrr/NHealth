@@ -1,0 +1,23 @@
+{
+  "name": "nhealth-native",
+  "private": true,
+  "description": "App Store (iOS) and Play Store (Android) shells around the N-Health web app. Not part of the pnpm workspace; see README.md.",
+  "scripts": {
+    "web": "cd ../apps/landing && VITE_API_URL=https://api.nhealth.com.ng npm run build",
+    "sync": "npm run web && npx cap sync",
+    "ios": "npm run sync && npx cap open ios",
+    "android": "npm run sync && npx cap open android",
+    "assets": "npx @capacitor/assets generate --iconBackgroundColor '#1A73E8' --splashBackgroundColor '#1A73E8' --assetPath store"
+  },
+  "dependencies": {
+    "@capacitor/android": "6.2.0",
+    "@capacitor/core": "6.2.0",
+    "@capacitor/ios": "6.2.0",
+    "@capacitor/splash-screen": "6.0.3",
+    "@capacitor/status-bar": "6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "6.2.0"
+  }
+}

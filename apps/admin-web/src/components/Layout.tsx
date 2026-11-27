@@ -26,6 +26,7 @@ export function Layout() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-logo">
+          <img src="/icon.svg" alt="" width={26} height={26} style={{ verticalAlign: -7, marginRight: 8, borderRadius: 6 }} />
           N-Health Admin
           {user?.isSuperAdmin && <span className="sidebar-badge">SUPER</span>}
         </div>

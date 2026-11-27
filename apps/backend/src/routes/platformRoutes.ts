@@ -10,6 +10,7 @@ import * as inst from '../controllers/platform/institution';
 import * as er from '../controllers/platform/er';
 import * as fac from '../controllers/platform/facilities';
 import * as gig from '../controllers/platform/gigs';
+import * as flyer from '../controllers/platform/flyer';
 import * as ph from '../controllers/platform/pharmacyExt';
 import * as lab from '../controllers/platform/labExt';
 import * as priv from '../controllers/platform/privacy';
@@ -47,6 +48,10 @@ r.get('/facilities/search', marketingLimiter, h(fac.search));
 r.get('/facilities/mine', auth, h(fac.myListing));
 r.get('/facilities/:id', marketingLimiter, h(fac.getListing));
 r.post('/facilities/:id/claim', auth, sensitiveLimiter, h(fac.claim));
+// Provider public pages and flyers (QR codes on printed flyers open the public page)
+r.get('/public/providers/:id', marketingLimiter, h(flyer.getPublic));
+r.post('/public/providers/:id/visit', marketingLimiter, h(flyer.recordVisit));
+r.get('/flyer/me', auth, h(flyer.myFlyer));
 r.get('/medicines/search', auth, h(fac.searchMedicines));
 
 // Unified provider profile

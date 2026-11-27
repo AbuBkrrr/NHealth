@@ -1772,3 +1772,14 @@ model WorkProfile {
 
   @@index([profession, openToWork])
 }
+
+/// Someone opened a provider's public page (usually by scanning the provider's N-Health flyer).
+model ProviderPageVisit {
+  id         String   @id @default(uuid())
+  providerId String // the provider's user id
+  deviceKey  String?
+  source     String   @default("link") // flyer | link
+  createdAt  DateTime @default(now())
+
+  @@index([providerId, createdAt])
+}

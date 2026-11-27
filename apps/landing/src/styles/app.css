@@ -252,3 +252,37 @@ body[data-side=provider] .invite-card{border-color:var(--provider-primary,#7C4DF
 .kyc-up .ic{font-size:18px}
 .chk-grid .check{display:flex;align-items:center;gap:6px;flex-direction:row}
 .chk-grid .check input{width:auto;margin:0}
+/* Brand logo */
+.nh-logo{display:inline-block;vertical-align:middle;flex:none}
+.app-bar .title .nh-logo{margin-right:6px;border-radius:7px;vertical-align:-6px}
+.auth-header .icon .nh-logo{border-radius:16px;box-shadow:0 6px 18px rgba(26,115,232,.25)}
+.splash-screen .logo .nh-logo{border-radius:18px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+/* Install prompt */
+.install-banner{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));width:calc(100% - 24px);max-width:440px;background:#fff;color:#202124;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:12px 14px;z-index:900;animation:ibIn .25s ease-out}
+@keyframes ibIn{from{opacity:0;transform:translate(-50%,16px)}to{opacity:1;transform:translate(-50%,0)}}
+.install-banner .ib-row{display:flex;gap:12px;align-items:flex-start}
+.install-banner .nh-logo{border-radius:11px}
+.install-banner .ib-text{flex:1;font-size:13px;line-height:1.4}
+.install-banner .ib-text b{font-size:14px}
+.install-banner .ib-steps{margin-top:6px;padding:6px 8px;background:#E8F0FE;border-radius:8px;color:#174ea6}
+.install-banner .ib-x{background:none;border:0;font-size:22px;line-height:1;color:#5f6368;cursor:pointer;padding:0 2px}
+.install-banner .ib-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+@media (prefers-color-scheme: dark){.install-banner{background:#202124;color:#e8eaed}.install-banner .ib-steps{background:#1f3a5f;color:#d2e3fc}}
+/* Public provider page */
+.pp-hero{display:flex;align-items:center;gap:10px;padding:14px 16px;font-size:18px;color:var(--primary)}
+.pp-hero .nh-logo{border-radius:9px}
+.pp-card{text-align:center;padding:20px 16px}
+.pp-card h2{font-size:22px;margin:8px 0 2px}
+.pp-avatar{width:76px;height:76px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff}
+.pp-services{text-align:left;margin:14px 0 0;padding-left:20px;line-height:1.8}
+.pp-login{background:transparent;border:1px solid var(--primary);color:var(--primary)}
+/* Flyer maker */
+.flyer-stats{display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:4px}
+.flyer-stats b{display:block;font-size:20px}.flyer-stats span{font-size:11px;color:var(--text-secondary,#5f6368)}
+.flyer-preview{background:#f1f3f4;border-radius:12px;padding:10px;margin-top:10px;text-align:center}
+.flyer-preview canvas{width:100%;max-width:360px;height:auto;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.15)}
+.flyer-link{font-family:monospace;font-size:12px;word-break:break-all;background:#f1f3f4;padding:8px;border-radius:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips .chip{margin:0}
+body.has-install #app .screen{padding-bottom:230px}
+.legal-page .modal-title{font-size:20px;font-weight:700;margin-bottom:10px}.legal-page p{margin:0 0 10px}

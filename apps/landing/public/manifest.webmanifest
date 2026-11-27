@@ -1,15 +1,34 @@
 {
+  "id": "/",
   "name": "N-Health",
   "short_name": "N-Health",
-  "description": "Complete healthcare ecosystem",
-  "start_url": "/",
+  "description": "Doctors, pharmacies, diagnostic centers, ambulances, nurses and hospitals across Nigeria in one app.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#1A73E8",
   "theme_color": "#1A73E8",
   "orientation": "portrait",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "categories": ["health", "medical", "lifestyle"],
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Emergency", "short_name": "Emergency", "url": "/#/patient/emergency", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Bookings", "short_name": "Bookings", "url": "/#/patient/appointments", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "Pharmacy", "short_name": "Pharmacy", "url": "/#/patient/pharmacy", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] }
   ]
 }

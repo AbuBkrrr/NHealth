@@ -270,12 +270,12 @@ const mail = (r) => `${r}.${S}@test.io`;
   // ---------------- 7. Visit every screen per role ----------------
   const screens = {
     PATIENT: [patient, ['/patient/home', '/patient/wallet', '/patient/emergency', '/patient/appointments', '/patient/appointments?tab=book', '/patient/appointments?tab=history', '/patient/pharmacy', '/patient/pharmacy?tab=rx', '/patient/orders', '/patient/pharmacy/' + para.pharmacyId, '/patient/labs', '/patient/labs?tab=results', '/patient/providers', '/patient/institutions', '/provider/' + doctor.user.id, '/provider/' + inst.user.id, '/patient/donations', '/patient/donations?tab=organ', '/patient/donations?tab=fund', '/patient/donations?tab=patients', '/patient/donations?tab=mine', '/donations/campaign/' + camp.id, '/patient/insurance', '/patient/records', '/patient/records?tab=reminders', '/patient/records?tab=family', '/patient/records?tab=vaccines', '/patient/records?tab=docs', '/patient/records?tab=card', '/messages', '/chat/' + doctor.user.id, '/notifications', '/profile', '/settings', '/kyc', '/support', '/articles', '/articles/malaria-prevention', '/affiliations', '/patient/find?type=BLOOD', '/patient/find?type=HMO', '/patient/find?type=MEDICINE', '/patient/find?type=HOSPITAL', '/jobs', '/jobs?tab=mine', '/jobs?tab=profile']],
-    DOCTOR: [doctor, ['/doctor/home', '/doctor/requests', '/doctor/requests?tab=past', '/doctor/patients', '/doctor/patient/' + pprof.id, '/doctor/schedule', '/doctor/lab-results', '/doctor/emergencies', '/referrals', '/provider/earnings', '/messages', '/profile', '/kyc', '/affiliations', '/hiring', '/hiring/new', '/jobs']],
-    PHARMACY: [pharm, ['/pharmacy/home', '/pharmacy/inventory', '/pharmacy/intake', '/pharmacy/audit', '/pharmacy/pos', '/pharmacy/orders', '/pharmacy/orders?tab=rx', '/pharmacy/customers', '/provider/earnings', '/profile']],
+    DOCTOR: [doctor, ['/doctor/home', '/doctor/requests', '/doctor/requests?tab=past', '/doctor/patients', '/doctor/patient/' + pprof.id, '/doctor/schedule', '/doctor/lab-results', '/doctor/emergencies', '/referrals', '/provider/earnings', '/messages', '/profile', '/kyc', '/affiliations', '/hiring', '/hiring/new', '/jobs', '/flyer']],
+    PHARMACY: [pharm, ['/pharmacy/home', '/pharmacy/inventory', '/pharmacy/intake', '/pharmacy/audit', '/pharmacy/pos', '/pharmacy/orders', '/pharmacy/orders?tab=rx', '/pharmacy/customers', '/provider/earnings', '/flyer', '/profile']],
     LAB: [lab, ['/lab/home', '/lab/tests', '/lab/tests?tab=done', '/lab/catalog', '/provider/schedule', '/provider/earnings', '/profile']],
     NURSE: [nurse, ['/nurse/home', '/nurse/requests', '/nurse/requests?tab=mine', '/provider/schedule', '/provider/earnings', '/profile']],
     AMBULANCE: [amb, ['/ambulance/home', '/ambulance/requests', '/ambulance/requests?tab=mine', '/provider/earnings', '/profile']],
-    INSTITUTION: [inst, ['/institution/home', '/institution/departments', '/institution/staff', '/institution/patients', '/institution/reports', '/institution/profile', '/provider/earnings', '/patient/donations?tab=mine', '/messages', '/profile']],
+    INSTITUTION: [inst, ['/institution/home', '/institution/departments', '/institution/staff', '/institution/patients', '/institution/reports', '/institution/profile', '/flyer', '/provider/earnings', '/patient/donations?tab=mine', '/messages', '/profile']],
   };
   for (const [role, [u, routes]] of Object.entries(screens)) {
     const p = await newPage(u);
@@ -286,6 +286,11 @@ const mail = (r) => `${r}.${S}@test.io`;
   const pub = await newPage();
   await pub.goto(WEB + '/#/e/' + card.token); await pub.waitForTimeout(1500);
   (await pub.textContent('#app')).includes('O+') ? pass('public emergency card page') : fail('public emergency card page');
+  // Provider flyer QR -> public provider page (no login), and the public privacy policy for the app stores
+  await pub.goto(WEB + '/p/' + pharm.user.id + '?src=flyer'); await pub.waitForTimeout(2000);
+  (await pub.locator('.pp-card').count()) ? pass('public provider page from a flyer QR') : fail('public provider page from a flyer QR');
+  await pub.goto(WEB + '/privacy'); await pub.waitForTimeout(1200);
+  (await pub.textContent('#app')).includes('Privacy Policy') ? pass('public privacy policy page') : fail('public privacy policy page');
 
   // ---------------- 8. Logout & account deletion ----------------
   await pp.goto(WEB + '/#/profile'); await pp.waitForTimeout(1500);

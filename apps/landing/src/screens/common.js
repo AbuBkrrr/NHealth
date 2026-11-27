@@ -1,7 +1,7 @@
 // Reusable flows shared by several screens: payment, reviews, emergency numbers.
 import { get, post } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
-import { esc, $, $$, modal, toast, money, coins, busy, toCoins } from '../lib/ui.js';
+import { esc, $, $$, modal, toast, money, coins, busy, toCoins, webOrigin } from '../lib/ui.js';
 import { go } from '../lib/router.js';
 
 export async function loadBalance() {
@@ -40,7 +40,7 @@ export function payModal({ payableType, payableId, amount, title = 'Complete pay
         box.querySelector('[data-later]').onclick = () => { close(); resolve(false); };
         $('#paynow', box).onclick = (e) => busy(e.target, async () => {
           if (m === 'card') {
-          const r = await post('/payments/card', { payableType, payableId, returnUrl: location.origin + '/' });
+          const r = await post('/payments/card', { payableType, payableId, returnUrl: webOrigin() + '/' });
           sessionStorage.setItem('nh_paid', r.internalRef);
           close(); resolve(true);
           if (r.checkoutUrl) location.href = r.checkoutUrl; else throw new Error('Checkout unavailable');
@@ -104,7 +104,7 @@ export function loadInviteStats(root = document) {
 }
 export function inviteText() {
   const u = state.user || {};
-  const link = `${location.origin}/?ref=${encodeURIComponent(u.referralCode || '')}`;
+  const link = `${webOrigin()}/?ref=${encodeURIComponent(u.referralCode || '')}`;
   const text = u.role === 'PATIENT'
     ? `Join me on N-Health: book doctors, order medicines, get test results and emergency help in one app. Sign up with my code ${u.referralCode}: ${link}`
     : `I use N-Health to see patients, take payments and manage my practice. Join with my code ${u.referralCode}: ${link}`;

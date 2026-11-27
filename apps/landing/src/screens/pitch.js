@@ -2,7 +2,7 @@
 import { get, post } from '../lib/api.js';
 import { state } from '../lib/store.js';
 import { go, home } from '../lib/router.js';
-import { esc, $, toast, toastErr, field, readForm, modal, closeModal } from '../lib/ui.js';
+import { esc, $, toast, toastErr, field, readForm, modal, closeModal, webOrigin } from '../lib/ui.js';
 import { trackOpen, adPixels, adEvent, deviceId, sharePreciseLocation, locationWasAsked } from '../lib/marketing.js';
 import { COUNTRIES } from './data.js';
 
@@ -88,7 +88,7 @@ export async function pitchScreen(el, { slug } = {}) {
     if (t.dataset.login !== undefined) return go('/auth');
     if (t.dataset.wa !== undefined) return adEvent('Contact');
     if (t.dataset.share !== undefined) {
-      const url = location.origin + '/go/' + (slug || '');
+      const url = webOrigin() + '/go/' + (slug || '');
       const data = { title: 'N-Health', text: 'I found N-Health - doctors, medicines, labs and ambulances in one app:', url };
       if (navigator.share) { try { await navigator.share(data); } catch { /* cancelled */ } }
       else { try { await navigator.clipboard.writeText(url); toast('🔗 Link copied'); } catch { toast(url); } }
