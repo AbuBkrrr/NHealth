@@ -2,6 +2,7 @@ import 'express-async-errors';
 import express from 'express';
 import path from 'path';
 import helmet from 'helmet';
+import compression from 'compression';
 import morgan from 'morgan';
 import { env } from './config/env';
 import accountRoutes from './routes/accountRoutes';
@@ -63,6 +64,8 @@ export function createApp() {
 
   // 2. Security headers
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, crossOriginEmbedderPolicy: false }));
+  // Compress responses (JSON shrinks ~5-10x): matters on 2G/3G networks.
+  app.use(compression({ threshold: 512 }));
 
   // 3. Webhooks need the exact raw body for signature verification - parse them BEFORE express.json().
   app.use('/api/webhooks', express.raw({ type: '*/*', limit: '2mb' }), (req, _res, next) => {

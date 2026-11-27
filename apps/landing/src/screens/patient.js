@@ -1,4 +1,4 @@
-import { get, post, patch, del, download } from '../lib/api.js';
+import { get, post, postLater, patch, del, download } from '../lib/api.js';
 import { state } from '../lib/store.js';
 import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile } from '../lib/ui.js';
 import { on } from '../lib/realtime.js';
@@ -606,6 +606,7 @@ export async function insuranceScreen(el) {
 }
 
 // ================= HEALTH RECORDS =================
+const savedOrQueued = (r) => { if (r?.queued) toast('📤 Saved offline - it will appear here once you are back online'); return r; };
 export async function recordsScreen(el, _p, q) {
   let tab = q.tab || 'timeline';
   el.innerHTML = appBar({ title: '📁 Health Records', back: '/patient/home' }) + `<div class="hscroll">${[['timeline', '🕒 Timeline'], ['reminders', '⏰ Reminders'], ['family', '👨‍👩‍👧 Family'], ['vaccines', '💉 Vaccines'], ['docs', '📄 Documents'], ['card', '🆘 Emergency ID']].map(([k, l]) => `<span class="chip ${k === tab ? 'active' : ''}" data-rt="${k}">${l}</span>`).join('')}</div><div id="tb"></div>`;
@@ -621,7 +622,7 @@ export async function recordsScreen(el, _p, q) {
       $('#addr', tb).onclick = () => formModal('⏰ Medication reminder', [
         { name: 'medication', label: 'Medication', required: true }, { name: 'dosage', label: 'Dosage', placeholder: '1 tablet' },
         { name: 'times', label: 'Times (comma separated, 24h)', value: '08:00, 20:00', required: true }, { name: 'endDate', label: 'Until', type: 'date' }, { name: 'refillAt', label: 'Refill reminder date', type: 'date' },
-      ], { onSubmit: async (v) => { await post('/health/reminders', { ...v, times: v.times.split(',').map((s) => s.trim()).filter(Boolean), endDate: v.endDate ? new Date(v.endDate).toISOString() : undefined, refillAt: v.refillAt ? new Date(v.refillAt + 'T09:00').toISOString() : undefined }); draw(); } });
+      ], { onSubmit: async (v) => { savedOrQueued(await postLater('/health/reminders', { ...v, times: v.times.split(',').map((s) => s.trim()).filter(Boolean), endDate: v.endDate ? new Date(v.endDate).toISOString() : undefined, refillAt: v.refillAt ? new Date(v.refillAt + 'T09:00').toISOString() : undefined })); draw(); } });
     } else if (tab === 'family') {
       const f = await get('/health/family');
       tb.innerHTML = `<button class="btn btn-primary btn-block btn-sm mb8" id="addf">+ Add family member</button>` + (f.length ? card(f.map((x) => item({ icon: '👤', title: esc(x.name), sub: esc(x.relationship) + (x.dateOfBirth ? ' • ' + dateOnly(x.dateOfBirth) : '') + (x.bloodType ? ' • ' + esc(x.bloodType) : '') + (x.genotype ? ' • ' + esc(x.genotype) : ''), trailing: `<button class="link" data-delf="${x.id}">Remove</button>` })).join('')) : empty('👨‍👩‍👧', 'Manage care for children, parents and dependants'));
@@ -630,11 +631,11 @@ export async function recordsScreen(el, _p, q) {
         { name: 'dateOfBirth', label: 'Date of birth', type: 'date' }, { name: 'gender', label: 'Sex', type: 'select', options: [['', '—'], 'Female', 'Male'] },
         { name: 'bloodType', label: 'Blood group', type: 'select', options: [['', '—'], ...BLOOD] }, { name: 'genotype', label: 'Genotype', type: 'select', options: [['', '—'], ...GENOTYPES] },
         { name: 'allergies', label: 'Allergies' }, { name: 'conditions', label: 'Conditions' },
-      ], { onSubmit: async (v) => { await post('/health/family', v); draw(); } });
+      ], { onSubmit: async (v) => { savedOrQueued(await postLater('/health/family', v)); draw(); } });
     } else if (tab === 'vaccines') {
       const v = await get('/health/vaccinations');
       tb.innerHTML = `<button class="btn btn-primary btn-block btn-sm mb8" id="addv">+ Record vaccination</button>` + (v.length ? card(v.map((x) => item({ icon: '💉', title: esc(x.vaccine) + (x.dose ? ' • ' + esc(x.dose) : ''), sub: (x.givenAt ? 'Given ' + dateOnly(x.givenAt) : '') + (x.nextDueAt ? ' • Next due ' + dateOnly(x.nextDueAt) : '') + (x.provider ? ' • ' + esc(x.provider) : ''), trailing: `<button class="link" data-delv="${x.id}">🗑️</button>` })).join('')) : empty('💉', 'Keep track of immunisations (BCG, Polio, Hep B, Yellow fever, HPV, COVID-19…)'));
-      $('#addv', tb).onclick = () => formModal('💉 Vaccination', [{ name: 'vaccine', label: 'Vaccine', required: true }, { name: 'dose', label: 'Dose', placeholder: 'Dose 1 / Booster' }, { name: 'givenAt', label: 'Date given', type: 'date' }, { name: 'nextDueAt', label: 'Next dose due', type: 'date' }, { name: 'provider', label: 'Where' }], { onSubmit: async (val) => { await post('/health/vaccinations', { ...val, givenAt: val.givenAt || undefined, nextDueAt: val.nextDueAt || undefined }); draw(); } });
+      $('#addv', tb).onclick = () => formModal('💉 Vaccination', [{ name: 'vaccine', label: 'Vaccine', required: true }, { name: 'dose', label: 'Dose', placeholder: 'Dose 1 / Booster' }, { name: 'givenAt', label: 'Date given', type: 'date' }, { name: 'nextDueAt', label: 'Next dose due', type: 'date' }, { name: 'provider', label: 'Where' }], { onSubmit: async (val) => { savedOrQueued(await postLater('/health/vaccinations', { ...val, givenAt: val.givenAt || undefined, nextDueAt: val.nextDueAt || undefined })); draw(); } });
     } else if (tab === 'docs') {
       const d = await get('/health/documents');
       tb.innerHTML = `<button class="btn btn-primary btn-block btn-sm mb8" id="addd">⬆️ Upload document</button>` + (d.length ? card(d.map((x) => item({ icon: '📄', title: esc(x.title), sub: esc(x.category) + ' • ' + dateOnly(x.createdAt), trailing: `<a class="link" href="${esc(x.fileUrl)}" target="_blank" rel="noopener">Open</a> <button class="link" data-deld="${x.id}">🗑️</button>` })).join('')) : empty('📄', 'Store scans, discharge summaries, old results and insurance cards'));
@@ -661,7 +662,7 @@ export async function recordsScreen(el, _p, q) {
   $$('[data-rt]', el).forEach((c) => (c.onclick = () => { tab = c.dataset.rt; $$('[data-rt]', el).forEach((x) => x.classList.toggle('active', x === c)); draw(); }));
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-taken],[data-skip],[data-delr],[data-delf],[data-delv],[data-deld]'); if (!b) return;
-    if (b.dataset.taken || b.dataset.skip) { await post('/health/reminders/' + (b.dataset.taken || b.dataset.skip) + '/log', { status: b.dataset.taken ? 'taken' : 'skipped' }); toast(b.dataset.taken ? '✓ Logged' : 'Skipped'); }
+    if (b.dataset.taken || b.dataset.skip) { const r = await postLater('/health/reminders/' + (b.dataset.taken || b.dataset.skip) + '/log', { status: b.dataset.taken ? 'taken' : 'skipped' }); toast(r?.queued ? '📤 Saved offline - will sync when online' : b.dataset.taken ? '✓ Logged' : 'Skipped'); }
     if (b.dataset.delr) await del('/health/reminders/' + b.dataset.delr);
     if (b.dataset.delf) await del('/health/family/' + b.dataset.delf);
     if (b.dataset.delv) await del('/health/vaccinations/' + b.dataset.delv);

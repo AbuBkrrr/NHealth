@@ -31,7 +31,22 @@ export function home(role = state.user?.role) {
 }
 
 let seq = 0;
-export async function render() {
+let pattern = null;
+let touched = false; // the person has tapped or typed since this screen opened
+['click', 'keydown', 'input', 'change'].forEach((ev) => document.addEventListener(ev, () => { touched = true; }, { capture: true, passive: true }));
+/** Route pattern of the open screen, e.g. '/patient/home'. */
+export const currentPattern = () => pattern;
+
+// Screens that keep their own live state (maps, chats, payments, forms): never redrawn underneath the person.
+const NO_AUTO_REFRESH = /^\/(book|patient\/emergency|patient\/wallet|ambulance|kyc|pharmacy\/pos|pharmacy\/intake|settings|support|go)/;
+/** Redraws the open screen with newer data, unless the person is using it. */
+export function softRefresh() {
+  if (touched || document.hidden || document.getElementById('modal')?.classList.contains('active')) return;
+  if (NO_AUTO_REFRESH.test(current())) return;
+  render({ soft: true });
+}
+
+export async function render({ soft = false } = {}) {
   const raw = location.hash.slice(1) || '/';
   const [path, qs] = raw.split('?');
   const query = Object.fromEntries(new URLSearchParams(qs || ''));
@@ -45,6 +60,9 @@ export async function render() {
   if (match.roles && !match.roles.includes(state.user.role)) return go(home(), { replace: true });
 
   const my = ++seq;
+  pattern = match.pattern;
+  touched = false;
+  const keepScroll = soft ? $('#app .screen')?.scrollTop || 0 : 0;
   if (typeof cleanup === 'function') { try { cleanup(); } catch { /* */ } }
   cleanup = null;
   const app = $('#app');
@@ -61,6 +79,7 @@ export async function render() {
     console.error(e);
     if (my === seq) { el.innerHTML += `<div class="empty"><span class="icon">⚠️</span>${e?.message || 'Could not load this screen'}<div class="mt8"><button class="btn btn-outline btn-sm" onclick="location.reload()">Retry</button></div></div>`; toastErr(e); }
   }
-  el.scrollTop = 0;
+  el.scrollTop = keepScroll;
+  if (keepScroll) requestAnimationFrame(() => { el.scrollTop = keepScroll; });
 }
 window.addEventListener('popstate', render);

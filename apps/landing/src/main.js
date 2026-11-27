@@ -1,13 +1,13 @@
 import './styles/mockup.css';
 import './styles/app.css';
-import { get, post, auth, setUnauthorizedHandler } from './lib/api.js';
+import { get, post, auth, setUnauthorizedHandler, setFreshHandler, setReadTracker, prefetch, flushOutbox, onOutbox, pendingWrites } from './lib/api.js';
 import { state, setState, subscribe } from './lib/store.js';
-import { render, go, back, home, onNav, current } from './lib/router.js';
+import { render, go, back, home, onNav, current, softRefresh, currentPattern } from './lib/router.js';
 import { connect, disconnect } from './lib/realtime.js';
 import { registerSW } from './lib/push.js';
 import { toast, esc, $ } from './lib/ui.js';
 import { t } from './lib/i18n.js';
-import './screens/index.js';
+import { S, P, V } from './screens/index.js';
 
 // ---------- Bottom navigation per role (mockup bottom-nav styles) ----------
 const NAVS = {
@@ -48,6 +48,7 @@ export async function startSession(token, user) {
   connect();
   refreshUnread();
   go(home(user.role), { replace: true });
+  warmUp();
 }
 export function logout(msg) {
   auth.clear();
@@ -73,25 +74,77 @@ export async function refreshMe() {
 // ---------- Connectivity (mockup offline banner) ----------
 function netBanner() {
   let b = $('#offline-banner');
-  if (navigator.onLine) { b?.remove(); return; }
-  if (!b) { b = document.createElement('div'); b.id = 'offline-banner'; b.className = 'offline-banner'; b.innerHTML = '<span class="dot"></span> You are offline - showing saved data. Changes will sync when you reconnect.'; $('#app').before(b); }
+  const waiting = pendingWrites().length;
+  if (navigator.onLine && !waiting) { b?.remove(); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'offline-banner'; b.className = 'offline-banner'; $('#app').before(b); }
+  b.innerHTML = navigator.onLine
+    ? `<span class="dot"></span> Sending ${waiting} saved change${waiting > 1 ? 's' : ''}…`
+    : `<span class="dot"></span> Offline - showing saved data.${waiting ? ` ${waiting} change${waiting > 1 ? 's' : ''} will send when you reconnect.` : ' Messages and health notes you add will send when you reconnect.'}`;
 }
-window.addEventListener('online', () => { netBanner(); toast('✅ Back online'); setState({ online: true }); if (state.user) { connect(); refreshUnread(); } });
-window.addEventListener('offline', () => { netBanner(); toast('⚠️ You are offline. Changes will sync when you reconnect.'); setState({ online: false }); });
+async function syncOutbox() {
+  const n = await flushOutbox().catch(() => 0);
+  netBanner();
+  if (n) { toast(`✅ ${n} saved change${n > 1 ? 's' : ''} sent`); softRefresh(); }
+}
+onOutbox(netBanner);
+window.addEventListener('online', () => { netBanner(); toast('✅ Back online'); setState({ online: true }); if (state.user) { connect(); refreshUnread(); syncOutbox(); } });
+window.addEventListener('offline', () => { netBanner(); toast('⚠️ You are offline. Saved screens still work.'); setState({ online: false }); });
+
+// ---------- Speed: redraw when newer data arrives, learn and pre-load each screen's data ----------
+let freshTimer = null;
+setFreshHandler(() => { clearTimeout(freshTimer); freshTimer = setTimeout(softRefresh, 250); });
+const LEARN = 'nh_routes';
+let learned = (() => { try { return JSON.parse(localStorage.getItem(LEARN) || '{}'); } catch { return {}; } })();
+let learnTimer = null;
+setReadTracker((path) => {
+  const p = currentPattern();
+  if (!p || p.includes(':') || path.startsWith('/auth') || path.startsWith('/mkt')) return; // only fixed screens (bottom tabs, home)
+  const list = learned[p] || (learned[p] = []);
+  if (list.includes(path)) return;
+  list.push(path); if (list.length > 10) list.shift();
+  clearTimeout(learnTimer);
+  learnTimer = setTimeout(() => { try { localStorage.setItem(LEARN, JSON.stringify(learned)); } catch { /* */ } }, 1000);
+});
+// What each role's main tabs read, so even a first visit to a tab opens instantly (learned reads are added).
+const MSG = '/messages/conversations', PROF = '/provider-profile', AVAIL = '/availability/me';
+const TAB_READS = {
+  PATIENT: ['/patient/appointments', '/patient/emergency', '/directory?type=PHARMACY&sort=rating', '/directory?type=ALL&q=&sort=rating', MSG],
+  DOCTOR: ['/doctor-ops/stats', '/doctor/appointments', '/doctor/patients', AVAIL, MSG, PROF],
+  PHARMACY: ['/pharmacy/stats', '/pharmacy/inventory', '/pharmacy/orders', '/pharmacy-ops/customers', '/pharmacy-ops/alerts', MSG, PROF],
+  LAB: ['/lab/stats', '/lab/tests', '/lab-ops/catalog', AVAIL, MSG, PROF],
+  NURSE: ['/nurse/stats', '/nurse/requests/mine', '/nurse/requests/available', AVAIL, MSG, PROF],
+  AMBULANCE: ['/ambulance/stats', '/ambulance/requests/mine', '/ambulance/requests/available', MSG, PROF],
+  INSTITUTION: ['/institution/profile', '/institution/stats', '/institution/departments', '/institution/staff', '/institution/patients?status=&q=', '/institution/reports?days=30', MSG, PROF],
+};
+/** After the first screen: download the person's other screens and their tabs' data in the background. */
+function warmUp() {
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1200));
+  idle(() => {
+    if (!state.user) return;
+    const mods = state.user.role === 'PATIENT' ? [P, S] : [V, S, P];
+    mods.forEach((m) => m.preload().catch(() => null));
+    const nav = NAVS[state.user.role];
+    if (nav) prefetch([...new Set(['/auth/me', ...(TAB_READS[state.user.role] || []), ...nav.items.flatMap(([p]) => learned[p] || [])])]);
+  });
+}
 subscribe((_s, p) => { if ('unread' in p) { const c = document.querySelector('.bell .count'); const bell = document.querySelector('.bell'); if (bell) { if (c) c.remove(); if (state.unread > 0) bell.insertAdjacentHTML('beforeend', `<span class="count">${state.unread > 99 ? '99+' : state.unread}</span>`); } } });
 
 navigator.serviceWorker?.addEventListener?.('message', (e) => { if (e.data?.type === 'open-notifications') go('/notifications'); });
 
 // ---------- Boot ----------
-(async function boot() {
-  const started = Date.now();
-  try { setState({ config: await get('/config') }); } catch { setState({ config: { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, emergencyNumbers: { DEFAULT: ['112'] } } }); }
-  if (auth.token) {
+// The app opens straight away from what is saved on the phone; fresh data follows in the background.
+const DEFAULT_CONFIG = { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, emergencyNumbers: { DEFAULT: ['112'] } };
+(function boot() {
+  const cfg = get('/config').then((c) => setState({ config: c })).catch(() => { if (!state.config) setState({ config: DEFAULT_CONFIG }); });
+  if (auth.token && auth.user) {
     setState({ user: auth.user });
-    try { await refreshMe(); connect(); refreshUnread(); } catch (e) { if (e.status === 401) auth.clear(), setState({ user: null }); }
+    refreshMe().catch(() => null); // a 401 signs out through the unauthorized handler
+    connect();
+    refreshUnread();
   }
-  // Splash for at least 900ms (mockup), then route.
-  setTimeout(() => {
+  // Wait for settings only when nothing is saved yet, and never more than 1.5 s.
+  Promise.race([cfg, new Promise((r) => setTimeout(r, 1500))]).then(() => {
+    if (!state.config) setState({ config: DEFAULT_CONFIG });
     netBanner();
     const q = new URLSearchParams(location.search);
     // Tracking links / QR codes: https://www.<domain>/go/<slug>?utm_... -> pitch page
@@ -102,8 +155,10 @@ navigator.serviceWorker?.addEventListener?.('message', (e) => { if (e.data?.type
     if (q.get('paid')) { sessionStorage.setItem('nh_paid', q.get('paid')); history.replaceState(null, '', location.pathname + '#/patient/appointments'); }
     if (q.get('settle')) { sessionStorage.setItem('nh_settle', q.get('settle')); history.replaceState(null, '', location.pathname + '#/provider/earnings'); }
     render();
+    setTimeout(() => sessionStorage.removeItem('nh_chunk_reload'), 10000);
     confirmCardPayment();
-  }, Math.max(0, 900 - (Date.now() - started)));
+    if (state.user) { warmUp(); syncOutbox(); }
+  });
   registerSW();
 })();
 

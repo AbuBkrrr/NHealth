@@ -1,4 +1,4 @@
-import { get, post, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
+import { get, post, postLater, pendingWrites, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
 import { esc, $, $$, appBar, card, cardHead, item, avatar, badge, empty, skeleton, toast, toastErr, formModal, modal, confirmBox, busy, dt, ago, relDay, dateOnly, timeOnly, money, coins, fileToDataUri, pickFile, field, readForm, tabs, closeModal } from '../lib/ui.js';
 import { on, emit } from '../lib/realtime.js';
@@ -28,7 +28,7 @@ export async function notificationsScreen(el) {
   el.addEventListener('click', async (e) => {
     const n = e.target.closest('[data-n]');
     if (!n) return;
-    post('/notifications/' + n.dataset.n + '/read').then(refreshUnread).catch(() => null);
+    postLater('/notifications/' + n.dataset.n + '/read').then(refreshUnread).catch(() => null);
     const d = JSON.parse(n.dataset.ref || '{}'), r = state.user.role;
     const t = n.dataset.type;
     if (t === 'message' && d.partnerId) return go('/chat/' + d.partnerId);
@@ -74,7 +74,8 @@ export async function chatScreen(el, { id }) {
   };
   const load = async () => {
     const msgs = await get('/messages/conversations/' + id);
-    chat.innerHTML = msgs.length ? msgs.map(bubble).join('') : empty('👋', 'Say hello. You can send photos and short videos (max 25MB).');
+    const waiting = pendingWrites().filter((w) => w.path === '/messages' && w.body?.receiverId === id);
+    chat.innerHTML = msgs.length || waiting.length ? msgs.map(bubble).join('') + waiting.map((w) => `<div class="bubble me">${esc(w.body.content)}<div class="time">⏳ Will send when online</div></div>`).join('') : empty('👋', 'Say hello. You can send photos and short videos (max 25MB).');
     el.scrollTop = el.scrollHeight;
   };
   await load();
@@ -92,7 +93,9 @@ export async function chatScreen(el, { id }) {
     const btn = e.target.querySelector('[type=submit]');
     await busy(btn, async () => {
       if (pending.length) toast('Uploading…');
-      await post('/messages', { receiverId: id, content, attachments: pending.length ? pending : undefined });
+      // Text messages are kept and sent later when offline; photos and videos need a connection.
+      const r = pending.length ? await post('/messages', { receiverId: id, content, attachments: pending }) : await postLater('/messages', { receiverId: id, content });
+      if (r?.queued) toast('📤 Saved - it will send when you are back online');
       input.value = ''; pending = []; $('#thumbs', el).innerHTML = '';
       await load();
     });
