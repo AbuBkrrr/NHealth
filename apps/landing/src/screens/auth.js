@@ -1,9 +1,15 @@
-import { post, ApiError } from '../lib/api.js';
+import { get, post, auth, ApiError } from '../lib/api.js';
 import { state } from '../lib/store.js';
 import { esc, $, $$, toast, toastErr, field, readForm, formModal, modal } from '../lib/ui.js';
 import { startSession } from '../main.js';
 import { signupAttribution, adEvent } from '../lib/marketing.js';
 import { SPECIALTIES, PROVIDER_ROLES, INSTITUTION_TYPES, COUNTRIES, NG_STATES } from './data.js';
+
+// Accounts that can find and claim their facility in the national directory at sign-up.
+const FINDABLE = {
+  INSTITUTION: 'TEACHING_HOSPITAL,FEDERAL_MEDICAL_CENTRE,GENERAL_HOSPITAL,SPECIALIST_HOSPITAL,HOSPITAL,CLINIC,PRIMARY_HEALTH_CENTRE,HEALTH_POST,MATERNITY,DENTAL,EYE,NURSING_HOME,BLOOD_BANK,DIAGNOSTIC,OTHER',
+  LAB: 'DIAGNOSTIC,BLOOD_BANK', PHARMACY: 'PHARMACY',
+};
 
 const guessCountry = () => {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -42,6 +48,11 @@ export function authScreen(el, _params = {}, query = {}) {
       ${provider ? `<div class="form-group"><label>Provider type</label><select id="prov-role">${PROVIDER_ROLES.map(([k, i, n]) => `<option value="${k}" ${k === s.role ? 'selected' : ''}>${i} ${n}</option>`).join('')}</select></div>` : ''}
       <div class="tab-container"><div class="tab ${login ? 'active' : ''}" data-mode="login" tabindex="0">Sign In</div><div class="tab ${!login ? 'active' : ''}" data-mode="register" tabindex="0">Create Account</div></div>
       <form id="auth-form" novalidate ${isInst && !login ? 'class="institution-register-form" style="max-height:none"' : ''}>
+        ${!login && FINDABLE[role] ? `<div class="form-group fac-find"><label>Find your ${role === 'PHARMACY' ? 'pharmacy' : role === 'LAB' ? 'diagnostic center' : 'facility'} in our directory</label>
+          <input id="fsearch" autocomplete="off" placeholder="Start typing its name, e.g. ${role === 'PHARMACY' ? 'HealthPlus' : role === 'LAB' ? 'Clina-Lancet' : 'Lagos University Teaching Hospital'}">
+          <div id="fres" class="fac-results"></div><div id="fpick"></div>
+          <div class="hint">Over 72,000 Nigerian facilities are already listed. Pick yours and we fill in the address and map location. Not listed? Just fill in the form.</div>
+          <input type="hidden" name="listingId"></div>` : ''}
         ${login ? `
           ${field({ name: 'email', label: 'Email', type: 'email', autocomplete: 'email', required: true, placeholder: 'you@example.com' })}
           ${field({ name: 'password', label: 'Password', type: 'password', required: true })}
@@ -91,6 +102,32 @@ export function authScreen(el, _params = {}, query = {}) {
     $('[data-privacy]', el)?.addEventListener('click', (e) => { e.preventDefault(); legal('privacy'); });
     $('#forgot', el)?.addEventListener('click', forgot);
     const form = $('#auth-form', el);
+    const fs = $('#fsearch', el);
+    if (fs) {
+      let tmr = null, seq = 0;
+      const nameField = role === 'INSTITUTION' ? 'instName' : 'name';
+      fs.oninput = () => {
+        clearTimeout(tmr);
+        const q = fs.value.trim();
+        if (q.length < 3) { $('#fres', el).innerHTML = ''; return; }
+        tmr = setTimeout(async () => {
+          const my = ++seq;
+          const list = await get(`/facilities/search?claimable=1&limit=8&category=${FINDABLE[role]}&q=${encodeURIComponent(q)}`).catch(() => []);
+          if (my !== seq) return;
+          $('#fres', el).innerHTML = list.length ? list.map((x, i) => `<button type="button" class="fac-hit" data-i="${i}"><b>${esc(x.name)}</b><span>${esc([x.categoryLabel, x.lga, x.state].filter(Boolean).join(' • '))}</span></button>`).join('') : '<div class="small muted" style="padding:6px 2px">Not found. Fill in the form below and we will add it.</div>';
+          $$('.fac-hit', el).forEach((b) => (b.onclick = () => {
+            const x = list[Number(b.dataset.i)];
+            form.listingId.value = x.id;
+            if (form[nameField]) form[nameField].value = x.name;
+            if (form.address && !form.address.value) form.address.value = [x.address, x.lga].filter(Boolean).join(', ');
+            if (form.state && x.state) form.state.value = x.state;
+            $('#fres', el).innerHTML = ''; fs.value = '';
+            $('#fpick', el).innerHTML = `<div class="fac-picked">✓ <b>${esc(x.name)}</b> <span class="small muted">${esc([x.lga, x.state].filter(Boolean).join(', '))}</span> <button type="button" class="link" id="funpick">Change</button></div>`;
+            $('#funpick', el).onclick = () => { form.listingId.value = ''; $('#fpick', el).innerHTML = ''; fs.focus(); };
+          }));
+        }, 300);
+      };
+    }
     form.onsubmit = async (e) => {
       e.preventDefault();
       const v = readForm(form);
@@ -119,6 +156,7 @@ export function authScreen(el, _params = {}, query = {}) {
           locale: (navigator.language || 'en').slice(0, 2), acceptTerms: true, marketingOptIn: !!v.marketingOptIn, referralCode: v.referralCode || undefined, mkt: signupAttribution(),
         });
         adEvent('CompleteRegistration');
+        if (v.listingId) { auth.token = r.token; await post('/facilities/' + v.listingId + '/claim').catch((err) => toast('⚠️ ' + err.message)); }
         toast('🎉 Account created! Check your email for a verification code.');
         startSession(r.token, r.user);
       } catch (err) {

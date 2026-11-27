@@ -35,7 +35,7 @@ export function Layout() {
         <NavLink to="/users" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           Users
         </NavLink>
-        {[['/operations', 'Operations'], ['/verifications', 'Provider verification'], ['/kyc', 'Identity (KYC)'], ['/campaigns', 'Donation campaigns'], ['/finance', 'Fees & payouts'], ['/revenue', 'Revenue'], ['/payouts', 'Coin payments by provider'], ['/tickets', 'Support tickets'], ['/catalogs', 'Catalogs & rates']].map(([to, label]) => (
+        {[['/operations', 'Operations'], ['/verifications', 'Provider verification'], ['/kyc', 'Identity (KYC)'], ['/facilities', 'Facility directory'], ['/campaigns', 'Donation campaigns'], ['/finance', 'Fees & payouts'], ['/revenue', 'Revenue'], ['/payouts', 'Coin payments by provider'], ['/tickets', 'Support tickets'], ['/catalogs', 'Catalogs & rates']].map(([to, label]) => (
           <NavLink key={to} to={to} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
             {label}
           </NavLink>

@@ -224,3 +224,11 @@ body[data-side="patient"] .quick-action:not(.emergency) { border: none; backgrou
 .role-card.picked .change{position:absolute;top:8px;right:10px;font-size:12px}
 .invite-card{border:2px dashed var(--primary);background:linear-gradient(135deg,#fff,var(--primary-light))}
 body[data-side=provider] .invite-card{border-color:var(--provider-primary,#7C4DFF);background:linear-gradient(135deg,#fff,var(--provider-light,#EDE7F6))}
+
+/* Sign-up: find your facility in the national directory */
+.fac-find{background:var(--provider-light,#EDE7F6);padding:10px;border-radius:12px}
+.fac-results{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.fac-hit{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:8px 10px;border:1px solid #ddd;border-radius:10px;background:#fff;font:inherit;text-align:left;cursor:pointer}
+.fac-hit span{font-size:11px;color:var(--text-secondary)}
+.fac-picked{margin-top:6px;padding:8px 10px;border-radius:10px;background:#E8F5E9;color:#1B5E20;font-size:13px}
+.listing-card{border-left:3px solid #cfd8dc}

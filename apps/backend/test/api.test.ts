@@ -452,3 +452,54 @@ describe('emergency: going to a hospital yourself', () => {
     expect(dec.body).toMatchObject({ status: 'DECLINED', declineReason: 'The emergency unit is full right now' });
   });
 });
+
+describe('facility directory (listed before they join)', () => {
+  it('finds listed facilities, lets the right account claim one once, and reports coverage to admins', async () => {
+    const tag = uniq();
+    const [hosp, pharm, hmo] = await Promise.all([
+      prisma.facilityListing.create({ data: { source: 'GRID3', sourceId: 'T-' + tag, name: `Zeta Teaching Hospital ${tag}`, category: 'TEACHING_HOSPITAL', state: 'Lagos', lga: 'Surulere', lat: 6.5158, lng: 3.3898 } }),
+      prisma.facilityListing.create({ data: { source: 'OSM', sourceId: 'P-' + tag, name: `Zeta Pharmacy ${tag}`, category: 'PHARMACY', state: 'Lagos', lat: 6.52, lng: 3.39 } }),
+      prisma.facilityListing.create({ data: { source: 'NHIA', sourceId: 'HMO-' + tag, name: `Zeta Health HMO ${tag}`, category: 'HMO', state: 'FCT', phone: '08000000000' } }),
+    ]);
+    expect((await request(app).get('/api/facilities/search')).status).toBe(400); // needs a name or a location
+    const s = await request(app).get(`/api/facilities/search?q=zeta%20teaching%20${tag}`);
+    expect(s.status).toBe(200);
+    expect(s.body[0]).toMatchObject({ id: hosp.id, categoryLabel: 'Teaching hospital', onNhealth: false });
+    const hmos = await request(app).get('/api/facilities/search?category=HMO&limit=150');
+    expect(hmos.body.some((x: any) => x.id === hmo.id)).toBe(true);
+
+    // A pharmacy account cannot claim a hospital; a hospital account can, once
+    const ph = await register('PHARMACY', { pharmacyName: 'P ' + tag, licenseNumber: 'PCN-' + tag, address: 'x' });
+    expect((await request(app).post(`/api/facilities/${hosp.id}/claim`).set(auth(ph.token))).status).toBe(400);
+    expect((await request(app).post(`/api/facilities/${pharm.id}/claim`).set(auth(ph.token))).status).toBe(200);
+    const h1 = await register('INSTITUTION', { name: 'H1 ' + tag, type: 'HOSPITAL', licenseNumber: 'H1-' + tag });
+    const h2 = await register('INSTITUTION', { name: 'H2 ' + tag, type: 'HOSPITAL', licenseNumber: 'H2-' + tag });
+    const c = await request(app).post(`/api/facilities/${hosp.id}/claim`).set(auth(h1.token));
+    expect(c.body).toMatchObject({ onNhealth: true, userId: h1.user.id });
+    expect((await request(app).post(`/api/facilities/${hosp.id}/claim`).set(auth(h2.token))).status).toBe(409);
+    const ip = await prisma.institutionProfile.findUnique({ where: { userId: h1.user.id } });
+    expect(ip).toMatchObject({ lat: 6.5158, lng: 3.3898, state: 'Lagos' }); // filled in from the listing
+    expect((await request(app).get(`/api/facilities/search?claimable=1&q=zeta%20teaching%20${tag}`)).body).toHaveLength(0);
+
+    // Patients see nearby hospitals not on N-Health in an emergency (claimed ones are on N-Health already)
+    const pat = await register('PATIENT');
+    await prisma.facilityListing.create({ data: { source: 'GRID3', sourceId: 'G-' + tag, name: `Zeta General Hospital ${tag}`, category: 'GENERAL_HOSPITAL', state: 'Lagos', lat: 6.50, lng: 3.36 } });
+    const un = await request(app).get('/api/er/unlisted?lat=6.499&lng=3.355').set(auth(pat.token));
+    expect(un.body.some((x: any) => x.name === `Zeta General Hospital ${tag}`)).toBe(true);
+    expect(un.body.some((x: any) => x.id === hosp.id)).toBe(false);
+
+    // Admin: coverage, add a missing facility, fix a listing
+    const boss = await prisma.user.create({ data: { email: `f-${tag}@test.io`, name: 'Boss', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const { signToken } = await import('../src/utils/jwt');
+    const t = signToken({ userId: boss.id, role: 'ADMIN' as any, isSuperAdmin: true, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    expect((await request(app).get('/api/admin-ops/facilities/coverage').set(auth(pat.token))).status).toBe(403);
+    const cov = await request(app).get('/api/admin-ops/facilities/coverage').set(auth(t));
+    expect(cov.body.total).toBeGreaterThanOrEqual(4);
+    expect(cov.body.categories.find((x: any) => x.key === 'HMO').count).toBeGreaterThanOrEqual(1);
+    const add = await request(app).post('/api/admin-ops/facilities').set(auth(t)).send({ name: `Zeta Blood Bank ${tag}`, category: 'BLOOD_BANK', state: 'Kano' });
+    expect(add.status).toBe(201);
+    expect((await request(app).post('/api/admin-ops/facilities').set(auth(t)).send({ name: `Zeta Blood Bank ${tag}`, category: 'BLOOD_BANK', state: 'Kano' })).status).toBe(409);
+    const fix = await request(app).patch(`/api/admin-ops/facilities/${pharm.id}`).set(auth(t)).send({ phone: '0801 234 5678', hidden: true });
+    expect(fix.body).toMatchObject({ phone: '0801 234 5678', hidden: true, addedById: boss.id });
+  });
+});
