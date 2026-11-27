@@ -15,6 +15,7 @@ import { AuditLogPage } from './pages/AuditLogPage';
 import { FinancePage, RevenuePage, IntegrationsPage } from './pages/FinancePages';
 import { OpsDashboardPage, VerificationsPage, KycPage, CampaignsPage, PayoutsPage, TicketsPage, CatalogPage } from './pages/OpsPages';
 import { MarketingPage } from './pages/MarketingPage';
+import { FacilitiesPage } from './pages/FacilitiesPage';
 import { PatientHomePage } from './pages/PatientHomePage';
 import { DoctorDashboardPage } from './pages/DoctorDashboardPage';
 import { NurseDashboardPage } from './pages/NurseDashboardPage';
@@ -116,6 +117,7 @@ export default function App() {
             <Route index element={<RoleBasedHome />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="operations" element={<OpsDashboardPage />} />
+            <Route path="facilities" element={<FacilitiesPage />} />
             <Route path="verifications" element={<VerificationsPage />} />
             <Route path="kyc" element={<KycPage />} />
             <Route path="campaigns" element={<CampaignsPage />} />

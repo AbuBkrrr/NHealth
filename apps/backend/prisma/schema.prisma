@@ -1653,3 +1653,38 @@ model MarketingBroadcast {
   createdById String?
   createdAt   DateTime @default(now())
 }
+
+/// Nigerian health facilities from public registries (GRID3, OpenStreetMap, NHIA, NBSA) or added by admins,
+/// listed before they join N-Health. A facility claims its listing when it signs up.
+model FacilityListing {
+  id              String    @id @default(uuid())
+  source          String // GRID3 | OSM | NHIA | NBSA | ADMIN
+  sourceId        String
+  name            String
+  category        String // TEACHING_HOSPITAL | FEDERAL_MEDICAL_CENTRE | GENERAL_HOSPITAL | SPECIALIST_HOSPITAL | HOSPITAL | CLINIC | PRIMARY_HEALTH_CENTRE | HEALTH_POST | MATERNITY | DIAGNOSTIC | BLOOD_BANK | PHARMACY | DENTAL | EYE | NURSING_HOME | HMO | OTHER
+  level           String?
+  ownership       String?
+  ownershipType   String?
+  state           String?
+  lga             String?
+  ward            String?
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  lat             Float?
+  lng             Float?
+  functional      String?
+  nhfrCode        String?
+  hidden          Boolean   @default(false)
+  addedById       String?
+  claimedByUserId String?   @unique
+  claimedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([source, sourceId])
+  @@index([category, state])
+  @@index([state])
+  @@index([lat, lng])
+}

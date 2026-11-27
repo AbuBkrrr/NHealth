@@ -276,9 +276,15 @@ function erChooser(box, nums, redraw) {
     sessionStorage.setItem('nh_er_form', JSON.stringify(f));
     const hl = $('#hl', box); hl.innerHTML = skeleton(3);
     const hs = await get(`/er/hospitals?lat=${pos.lat}&lng=${pos.lng}&type=${f.type}`);
+    // Hospitals in the national directory that are not on N-Health yet: they cannot be alerted, so call first.
+    const unlisted = () => get(`/er/unlisted?lat=${pos.lat}&lng=${pos.lng}`).then((us) => {
+      if (!us.length || !$('#hl', box)) return;
+      hl.insertAdjacentHTML('beforeend', `<div class="section-title" style="margin:14px 4px 6px">Other hospitals nearby <span class="small muted">(not on N-Health yet - call before you go)</span></div>` + us.map(listingCard).join(''));
+    }).catch(() => null);
     if (!hs.length) {
       hl.innerHTML = card(empty('🏥', 'No emergency units on N-Health near you yet.', `<a class="btn btn-danger btn-sm" href="tel:${nums[0]}">📞 Call ${nums[0]}</a> <button class="btn btn-outline btn-sm" id="toamb">🚑 Request an ambulance</button>`));
       $('#toamb', hl).onclick = () => { sessionStorage.setItem('nh_em_mode', 'amb'); redraw(); };
+      unlisted();
       return;
     }
     const typeLabel = (ER_TYPES.find((t) => t[0] === f.type) || ER_TYPES[0])[1].replace(/^\S+\s/, '').toLowerCase();
@@ -298,6 +304,7 @@ function erChooser(box, nums, redraw) {
         <div class="small muted">${fresh ? 'Updated ' + ago(h.erUpdatedAt) : '⚠️ Not updated recently - call to confirm'}</div>
         <div class="row mt8">${h.erOpen ? `<button class="btn btn-danger btn-sm grow" data-goto="${h.id}" data-name="${esc(h.name)}">🚨 Go here - tell them I'm coming</button>` : ''}${h.phone ? `<a class="btn btn-outline btn-sm" href="tel:${esc(h.phone)}">📞</a>` : ''}</div>`, h.erOpen ? '' : 'style="opacity:.7"');
     }).join('');
+    unlisted();
     hl.onclick = async (e) => {
       const b = e.target.closest('[data-goto]'); if (!b) return;
       if (!(await confirmBox(`Tell ${b.dataset.name} you are coming? Their emergency team will see your location and medical summary so they can get ready.`, { ok: 'Yes, tell them' }))) return;
@@ -482,6 +489,25 @@ export async function bookScreen(el, { userId }) {
   }, { button: 'Continue' });
 }
 
+// Facilities from the national directory that have not joined N-Health yet.
+const LISTING_CATS = {
+  ALL: 'TEACHING_HOSPITAL,FEDERAL_MEDICAL_CENTRE,GENERAL_HOSPITAL,SPECIALIST_HOSPITAL,HOSPITAL,CLINIC,MATERNITY,DIAGNOSTIC,BLOOD_BANK,PHARMACY,EYE,DENTAL',
+  INSTITUTION: 'TEACHING_HOSPITAL,FEDERAL_MEDICAL_CENTRE,GENERAL_HOSPITAL,SPECIALIST_HOSPITAL,HOSPITAL,CLINIC,PRIMARY_HEALTH_CENTRE,MATERNITY,EYE,DENTAL,BLOOD_BANK',
+  LAB: 'DIAGNOSTIC,BLOOD_BANK', PHARMACY: 'PHARMACY',
+};
+const LISTING_ICON = { TEACHING_HOSPITAL: '🏛️', FEDERAL_MEDICAL_CENTRE: '🏥', GENERAL_HOSPITAL: '🏥', SPECIALIST_HOSPITAL: '🏥', HOSPITAL: '🏥', CLINIC: '🩺', PRIMARY_HEALTH_CENTRE: '🩺', HEALTH_POST: '🩺', MATERNITY: '🤱', DIAGNOSTIC: '🔬', BLOOD_BANK: '🩸', PHARMACY: '💊', DENTAL: '🦷', EYE: '👁️', NURSING_HOME: '🛏️', HMO: '🛡️', OTHER: '🏥' };
+export function listingCard(x) {
+  const where = [x.address, x.lga, x.state].filter(Boolean).join(', ');
+  const invite = `Hello ${x.name}, patients are looking for you on N-Health. Join free and receive bookings: ${location.origin}/?ref=${encodeURIComponent(state.user?.referralCode || '')}`;
+  return `<div class="card listing-card"><div class="row"><div class="avatar institution-avatar">${LISTING_ICON[x.category] || '🏥'}</div><div class="grow"><div style="font-weight:600">${esc(x.name)}</div>
+      <div class="small muted">${esc(x.categoryLabel)}${x.ownership ? ' • ' + esc(x.ownership) : ''}${where ? ' • ' + esc(where) : ''}</div></div>${x.distanceKm != null ? `<div class="small" style="white-space:nowrap"><b>${x.distanceKm} km</b></div>` : ''}</div>
+    <div class="row mt8 wrap"><span class="badge" style="background:#f1f3f4;color:#555">Not on N-Health yet</span><span class="grow"></span>
+      ${x.lat != null ? `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lng}">🧭 Directions</a>` : ''}
+      ${x.phone ? `<a class="btn btn-outline btn-sm" href="tel:${esc(String(x.phone).split(',')[0].trim())}">📞 Call</a>` : ''}
+      ${x.website ? `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="${esc(x.website)}">🌐</a>` : ''}
+      <a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(invite)}" title="Invite them to N-Health">📨 Invite</a></div></div>`;
+}
+
 // ================= PROVIDERS & FACILITIES =================
 const TYPES = [['ALL', 'All'], ['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacies'], ['LAB', '🔬 Diagnostic centers'], ['AMBULANCE', '🚑 Ambulance'], ['INSTITUTION', '🏥 Facilities']];
 export async function providersScreen(el, _p, q, facilitiesOnly = false) {
@@ -490,15 +516,22 @@ export async function providersScreen(el, _p, q, facilitiesOnly = false) {
     `<div class="form-group"><input id="pq" placeholder="🔍 Search name, specialty, hospital…"></div>
     ${facilitiesOnly ? '' : `<div class="hscroll">${TYPES.map(([k, l]) => `<span class="chip ${k === type ? 'active' : ''}" data-t="${k}">${l}</span>`).join('')}</div>`}
     <div class="row between mb8"><span class="muted" id="cnt"></span><select id="sort" style="border:none;background:none;font-size:12px;color:var(--primary)"><option value="rating">Top rated</option><option value="distance">Nearest</option><option value="fee">Lowest fee</option></select></div>
-    <div id="pl">${skeleton(4)}</div>`;
+    <div id="pl">${skeleton(4)}</div><div id="unl"></div>`;
   const load = async () => {
-    const p = sort === 'distance' ? await pos() : myPos;
+    const p = sort === 'distance' || ['INSTITUTION', 'LAB', 'PHARMACY'].includes(type) ? await pos() : myPos;
     const list = await get(`/directory?type=${type}&q=${encodeURIComponent(qv)}&sort=${sort}` + (p ? `&lat=${p.lat}&lng=${p.lng}` : ''));
     $('#cnt', el).textContent = list.length + ' found';
     $('#pl', el).innerHTML = list.length ? list.map((x) => x.role === 'INSTITUTION'
       ? `<div class="facility-card" data-go="/provider/${x.userId}"><div class="facility-header"><div><div class="facility-name">${esc(x.name)}</div><div class="facility-type">${esc(x.title)}</div></div>${verifiedBadge(x.verified)}</div><div class="facility-stats"><span>📍 ${esc(x.location || '—')}</span>${x.distanceKm != null ? `<span>${x.distanceKm} km</span>` : ''}<span>⭐ ${x.rating || 'New'}</span>${x.beds != null ? `<span>🛏️ ${x.beds} beds free</span>` : ''}${x.emergencyCare ? '<span>🚨 24h emergency</span>' : ''}</div></div>`
       : `<div class="provider-detail-card" data-go="/provider/${x.userId}"><div class="row">${avatar(x.role, x.avatarUrl)}<div class="grow"><div class="provider-name">${x.role === 'DOCTOR' ? 'Dr. ' : ''}${esc(x.name)} ${verifiedBadge(x.verified)}</div><div class="provider-specialty">${esc(x.title || '')}</div></div></div>
-        <div class="provider-info"><div><span class="label">Rating</span> ⭐ ${x.rating || 'New'} (${x.reviewCount || 0})</div>${x.experience ? `<div><span class="label">Experience</span> ${x.experience} yrs</div>` : ''}${x.fee ? `<div><span class="label">Fee</span> ${money(x.fee)}</div>` : ''}${x.distanceKm != null ? `<div><span class="label">Distance</span> ${x.distanceKm} km</div>` : x.location ? `<div><span class="label">Location</span> ${esc(x.location)}</div>` : ''}</div></div>`).join('') : empty('🔍', 'No providers match your search');
+        <div class="provider-info"><div><span class="label">Rating</span> ⭐ ${x.rating || 'New'} (${x.reviewCount || 0})</div>${x.experience ? `<div><span class="label">Experience</span> ${x.experience} yrs</div>` : ''}${x.fee ? `<div><span class="label">Fee</span> ${money(x.fee)}</div>` : ''}${x.distanceKm != null ? `<div><span class="label">Distance</span> ${x.distanceKm} km</div>` : x.location ? `<div><span class="label">Location</span> ${esc(x.location)}</div>` : ''}</div></div>`).join('') : empty('🔍', 'No providers on N-Health match your search yet');
+    // Facilities in Nigeria that are not on N-Health yet (public registries): still findable, with directions.
+    const cats = LISTING_CATS[type];
+    const box = $('#unl', el);
+    if (!box) return;
+    if (!cats || (!p && qv.trim().length < 2)) { box.innerHTML = ''; return; }
+    const ls = await get(`/facilities/search?claimable=1&limit=10&category=${cats}` + (qv.trim().length >= 2 ? '&q=' + encodeURIComponent(qv.trim()) : '') + (p ? `&lat=${p.lat}&lng=${p.lng}` : '')).catch(() => []);
+    box.innerHTML = ls.length ? `<div class="section-title" style="margin:14px 4px 6px">${qv.trim() ? 'Also in Nigeria' : 'Also near you'} <span class="small muted">(not on N-Health yet)</span></div>` + ls.map(listingCard).join('') + `<p class="small muted center">Facility data: GRID3 (CC BY 4.0), © OpenStreetMap contributors, NHIA, NBSA</p>` : '';
   };
   $$('[data-t]', el).forEach((c) => (c.onclick = () => { type = c.dataset.t; $$('[data-t]', el).forEach((x) => x.classList.toggle('active', x === c)); load(); }));
   $('#sort', el).onchange = (e) => { sort = e.target.value; load(); };
@@ -796,7 +829,8 @@ export async function insuranceScreen(el) {
   el.innerHTML = appBar({ title: '🛡️ Insurance', back: '/patient/home' }) +
     card(cardHead('🇳🇬 NHIS / NHIA status') + (p.nhisNumber ? `<div class="banner ok">✅ NHIA number on file: <b>${esc(p.nhisNumber)}</b></div>` : '<div class="banner warn">No NHIA number on file. Add it in Profile → Health information.</div>')) +
     card(cardHead('📋 My policies', '<button class="link" id="addp">+ Add existing</button>') + (mine.length ? mine.map((x) => `${item({ icon: '🛡️', title: esc(x.plan?.name || x.provider), sub: esc(x.policyNumber) + (x.premiumAmount ? ' • ' + money(x.premiumAmount) + '/mo' : '') + (x.expiresAt ? ' • expires ' + dateOnly(x.expiresAt) : ''), trailing: badge(x.status) })}${x.status === 'PENDING' && x.premiumAmount ? `<button class="btn btn-primary btn-sm btn-block mb8" data-prem="${x.id}" data-amt="${x.premiumAmount}">Pay first premium ${money(x.premiumAmount)}</button>` : ''}`).join('') : empty('🛡️', 'No policies yet'))) +
-    card(cardHead('🏥 Health schemes') + plans.map((pl) => `<div class="provider-detail-card"><div class="row between"><div><div class="provider-name">${esc(pl.name)}</div><div class="provider-specialty">${esc(pl.provider)} • ${esc(pl.type)}</div></div><div class="provider-fee">${Number(pl.monthlyPremium) ? money(pl.monthlyPremium) + '/mo' : 'Free'}</div></div><p class="muted small mt8">${esc(pl.description || '')}</p><div class="row wrap mt8">${(pl.coverage || []).map((c) => `<span class="chip">✓ ${esc(c)}</span>`).join('')}</div><button class="btn btn-primary btn-sm btn-block mt8" data-enrol="${pl.id}" data-name="${esc(pl.name)}" data-fam="${/family/i.test(pl.name) ? 1 : 0}">Enroll</button></div>`).join(''));
+    card(cardHead('🛡️ Accredited HMOs in Nigeria', '<button class="link" id="hmos">See all</button>') + '<p class="small muted" style="margin:0">All health maintenance organisations accredited by NHIA, with their contacts. Source: NHIA.</p>') +
+        card(cardHead('🏥 Health schemes') + plans.map((pl) => `<div class="provider-detail-card"><div class="row between"><div><div class="provider-name">${esc(pl.name)}</div><div class="provider-specialty">${esc(pl.provider)} • ${esc(pl.type)}</div></div><div class="provider-fee">${Number(pl.monthlyPremium) ? money(pl.monthlyPremium) + '/mo' : 'Free'}</div></div><p class="muted small mt8">${esc(pl.description || '')}</p><div class="row wrap mt8">${(pl.coverage || []).map((c) => `<span class="chip">✓ ${esc(c)}</span>`).join('')}</div><button class="btn btn-primary btn-sm btn-block mt8" data-enrol="${pl.id}" data-name="${esc(pl.name)}" data-fam="${/family/i.test(pl.name) ? 1 : 0}">Enroll</button></div>`).join(''));
   el.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-enrol],[data-prem],#addp'); if (!b) return;
     if (b.id === 'addp') return formModal('Add an existing policy', [{ name: 'provider', label: 'Insurer / HMO', required: true }, { name: 'policyNumber', label: 'Policy / member number', required: true }, { name: 'coverageDetails', label: 'Coverage notes' }, { name: 'expiresAt', label: 'Expiry date', type: 'date' }], { onSubmit: async (v) => { await post('/patient/insurance', { ...v, expiresAt: v.expiresAt ? new Date(v.expiresAt).toISOString() : undefined }); insuranceScreen(el); } });
@@ -804,6 +838,13 @@ export async function insuranceScreen(el) {
     if (b.dataset.prem) premium(b.dataset.prem, b.dataset.amt);
   });
   const premium = async (id, amt) => { if (await confirmBox(`Pay ${money(amt)} premium from your coins?`, { ok: 'Pay' })) { try { await post('/insurance/policies/' + id + '/pay'); toast('🛡️ Policy active'); insuranceScreen(el); } catch (err) { toastErr(err); } } };
+  $('#hmos', el).onclick = async () => {
+    const all = await get('/facilities/search?category=HMO&limit=100');
+    modal(`<div class="modal-title">🛡️ NHIA-accredited HMOs (${all.length})</div><input id="hq" placeholder="🔍 Search HMO or state" class="mb8" style="width:100%"><div id="hl" style="max-height:60vh;overflow:auto"></div>`, (root) => {
+      const draw = (q = '') => { const ql = q.toLowerCase(); $('#hl', root).innerHTML = all.filter((h) => !ql || (h.name + ' ' + (h.state || '') + ' ' + (h.address || '')).toLowerCase().includes(ql)).map(listingCard).join('') || empty('🛡️', 'No HMO matches'); };
+      draw(); $('#hq', root).oninput = (e) => draw(e.target.value);
+    });
+  };
 }
 
 // ================= HEALTH RECORDS =================

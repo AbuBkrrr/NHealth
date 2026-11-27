@@ -441,3 +441,17 @@ button { border-radius: var(--radius-sm); font-weight: 600; transition: var(--tr
 .mk-btn:hover { border-color: var(--primary); background: var(--primary-light); }
 .mk-url code { background: var(--surface); border-radius: var(--radius-sm); }
 .nav-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 9px; background: #D32F2F; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+
+/* Facility directory */
+.success-text { color: var(--success); font-size: 13px; margin-bottom: 12px; }
+.fac-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.fac-cat { display: flex; flex-direction: column; align-items: flex-start; padding: 10px 12px; border: 1px solid #e6e6ef; border-radius: 12px; background: #fff; color: inherit; cursor: pointer; text-align: left; }
+.fac-cat b { font-size: 18px; }
+.fac-cat span { font-size: 12px; color: var(--text-secondary); }
+.fac-cat.active { border-color: var(--primary); background: var(--primary-light); }
+td.fac-gap { color: var(--error); font-weight: 700; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal { background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 640px; max-height: 90vh; overflow: auto; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+@media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }

@@ -8,6 +8,7 @@ import * as health from '../controllers/platform/health';
 import * as don from '../controllers/platform/donations';
 import * as inst from '../controllers/platform/institution';
 import * as er from '../controllers/platform/er';
+import * as fac from '../controllers/platform/facilities';
 import * as ph from '../controllers/platform/pharmacyExt';
 import * as lab from '../controllers/platform/labExt';
 import * as priv from '../controllers/platform/privacy';
@@ -40,6 +41,11 @@ r.post('/mkt/open', marketingLimiter, h(mkt.recordOpen));
 r.post('/mkt/lead', marketingLimiter, h(mkt.createLead));
 r.post('/mkt/locate', marketingLimiter, h(mkt.recordLocation));
 r.get('/mkt/unsubscribe', marketingLimiter, h(mkt.unsubscribe));
+// Facility directory (Nigerian facilities, including those not yet on N-Health)
+r.get('/facilities/search', marketingLimiter, h(fac.search));
+r.get('/facilities/mine', auth, h(fac.myListing));
+r.get('/facilities/:id', marketingLimiter, h(fac.getListing));
+r.post('/facilities/:id/claim', auth, sensitiveLimiter, h(fac.claim));
 
 // Unified provider profile
 r.get('/provider-profile', auth, h(core.getProviderProfile));
@@ -127,6 +133,7 @@ const I = [auth, requireRole('INSTITUTION')];
 // Emergency: going to a hospital yourself (the hospital accepts and gets ready before you arrive)
 const PT = [auth, requireRole('PATIENT')];
 r.get('/er/hospitals', ...PT, h(er.nearbyHospitals));
+r.get('/er/unlisted', ...PT, h(er.unlistedHospitals));
 r.get('/er/arrivals', ...PT, h(er.myArrivals));
 r.post('/er/arrivals', ...PT, sensitiveLimiter, h(er.createArrival));
 r.post('/er/arrivals/:id/location', ...PT, h(er.patientLocation));
@@ -212,6 +219,10 @@ r.post('/admin-ops/tickets/:id/reply', ...A, h(adm.replyTicket));
 // Marketing (super admin): links & QR codes, opens per device, leads, broadcasts, pixels
 const SA = [auth, requireRole('ADMIN'), requireSuperAdmin];
 r.get('/admin-ops/marketing/overview', ...SA, h(mkt.overview));
+r.get('/admin-ops/facilities/coverage', auth, requireRole('ADMIN'), h(fac.coverage));
+r.get('/admin-ops/facilities', auth, requireRole('ADMIN'), h(fac.adminList));
+r.post('/admin-ops/facilities', auth, requireRole('ADMIN'), h(fac.adminCreate));
+r.patch('/admin-ops/facilities/:id', auth, requireRole('ADMIN'), h(fac.adminUpdate));
 r.get('/admin-ops/marketing/links', ...SA, h(mkt.listLinks));
 r.post('/admin-ops/marketing/links', ...SA, h(mkt.createLink));
 r.patch('/admin-ops/marketing/links/:id', ...SA, h(mkt.updateLink));

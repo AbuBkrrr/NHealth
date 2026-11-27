@@ -79,6 +79,7 @@ export function VerificationsPage() {
                   })}
                 </div>
                 {u.missingDocuments?.length > 0 && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--error)' }}>Approve unlocks when all three documents are uploaded.</div>}
+                {u.claimedListing && <div style={{ fontSize: 12, marginTop: 4 }}>📍 Claims directory listing: <b>{u.claimedListing.name}</b> ({[u.claimedListing.lga, u.claimedListing.state].filter(Boolean).join(', ')}{u.claimedListing.nhfrCode ? ' • NHFR ' + u.claimedListing.nhfrCode : ''}). Check it matches their documents.</div>}
               </div>
               <div className="row-actions">
                 <button disabled={!!u.missingDocuments?.length} title={u.missingDocuments?.length ? 'Missing: ' + u.missingDocuments.join(', ') : 'Approve'} onClick={() => decide(u.id, 'VERIFIED', u.kycStatus === 'APPROVED')}>Approve</button>

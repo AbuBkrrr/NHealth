@@ -98,4 +98,6 @@ Speed on 2G and offline use (what works without a connection, how saved data ref
 
 Emergencies (ambulance tracking, and going to a hospital yourself with the hospital ready before you arrive): [docs/EMERGENCY.md](docs/EMERGENCY.md).
 
+Nigerian facility directory (72,000+ facilities listed before they join; sources, licences, coverage and gaps): [docs/FACILITY_DIRECTORY.md](docs/FACILITY_DIRECTORY.md).
+
 Own server: [docs/DOCKER_DEPLOY.md](docs/DOCKER_DEPLOY.md) for a server that already runs Docker apps (N-Health runs in its own containers, built by GitHub), or [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md) for a plain Debian server.

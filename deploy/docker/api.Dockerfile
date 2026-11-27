@@ -17,5 +17,6 @@ ENV PORT=4000 HOME=/tmp npm_config_cache=/tmp/.npm
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-# Applies pending database migrations (safe, idempotent), then starts the API
-CMD ["sh", "-c", "node scripts/migrate.cjs && exec node dist/apps/backend/src/server.js"]
+# Applies pending database migrations (safe, idempotent), loads the Nigerian facility directory when its
+# data file changed (seconds; skipped otherwise), then starts the API
+CMD ["sh", "-c", "node scripts/migrate.cjs && node scripts/import-facilities.cjs && exec node dist/apps/backend/src/server.js"]

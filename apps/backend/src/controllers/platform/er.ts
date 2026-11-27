@@ -6,6 +6,7 @@ import { prisma } from '../../config/prisma';
 import { ApiError } from '../../utils/ApiError';
 import { notify, getIo } from '../../services/notify';
 import { str, num, uid, patientOf } from './util';
+import { nearestUnlistedHospitals } from './facilities';
 
 export const ER_SERVICES = ['General emergency', 'Trauma / accidents', 'Maternity / labour', 'Cardiac', 'Stroke', 'Paediatric', 'Surgery', 'ICU', 'Burns', 'Blood bank', 'X-ray / CT scan', 'Dialysis', 'Poisoning / toxicology', 'Mental health crisis'];
 /** Which service a type of emergency needs (used to rank hospitals that can handle it). */
@@ -50,6 +51,13 @@ export async function nearbyHospitals(req: Request, res: Response) {
   // Open first, then those that handle this emergency, then staffed, then nearest.
   out.sort((a, b) => Number(b.erOpen) - Number(a.erOpen) || Number(b.handlesType) - Number(a.handlesType) || Number(b.staffed) - Number(a.staffed) || a.distanceKm - b.distanceKm);
   res.json(out.slice(0, 15));
+}
+
+/** GET /api/er/unlisted?lat&lng - nearest hospitals not yet on N-Health (no alert possible: call before going). */
+export async function unlistedHospitals(req: Request, res: Response) {
+  const lat = num(req.query.lat), lng = num(req.query.lng);
+  if (lat === undefined || lng === undefined) throw ApiError.badRequest('Your location is needed');
+  res.json(await nearestUnlistedHospitals(lat, lng));
 }
 
 function patientCard(p: any) {

@@ -21,7 +21,9 @@ export async function verificationQueue(req: Request, res: Response) {
       pharmacyProfile: { select: { licenseNumber: true, pharmacyName: true, address: true } }, labProfile: { select: { licenseNumber: true, labName: true, address: true } },
       ambulanceProfile: { select: { licenseNumber: true, vehicleNumber: true } }, institutionProfile: { select: { licenseNumber: true, name: true, type: true, address: true } } },
   });
-  res.json(users.map((u) => ({ ...u, missingDocuments: missingProviderDocs(u.providerDocuments) })));
+  // The public listing each provider says is theirs (so the admin can compare name, address and registry code).
+  const listings = await prisma.facilityListing.findMany({ where: { claimedByUserId: { in: users.map((u) => u.id) } }, select: { claimedByUserId: true, name: true, category: true, state: true, lga: true, address: true, nhfrCode: true, source: true } });
+  res.json(users.map((u) => ({ ...u, missingDocuments: missingProviderDocs(u.providerDocuments), claimedListing: listings.find((l) => l.claimedByUserId === u.id) || null })));
 }
 /** POST /api/admin/verifications/:userId { decision: VERIFIED|REJECTED|SUSPENDED, note } */
 export async function decideVerification(req: Request, res: Response) {
