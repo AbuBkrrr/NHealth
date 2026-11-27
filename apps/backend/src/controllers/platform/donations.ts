@@ -48,7 +48,7 @@ export async function createCampaign(req: Request, res: Response) {
 /** POST /api/donations/campaigns/:id/donate { amount, anonymous, message } - pays with coins and updates progress. */
 export async function donate(req: Request, res: Response) {
   const amount = Number(req.body.amount);
-  if (!(amount >= 100)) throw ApiError.badRequest('Minimum donation is 100');
+  if (!(amount >= 100)) throw ApiError.badRequest('Minimum donation is 10 coins');
   const c = await prisma.donationCampaign.findUnique({ where: { id: req.params.id } });
   if (!c || c.status !== 'ACTIVE' || !['FUND', 'PATIENT_CASE'].includes(c.type)) throw ApiError.badRequest('This campaign is not accepting money');
   const p = await patientOf(uid(req));

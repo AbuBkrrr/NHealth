@@ -2,8 +2,8 @@ import { prisma } from '../config/prisma';
 import { getOrCreateLedger, purchaseCredits } from './creditsService';
 import { verify, Gateway } from './gateways';
 import { notify } from './notify';
+import { coinsText } from './coins';
 
-const REFERRAL_REWARD = Number(process.env.REFERRAL_REWARD || 500);
 
 /**
  * Credits a pending top-up exactly once, only after the gateway has confirmed the amount.
@@ -53,17 +53,7 @@ export async function settleCreditPurchase(internalRef: string, verified?: { amo
   await getOrCreateLedger(log.userId);
   const txn = await purchaseCredits(log.userId, Number(log.amount), internalRef, 'Coins top-up via ' + log.gateway, { gateway: log.gateway, gatewayRef: v.gatewayRef });
   await prisma.paymentGatewayLog.update({ where: { id: log.id }, data: { status: 'success', gatewayRef: v.gatewayRef, responsePayload: (v.raw ?? undefined) as any } });
-  await notify(log.userId, 'payment', 'Coins added 💰', `${log.currency} ${Number(log.amount).toLocaleString()} has been added to your balance.`, { email: true, data: { internalRef } });
-
-  // Referral reward on the referee's first successful top-up (closed-loop coins, not cash).
-  const user = await prisma.user.findUnique({ where: { id: log.userId }, select: { referredById: true } });
-  if (user?.referredById) {
-    const prior = await prisma.paymentGatewayLog.count({ where: { userId: log.userId, status: 'success', purpose: 'credit_purchase' } });
-    if (prior === 1 && REFERRAL_REWARD > 0) {
-      await getOrCreateLedger(user.referredById);
-      await purchaseCredits(user.referredById, REFERRAL_REWARD, 'REF-' + log.userId, 'Referral reward', { referee: log.userId }).catch(() => null);
-      await notify(user.referredById, 'payment', 'Referral reward 🎁', `You earned ${REFERRAL_REWARD} coins because a friend joined N-Health.`);
-    }
-  }
+  await notify(log.userId, 'payment', 'Coins added 💰', `${coinsText(Number(log.amount))} have been added to your balance.`, { email: true, data: { internalRef } });
+  // (Invite rewards are given when the invited person confirms their email or phone: see services/coins.ts.)
   return { ok: true, txn, log };
 }

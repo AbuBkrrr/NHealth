@@ -8,6 +8,7 @@ import { notify } from '../../services/notify';
 import { accruePosCoins } from '../../services/earnings';
 import { getFinance } from '../../services/settings';
 import { uid, str, num, date } from './util';
+import { coinsText } from '../../services/coins';
 
 async function pharm(req: Request) {
   const p = await prisma.pharmacyProfile.findUnique({ where: { userId: uid(req) } });
@@ -129,7 +130,7 @@ export async function posCheckout(req: Request, res: Response) {
       throw ApiError.badRequest('Patient has insufficient coins');
     }
     await accruePosCoins(sale.id, p.userId, Number(sale.total));
-    await notify(patient.id, 'payment', 'Pharmacy purchase', `${Number(sale.total).toLocaleString()} coins paid at ${p.pharmacyName}. Receipt ${sale.receiptNo}.`);
+    await notify(patient.id, 'payment', 'Pharmacy purchase', `${coinsText(Number(sale.total))} paid at ${p.pharmacyName}. Receipt ${sale.receiptNo}.`);
   }
   const low = await prisma.inventory.findMany({ where: { pharmacyId: p.id, id: { in: (sale.items as any[]).map((l) => l.inventoryId) } } });
   const alerts = low.filter((i) => i.stock <= i.reorderLevel);

@@ -344,7 +344,7 @@ export async function settingsScreen(el) {
 
 // ================= SUPPORT & ARTICLES =================
 const FAQ = [
-  ['How do coins work?', 'Coins are prepaid credits for healthcare on N-Health. Top up by card, transfer or USSD through Paystack or Flutterwave. 1 coin = ₦1. Coins can only be spent on services, not withdrawn.'],
+  ['How do coins work?', 'Coins are prepaid credits for healthcare on N-Health. Buy them by card, transfer or USSD (the price is shown before you pay), or earn them by inviting friends. Coins can only be spent on N-Health services and products. They cannot be withdrawn, transferred or exchanged for cash.'],
   ['Are providers verified?', 'Yes. Every provider passes Didit identity verification and an N-Health compliance review of their licence before patients can book them. Look for the ✓ Verified badge.'],
   ['What if my appointment is cancelled?', 'If the provider declines or you cancel 12+ hours ahead, your coins are refunded automatically.'],
   ['Is my medical data safe?', 'Your records are visible only to providers treating you. Every access is logged in Settings → Privacy, and you can download or delete your data at any time.'],

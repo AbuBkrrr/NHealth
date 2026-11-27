@@ -503,3 +503,27 @@ describe('facility directory (listed before they join)', () => {
     expect(fix.body).toMatchObject({ phone: '0801 234 5678', hidden: true, addedById: boss.id });
   });
 });
+
+describe('invite reward (coins)', () => {
+  it('gives the inviter 1 coin once, after the invited person confirms their email or phone', async () => {
+    const { rewardInviter, COIN_VALUE_NGN } = await import('../src/services/coins');
+    const inviter = await register('PATIENT');
+    const code = (await prisma.user.findUnique({ where: { id: inviter.user.id } }))!.referralCode!;
+    const email = `inv-${uniq()}@test.io`;
+    const r = await request(app).post('/api/auth/register').send({ email, password: 'password123', name: 'Ada Friend', role: 'PATIENT', acceptTerms: true, referralCode: code });
+    expect(r.status).toBe(201);
+    const friendId = r.body.user.id;
+    const bal = async () => Number((await prisma.creditLedger.findUnique({ where: { userId: inviter.user.id } }))?.balance || 0);
+    const before = await bal();
+    await rewardInviter(friendId); // not confirmed yet: nothing
+    expect(await bal()).toBe(before);
+    await prisma.user.update({ where: { id: friendId }, data: { emailVerifiedAt: new Date() } });
+    await rewardInviter(friendId);
+    await rewardInviter(friendId); // only once
+    expect(await bal()).toBe(before + 1 * COIN_VALUE_NGN); // 1 coin, kept as ₦10 inside
+    const s = await request(app).get('/api/invites/summary').set(auth(inviter.token));
+    expect(s.body).toMatchObject({ joined: 1, confirmed: 1, coinsEarned: 1, rewardCoins: 1 });
+    const cfg = await request(app).get('/api/config');
+    expect(cfg.body).toMatchObject({ coinValue: 10, inviteRewardCoins: 1 });
+  });
+});

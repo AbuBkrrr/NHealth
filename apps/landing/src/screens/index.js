@@ -24,6 +24,7 @@ const withInvite = (screen) => async (el, ...a) => {
   const r = await screen(el, ...a);
   const html = await C.inviteCard();
   if (html && el.isConnected && !el.querySelector('.invite-card')) el.insertAdjacentHTML('beforeend', html);
+  if (html) C.loadInviteStats(el);
   return r;
 };
 

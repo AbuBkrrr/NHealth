@@ -73,6 +73,7 @@ r.get('/directory', auth, h(core.directory));
 r.get('/directory/:userId', auth, h(core.directoryDetail));
 r.get('/reviews/:userId', auth, h(core.listReviews));
 r.post('/reviews', auth, h(core.createReview));
+r.get('/invites/summary', auth, h(core.inviteSummary));
 r.get('/referrals', auth, h(core.listReferrals));
 r.post('/referrals', auth, requireRole(...PROVIDERS), requireVerifiedProvider, h(core.createReferral));
 r.post('/referrals/:id/respond', auth, requireRole(...PROVIDERS), h(core.respondReferral));

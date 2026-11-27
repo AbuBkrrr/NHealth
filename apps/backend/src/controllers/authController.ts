@@ -14,6 +14,7 @@ import { sendEmail } from '../services/email';
 import { sendSms } from '../services/sms';
 import { notify } from '../services/notify';
 import { invalidateUserState } from '../middleware/auth';
+import { rewardInviter } from '../services/coins';
 
 const PROVIDER_ROLES = ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE', 'INSTITUTION'];
 const MAX_FAILED_LOGINS = 5;
@@ -436,6 +437,7 @@ export async function confirmVerifyEmail(req: Request, res: Response) {
   if (!user) throw ApiError.notFound('User not found');
   if (!(await checkOtp(user.email, 'email_verify', String(req.body.code || ''), true))) throw ApiError.badRequest('Invalid or expired code');
   await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+  await rewardInviter(user.id).catch(() => null); // the person who invited them earns their coin now
   res.json({ message: 'Email verified' });
 }
 
@@ -452,6 +454,7 @@ export async function confirmVerifyPhone(req: Request, res: Response) {
   if (!user?.phone) throw ApiError.badRequest('No phone number on file');
   if (!(await checkOtp(user.phone, 'phone_verify', String(req.body.code || ''), true))) throw ApiError.badRequest('Invalid or expired code');
   await prisma.user.update({ where: { id: user.id }, data: { phoneVerifiedAt: new Date() } });
+  await rewardInviter(user.id).catch(() => null);
   res.json({ message: 'Phone verified' });
 }
 

@@ -6,6 +6,7 @@ import { resolvePayable } from '../controllers/paymentController';
 import { notify } from './notify';
 import { refund } from './gateways';
 import { clawbackDirect } from './earnings';
+import { coinsText } from './coins';
 
 type Payable = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'DONATION' | 'INSURANCE_POLICY' | 'EMERGENCY';
 
@@ -57,7 +58,7 @@ export async function payWithCoins(userId: string, payableType: Payable, payable
   await getOrCreateLedger(userId);
   const reference = ref();
   const ledger = await prisma.creditLedger.findUnique({ where: { userId } });
-  if (!ledger || Number(ledger.balance) < amount) throw ApiError.badRequest(`Insufficient coins. You need ${amount.toLocaleString()} - top up first.`);
+  if (!ledger || Number(ledger.balance) < amount) throw ApiError.badRequest(`Not enough coins. You need ${coinsText(amount)} - top up first.`);
   await spendCredits(userId, amount, reference, `Payment for ${payableType.toLowerCase().replace('_', ' ')}`, { payableType, payableId });
   const now = new Date();
   const payment = await prisma.payment.create({
@@ -65,7 +66,7 @@ export async function payWithCoins(userId: string, payableType: Payable, payable
       expiresAt: now, confirmedAt: now },
   });
   await markPaid(payableType, payableId);
-  if (providerUserId) await notify(providerUserId, 'payment', 'Payment received 💳', `You received ${amount.toLocaleString()} coins for a ${payableType.toLowerCase().replace('_', ' ')}.`, { data: { paymentId: payment.id } });
+  if (providerUserId) await notify(providerUserId, 'payment', 'Payment received 💳', `You received ₦${amount.toLocaleString()} for a ${payableType.toLowerCase().replace('_', ' ')}.`, { data: { paymentId: payment.id } });
   return payment;
 }
 
@@ -77,7 +78,7 @@ export async function refundCoinPayment(payableType: Payable, payableId: string,
   if (!p) return null;
   await refundCredits(p.payerId, Number(p.amount), 'RF-' + p.reference, 'Refund: ' + reason, { paymentId: p.id });
   await prisma.payment.update({ where: { id: p.id }, data: { status: 'CANCELLED' } });
-  await notify(p.payerId, 'payment', 'Refund issued', `${Number(p.amount).toLocaleString()} coins were returned to your balance (${reason}).`);
+  await notify(p.payerId, 'payment', 'Refund issued', `${coinsText(Number(p.amount))} were returned to your balance (${reason}).`);
   return p;
 }
 

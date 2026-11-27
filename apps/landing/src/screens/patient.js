@@ -1,11 +1,11 @@
 import { get, getFresh, post, postLater, patch, del, download } from '../lib/api.js';
 import { state } from '../lib/store.js';
-import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile } from '../lib/ui.js';
+import { esc, $, $$, appBar, brandTitle, card, cardHead, item, avatar, badge, verifiedBadge, empty, skeleton, tabs, toast, toastErr, modal, formModal, confirmBox, busy, money, coins, dt, relDay, dateOnly, timeOnly, ago, locate, field, readForm, fileToDataUri, pickFile, coinValue } from '../lib/ui.js';
 import { on } from '../lib/realtime.js';
 import { go } from '../lib/router.js';
 import { createMap } from '../lib/map.js';
 import { t } from '../lib/i18n.js';
-import { loadBalance, payModal, reviewModal, emergencyNumbers, inviteCard } from './common.js';
+import { loadBalance, payModal, reviewModal, emergencyNumbers, inviteCard, loadInviteStats } from './common.js';
 import { BLOOD, ORGANS, GENOTYPES } from './data.js';
 
 const upcoming = (a) => ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(a.status) && new Date(a.scheduledAt).getTime() > Date.now() - 2 * 3600e3;
@@ -38,6 +38,7 @@ export async function homeScreen(el) {
     </div>
     <div id="fhp"></div>${inviteCard()}<div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
+  loadInviteStats(el);
   get('/patient/insurance').then((p) => { const a = p.find((x) => x.status === 'ACTIVE'); $('#ins', el) && ($('#ins', el).innerHTML = a ? `<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">✓ ${esc(a.plan?.name || a.provider)} Active</span>` : ''); }).catch(() => null);
   get('/patient/appointments').then((list) => {
     const up = list.filter(upcoming).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 3);
@@ -69,12 +70,12 @@ export async function walletScreen(el, _p, q) {
   const gws = cfg.gateways || [];
   const pending = sessionStorage.getItem('nh_topup');
   el.innerHTML = appBar({ title: '💰 Coins', back: '/patient/home' }) + `
-    <div class="balance-card"><div class="balance-label">Available coins</div><div class="balance-amount" id="bal">…</div><div class="small" style="opacity:.8">1 coin = ₦1 • for healthcare services on N-Health</div></div>
+    <div class="balance-card"><div class="balance-label">Available coins</div><div class="balance-amount" id="bal">…</div><div class="small" style="opacity:.8">For healthcare services and products on N-Health</div></div>
     ${pending ? '<div class="banner info" id="pend">⏳ Confirming your payment…</div>' : ''}
     ${tabs([['fund', '💰 Top up'], ['history', '📊 History']], q.tab === 'history' ? 'history' : 'fund')}
     <div id="fund" class="${q.tab === 'history' ? 'hidden' : ''}">${card(`
-      <div class="form-group"><label>Amount (₦)</label><input type="number" id="amt" min="100" max="500000" inputmode="numeric" placeholder="e.g. 5000" value="${esc(q.amount || '')}"></div>
-      <div class="row wrap mb8">${[2000, 5000, 10000, 20000, 50000].map((v) => `<span class="chip" data-amt="${v}">${money(v, { convert: false })}</span>`).join('')}</div>
+      <div class="form-group"><label>Coins to buy</label><input type="number" id="amt" min="10" max="50000" step="1" inputmode="numeric" placeholder="e.g. 500" value="${esc(q.amount || '')}"><div class="hint" id="price">&nbsp;</div></div>
+      <div class="row wrap mb8">${[200, 500, 1000, 2000, 5000].map((v) => `<span class="chip" data-amt="${v}">🪙 ${v.toLocaleString()}</span>`).join('')}</div>
       <div class="card-title" style="font-size:13px;margin-bottom:6px">Payment gateway</div>
       ${gws.length ? `<div class="payment-options">${gws.map((g, i) => `<div class="payment-option ${i === 0 ? 'selected' : ''}" data-gw="${g}"><div class="icon">${g === 'paystack' ? '🟦' : g === 'flutterwave' ? '🟧' : '💳'}</div><div class="label">${g[0].toUpperCase() + g.slice(1)}</div></div>`).join('')}</div>` : '<div class="banner warn">Online top-up is being activated. Please check back shortly.</div>'}
       <div class="card-title" style="font-size:13px;margin:8px 0 6px">Payment method</div>
@@ -93,12 +94,16 @@ export async function walletScreen(el, _p, q) {
   refresh();
   let gw = gws[0], pm = 'card';
   $$('[data-tab]', el).forEach((tb) => (tb.onclick = () => { $$('[data-tab]', el).forEach((x) => x.classList.toggle('active', x === tb)); $('#fund', el).classList.toggle('hidden', tb.dataset.tab !== 'fund'); $('#history', el).classList.toggle('hidden', tb.dataset.tab !== 'history'); }));
-  $$('[data-amt]', el).forEach((c) => (c.onclick = () => { $('#amt', el).value = c.dataset.amt; }));
+  // The price of coins in naira is shown before paying (buyers must see what they will be charged).
+  const showPrice = () => { const n = Math.floor(Number($('#amt', el).value) || 0); $('#price', el).textContent = n > 0 ? `You pay ${money(n * coinValue(), { naira: true, convert: false })} by card, transfer or USSD` : '\u00a0'; };
+  $('#amt', el).oninput = showPrice; showPrice();
+  $$('[data-amt]', el).forEach((c) => (c.onclick = () => { $('#amt', el).value = c.dataset.amt; showPrice(); }));
   $$('[data-gw]', el).forEach((c) => (c.onclick = () => { gw = c.dataset.gw; $$('[data-gw]', el).forEach((x) => x.classList.toggle('selected', x === c)); }));
   $$('[data-pm]', el).forEach((c) => (c.onclick = () => { pm = c.dataset.pm; $$('[data-pm]', el).forEach((x) => x.classList.toggle('selected', x === c)); }));
   $('#pay', el).onclick = (e) => busy(e.target, async () => {
-    const amount = Number($('#amt', el).value);
-    if (!(amount >= 100)) throw new Error('Minimum top-up is ₦100');
+    const coinsWanted = Math.floor(Number($('#amt', el).value));
+    if (!(coinsWanted >= 10)) throw new Error('Minimum top-up is 10 coins');
+    const amount = coinsWanted * coinValue();
     const r = await post('/credits/purchase/initiate', { amount, gateway: gw, currency: 'NGN', channel: pm, returnUrl: location.origin + '/' });
     sessionStorage.setItem('nh_topup', r.internalRef);
     if (r.checkoutUrl) location.href = r.checkoutUrl;
@@ -779,9 +784,9 @@ export async function donationsScreen(el, _p, q) {
 }
 function donateModal(id, title, after) {
   formModal('❤️ Donate to ' + esc(title), [
-    { name: 'amount', label: 'Amount (coins)', type: 'number', required: true, min: 100, placeholder: '1000' },
+    { name: 'amount', label: 'Coins to donate', type: 'number', required: true, min: 10, placeholder: '100' },
     { name: 'message', label: 'Message of support (optional)' }, { name: 'anonymous', label: 'Donate anonymously', type: 'checkbox' },
-  ], { submit: 'Donate', intro: '<p class="muted mb8">Paid from your coins. 100% goes to the cause.</p>', onSubmit: async (v) => { await post('/donations/campaigns/' + id + '/donate', v); toast('💚 Thank you for your donation!'); loadBalance(); after?.(); } });
+  ], { submit: 'Donate', intro: '<p class="muted mb8">Paid from your coins. 100% goes to the cause.</p>', onSubmit: async (v) => { await post('/donations/campaigns/' + id + '/donate', { ...v, amount: Math.floor(Number(v.amount)) * coinValue() }); toast('💚 Thank you for your donation!'); loadBalance(); after?.(); } });
 }
 function createCampaign(after) {
   formModal('📣 Request donations', [
@@ -790,10 +795,10 @@ function createCampaign(after) {
     { name: 'description', label: 'Story / details', type: 'textarea', rows: 4, required: true },
     { name: 'beneficiaryName', label: 'Beneficiary' },
     { name: 'bloodType', label: 'Blood group needed', type: 'select', options: [['', '—'], ...BLOOD] }, { name: 'organ', label: 'Organ needed', type: 'select', options: [['', '—'], ...ORGANS] },
-    { name: 'unitsNeeded', label: 'Units / donors needed', type: 'number' }, { name: 'goalAmount', label: 'Goal amount (₦) - for money campaigns', type: 'number' },
+    { name: 'unitsNeeded', label: 'Units / donors needed', type: 'number' }, { name: 'goalAmount', label: state.user.role === 'PATIENT' ? 'Goal in coins - for money campaigns' : 'Goal amount (₦) - for money campaigns', type: 'number' },
     { name: 'urgency', label: 'Urgency', type: 'select', options: ['NORMAL', 'URGENT', 'CRITICAL'] }, { name: 'location', label: 'Hospital / location' },
     { name: 'contactName', label: 'Contact person' }, { name: 'contactPhone', label: 'Contact phone', type: 'tel' }, { name: 'deadline', label: 'Needed by', type: 'date' },
-  ], { submit: 'Submit for review', intro: '<div class="banner info">To protect donors, campaigns are reviewed by N-Health before going live (usually within 24h). Institutions go live instantly.</div>', onSubmit: async (v) => {
+  ], { submit: 'Submit for review', intro: '<div class="banner info">To protect donors, campaigns are reviewed by N-Health before going live (usually within 24h). Institutions go live instantly.</div>', onSubmit: async (v) => { if (state.user.role === 'PATIENT' && v.goalAmount) v.goalAmount = Number(v.goalAmount) * coinValue();
     const b = { ...v }; Object.keys(b).forEach((k) => b[k] === '' && delete b[k]);
     if (b.deadline) b.deadline = new Date(b.deadline).toISOString();
     const p = await pos(); if (p) Object.assign(b, { lat: p.lat, lng: p.lng });
