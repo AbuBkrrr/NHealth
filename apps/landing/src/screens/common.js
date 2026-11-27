@@ -84,3 +84,29 @@ export function emergencyNumbers() {
   const n = state.config?.emergencyNumbers || {};
   return n[state.user?.country] || n.DEFAULT || ['112'];
 }
+
+// ---------------------------------------------------------------- invite friends (home pages)
+/** Card inviting friends and family (patients) or colleagues (providers) with the person's own link. */
+export function inviteCard() {
+  const u = state.user; if (!u?.referralCode) return '';
+  const patient = u.role === 'PATIENT';
+  return `<div class="card invite-card"><div class="row"><div style="font-size:30px">🎁</div><div class="grow">
+      <div style="font-weight:700">${patient ? 'Invite friends & family' : 'Invite colleagues & patients'}</div>
+      <div class="small muted">${patient ? 'Help someone you love get care faster - doctors, pharmacies and emergency help in one app.' : 'Bring other providers and your patients to N-Health.'} Your code: <b>${esc(u.referralCode)}</b></div></div></div>
+    <div class="row mt8"><button class="btn btn-primary btn-sm grow" data-invite="share">📤 Share invite</button><button class="btn btn-outline btn-sm" data-invite="wa" aria-label="Share on WhatsApp">WhatsApp</button><button class="btn btn-outline btn-sm" data-invite="copy" aria-label="Copy invite link">Copy</button></div></div>`;
+}
+export function inviteText() {
+  const u = state.user || {};
+  const link = `${location.origin}/?ref=${encodeURIComponent(u.referralCode || '')}`;
+  const text = u.role === 'PATIENT'
+    ? `Join me on N-Health: book doctors, order medicines, get test results and emergency help in one app. Sign up with my code ${u.referralCode}: ${link}`
+    : `I use N-Health to see patients, take payments and manage my practice. Join with my code ${u.referralCode}: ${link}`;
+  return { text, link };
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-invite]'); if (!b) return;
+  const { text } = inviteText();
+  if (b.dataset.invite === 'wa') { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener'); return; }
+  if (b.dataset.invite === 'share' && navigator.share) { navigator.share({ title: 'N-Health', text }).catch(() => null); return; }
+  try { await navigator.clipboard.writeText(text); toast('📋 Invite copied - paste it in any chat'); } catch { toast(text); }
+});

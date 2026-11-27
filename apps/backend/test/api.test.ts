@@ -394,3 +394,61 @@ describe('marketing precise location', () => {
     expect(v).toMatchObject({ lat: 6.454124, lng: 3.394711, accuracyM: 7.2 });
   });
 });
+
+describe('emergency: going to a hospital yourself', () => {
+  it('lists open hospitals near the patient, alerts the chosen one, and tells the patient when it is ready', async () => {
+    const inst = await register('INSTITUTION', { name: 'ER Hospital ' + uniq(), type: 'HOSPITAL', licenseNumber: 'H-' + uniq() });
+    const closed = await register('INSTITUTION', { name: 'Closed Hospital ' + uniq(), type: 'HOSPITAL', licenseNumber: 'H-' + uniq() });
+    await prisma.user.updateMany({ where: { id: { in: [inst.user.id, closed.user.id] } }, data: { verificationStatus: 'VERIFIED' } });
+    // Hospital sets its emergency board
+    await prisma.institutionProfile.update({ where: { userId: inst.user.id }, data: { lat: 6.5158, lng: 3.3898 } });
+    await prisma.institutionProfile.update({ where: { userId: closed.user.id }, data: { lat: 6.5100, lng: 3.3700, emergencyCare: true, erOpen: false } });
+    const board = await request(app).patch('/api/institution/er').set(auth(inst.token)).send({ emergencyCare: true, erOpen: true, erDoctorsOnDuty: 2, erNursesOnDuty: 3, erServices: ['Trauma / accidents', 'Not a real service'] });
+    expect(board.status).toBe(200);
+    expect(board.body.erServices).toEqual(['Trauma / accidents']);
+
+    const pat = await register('PATIENT');
+    const other = await register('PATIENT');
+    expect((await request(app).get('/api/er/hospitals').set(auth(pat.token))).status).toBe(400); // location needed
+    const near = await request(app).get('/api/er/hospitals?lat=6.4990&lng=3.3550&type=ACCIDENT').set(auth(pat.token));
+    expect(near.status).toBe(200);
+    const mine = near.body.find((h: any) => h.userId === inst.user.id);
+    expect(mine).toMatchObject({ erOpen: true, erDoctorsOnDuty: 2, handlesType: true });
+    expect(near.body.findIndex((h: any) => h.userId === inst.user.id)).toBeLessThan(near.body.findIndex((h: any) => h.userId === closed.user.id)); // open first
+    expect((await request(app).get('/api/er/hospitals?lat=6.5&lng=3.36').set(auth(inst.token))).status).toBe(403); // patients only
+
+    const closedProfile = await prisma.institutionProfile.findUnique({ where: { userId: closed.user.id } });
+    expect((await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: closedProfile!.id, lat: 6.499, lng: 3.355 })).status).toBe(409);
+    const a = await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: mine.id, type: 'ACCIDENT', transport: 'TAXI', notes: 'deep cut', lat: 6.499, lng: 3.355 });
+    expect(a.status).toBe(201);
+    expect(a.body).toMatchObject({ status: 'REQUESTED', type: 'ACCIDENT', transport: 'TAXI' });
+    expect(a.body.etaMinutes).toBeGreaterThan(0);
+    expect(await prisma.notification.count({ where: { userId: inst.user.id, type: 'emergency' } })).toBeGreaterThanOrEqual(1);
+
+    // Hospital sees it with the patient's medical summary; another patient cannot touch it
+    const b = await request(app).get('/api/institution/er').set(auth(inst.token));
+    const incoming = b.body.arrivals.find((x: any) => x.id === a.body.id);
+    expect(incoming.patient.name).toBe('PATIENT Tester');
+    expect((await request(app).post(`/api/er/arrivals/${a.body.id}/cancel`).set(auth(other.token))).status).toBe(404);
+    expect((await request(app).post(`/api/institution/er/${a.body.id}/respond`).set(auth(closed.token)).send({ accept: true })).status).toBe(404);
+
+    // Position on the way updates the arrival time; hospital accepts with a note for the patient
+    const loc = await request(app).post(`/api/er/arrivals/${a.body.id}/location`).set(auth(pat.token)).send({ lat: 6.512, lng: 3.385 });
+    expect(loc.body.etaMinutes).toBeLessThan(a.body.etaMinutes);
+    const acc = await request(app).post(`/api/institution/er/${a.body.id}/respond`).set(auth(inst.token)).send({ accept: true, readyNote: 'Use the Emergency gate' });
+    expect(acc.body).toMatchObject({ status: 'ACCEPTED', readyNote: 'Use the Emergency gate' });
+    expect(await prisma.notification.count({ where: { userId: pat.user.id, type: 'emergency' } })).toBeGreaterThanOrEqual(1);
+    const trips = await request(app).get('/api/er/arrivals').set(auth(pat.token));
+    expect(trips.body[0]).toMatchObject({ id: a.body.id, status: 'ACCEPTED' });
+    expect(trips.body[0].institution.name).toContain('ER Hospital');
+
+    expect((await request(app).post(`/api/er/arrivals/${a.body.id}/arrived`).set(auth(pat.token))).status).toBe(200);
+    expect((await request(app).post(`/api/institution/er/${a.body.id}/status`).set(auth(inst.token)).send({ status: 'COMPLETED' })).body.status).toBe('COMPLETED');
+    expect((await request(app).post(`/api/er/arrivals/${a.body.id}/cancel`).set(auth(pat.token))).status).toBe(409);
+
+    // A hospital that cannot take the patient says why
+    const a2 = await request(app).post('/api/er/arrivals').set(auth(pat.token)).send({ institutionId: mine.id, lat: 6.499, lng: 3.355 });
+    const dec = await request(app).post(`/api/institution/er/${a2.body.id}/respond`).set(auth(inst.token)).send({ accept: false, reason: 'The emergency unit is full right now' });
+    expect(dec.body).toMatchObject({ status: 'DECLINED', declineReason: 'The emergency unit is full right now' });
+  });
+});

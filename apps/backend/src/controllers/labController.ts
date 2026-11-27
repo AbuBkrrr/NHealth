@@ -167,7 +167,7 @@ export async function uploadResult(req: Request, res: Response) {
   const patient = await prisma.patientProfile.findUnique({ where: { id: test.patientId }, select: { userId: true } });
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('labresult:new', result);
-    await notify(patient.userId, 'lab', 'Lab result ready 🔬', `Your ${test.testType} result is ready.`, { email: true, data: { labTestId: test.id } });
+    await notify(patient.userId, 'lab', 'Test result ready 🔬', `Your ${test.testType} result is ready.`, { email: true, data: { labTestId: test.id } });
   }
   // Send the result back to the doctor who requested the test.
   if (test.requestedByDoctorId) {

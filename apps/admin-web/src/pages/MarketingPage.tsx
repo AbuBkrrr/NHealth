@@ -266,7 +266,7 @@ function Broadcast({ links }: { links: any[] }) {
         <label className="field">Message<textarea rows={6} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} /></label>
         <div className="mk-checks">
           <label><input type="checkbox" checked={f.users} onChange={(e) => setF({ ...f, users: e.target.checked })} /> Registered users (opted in)</label>
-          {f.users && <span>Roles: {ROLES.map((r) => <label key={r}><input type="checkbox" checked={f.roles.includes(r)} onChange={() => tog('roles', r)} /> {r}</label>)} <span className="mk-sub">(none = all)</span></span>}
+          {f.users && <span>Roles: {ROLES.map((r) => <label key={r}><input type="checkbox" checked={f.roles.includes(r)} onChange={() => tog('roles', r)} /> {r === 'LAB' ? 'DIAGNOSTIC CENTER' : r}</label>)} <span className="mk-sub">(none = all)</span></span>}
         </div>
         <div className="mk-checks">
           <label><input type="checkbox" checked={f.leads} onChange={(e) => setF({ ...f, leads: e.target.checked })} /> Leads who consented (not yet registered)</label>

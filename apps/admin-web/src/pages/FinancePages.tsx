@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 const naira = (n: number | string) => '₦' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString() : '—');
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const SERVICES: [string, string][] = [['APPOINTMENT', 'Doctor consultations'], ['NURSE_REQUEST', 'Nurse home care'], ['LAB_TEST', 'Lab tests'], ['PHARMACY_ORDER', 'Pharmacy orders & coin POS sales'], ['EMERGENCY', 'Ambulance trips']];
+const SERVICES: [string, string][] = [['APPOINTMENT', 'Doctor consultations'], ['NURSE_REQUEST', 'Nurse home care'], ['LAB_TEST', 'Diagnostic tests & scans'], ['PHARMACY_ORDER', 'Pharmacy orders & coin POS sales'], ['EMERGENCY', 'Ambulance trips']];
 
 function useLoad<T>(path: string, init: T) {
   const [data, setData] = useState<T>(init);

@@ -96,4 +96,6 @@ Marketing tools (tracking links, QR codes, same-device vs shared, leads, broadca
 
 Speed on 2G and offline use (what works without a connection, how saved data refreshes): [docs/OFFLINE_AND_2G.md](docs/OFFLINE_AND_2G.md).
 
+Emergencies (ambulance tracking, and going to a hospital yourself with the hospital ready before you arrive): [docs/EMERGENCY.md](docs/EMERGENCY.md).
+
 Own server: [docs/DOCKER_DEPLOY.md](docs/DOCKER_DEPLOY.md) for a server that already runs Docker apps (N-Health runs in its own containers, built by GitHub), or [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md) for a plain Debian server.

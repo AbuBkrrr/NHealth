@@ -11,19 +11,34 @@ const guessCountry = () => {
 };
 
 export function authScreen(el, _params = {}, query = {}) {
-  const s = { side: query.side === 'PROVIDER' ? 'PROVIDER' : 'PATIENT', role: 'DOCTOR', mode: query.mode === 'register' ? 'register' : 'login' };
+  // Nothing is picked at first: the person chooses Patient or Health Provider, then only that card stays, above its form.
+  const s = { side: query.side === 'PROVIDER' || query.side === 'PATIENT' ? query.side : null, role: 'DOCTOR', mode: query.mode === 'register' ? 'register' : 'login' };
+  const referral = (() => { try { return query.ref || localStorage.getItem('nh_ref') || ''; } catch { return query.ref || ''; } })();
+  const CARDS = {
+    PATIENT: '<div class="icon">👤</div><div class="txt"><div class="name">Patient</div><div class="desc">Access healthcare services</div></div>',
+    PROVIDER: '<div class="icon">⚕️</div><div class="txt"><div class="name">Health Provider</div><div class="desc">Doctors, hospitals, pharmacies, diagnostic centers & more</div></div>',
+  };
   const draw = () => {
+    if (!s.side) {
+      el.innerHTML = `<div class="auth-screen">
+        <div class="auth-header"><div class="icon">🏥</div><h2>Welcome to N-Health</h2><p>Who are you signing in as?</p></div>
+        <div class="auth-choose">
+          <button type="button" class="role-card role-card-big" data-side="PATIENT">${CARDS.PATIENT}<span class="go">Continue as a patient →</span></button>
+          <button type="button" class="role-card role-card-big provider" data-side="PROVIDER">${CARDS.PROVIDER}<span class="go">Continue as a provider →</span></button>
+        </div>
+        <p class="muted center mt12 small">🔒 Your data is encrypted in transit and never sold.</p>
+      </div>`;
+      $$('[data-side]', el).forEach((c) => (c.onclick = () => { s.side = c.dataset.side; draw(); }));
+      return;
+    }
     const provider = s.side === 'PROVIDER';
     const role = provider ? s.role : 'PATIENT';
     const isInst = role === 'INSTITUTION';
     const login = s.mode === 'login';
     const country = guessCountry();
     el.innerHTML = `<div class="auth-screen">
-      <div class="auth-header"><div class="icon">🏥</div><h2>Welcome to N-Health</h2><p>${login ? 'Sign in to continue' : 'Create your account'}</p></div>
-      <div class="auth-role-selector" style="grid-template-columns:1fr 1fr">
-        <div class="role-card ${!provider ? 'selected' : ''}" data-side="PATIENT" tabindex="0"><div class="icon">👤</div><div class="name">Patient</div><div class="desc">Access healthcare services</div></div>
-        <div class="role-card ${provider ? 'selected' : ''}" data-side="PROVIDER" tabindex="0"><div class="icon">⚕️</div><div class="name">Health Provider</div><div class="desc">Doctors, pharmacies, labs & more</div></div>
-      </div>
+      <div class="auth-header compact"><h2>${login ? 'Sign in' : 'Create your account'}</h2></div>
+      <div class="role-card selected picked ${provider ? 'provider' : ''}">${CARDS[s.side]}<button type="button" class="link change" id="change">Change</button></div>
       ${provider ? `<div class="form-group"><label>Provider type</label><select id="prov-role">${PROVIDER_ROLES.map(([k, i, n]) => `<option value="${k}" ${k === s.role ? 'selected' : ''}>${i} ${n}</option>`).join('')}</select></div>` : ''}
       <div class="tab-container"><div class="tab ${login ? 'active' : ''}" data-mode="login" tabindex="0">Sign In</div><div class="tab ${!login ? 'active' : ''}" data-mode="register" tabindex="0">Create Account</div></div>
       <form id="auth-form" novalidate ${isInst && !login ? 'class="institution-register-form" style="max-height:none"' : ''}>
@@ -43,7 +58,7 @@ export function authScreen(el, _params = {}, query = {}) {
           ${field({ name: 'password', label: 'Password', type: 'password', required: true, autocomplete: 'new-password', hint: 'At least 8 characters' })}
           ${field({ name: 'password2', label: 'Confirm Password', type: 'password', required: true, autocomplete: 'new-password' })}
         ` : `
-          ${field({ name: 'name', label: role === 'PHARMACY' ? 'Pharmacy name' : role === 'LAB' ? 'Lab / Centre name' : role === 'AMBULANCE' ? 'Operator / Company name' : 'Full Name', required: true, autocomplete: 'name' })}
+          ${field({ name: 'name', label: role === 'PHARMACY' ? 'Pharmacy name' : role === 'LAB' ? 'Diagnostic center name' : role === 'AMBULANCE' ? 'Operator / Company name' : 'Full Name', required: true, autocomplete: 'name' })}
           ${field({ name: 'email', label: 'Email', type: 'email', required: true, autocomplete: 'email' })}
           ${field({ name: 'phone', label: 'Phone', type: 'tel', autocomplete: 'tel', required: provider, placeholder: '+234 801 234 5678' })}
           ${provider ? `
@@ -55,7 +70,7 @@ export function authScreen(el, _params = {}, query = {}) {
           ${field({ name: 'country', label: 'Country', type: 'select', options: COUNTRIES.map((c) => [c[0], c[1]]), value: country })}
           ${field({ name: 'password', label: 'Password', type: 'password', required: true, autocomplete: 'new-password', hint: 'At least 8 characters' })}
           ${field({ name: 'password2', label: 'Confirm Password', type: 'password', required: true, autocomplete: 'new-password' })}
-          ${field({ name: 'referralCode', label: 'Referral code (optional)', placeholder: 'NHXXXXXX' })}
+          ${field({ name: 'referralCode', label: 'Referral code (optional)', placeholder: 'NHXXXXXX', value: referral })}
         `}
         ${!login ? `<label class="check"><input type="checkbox" name="acceptTerms"> <span>I agree to the <a href="#" data-terms>Terms of Service</a> and <a href="#" data-privacy>Privacy Policy</a>, and consent to processing of my health data to provide care.</span></label>
           <label class="check"><input type="checkbox" name="marketingOptIn"> <span>Send me health tips and product updates (optional)</span></label>` : ''}
@@ -68,7 +83,7 @@ export function authScreen(el, _params = {}, query = {}) {
   };
 
   const wire = (role, login) => {
-    $$('[data-side]', el).forEach((c) => (c.onclick = () => { s.side = c.dataset.side; draw(); }));
+    $('#change', el).onclick = () => { s.side = null; draw(); };
     $$('[data-mode]', el).forEach((c) => (c.onclick = () => { s.mode = c.dataset.mode; draw(); }));
     const pr = $('#prov-role', el);
     if (pr) pr.onchange = () => { s.role = pr.value; draw(); };

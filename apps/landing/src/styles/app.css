@@ -183,3 +183,44 @@ body[data-side="patient"] .quick-action:not(.emergency) { border: none; backgrou
 .live-eta b{font-size:15px}
 .crew{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px;border:1px solid var(--border,#eee);border-radius:12px}
 .plate{display:inline-block;padding:3px 8px;border:2px solid #222;border-radius:6px;background:#FFEB3B;color:#111;font-weight:700;font-size:12px;letter-spacing:.5px;white-space:nowrap}
+.banner.success { background: #E8F5E9; color: #1B5E20; }
+
+/* Emergency: ambulance vs going to a hospital yourself */
+.em-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.em-opt{display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 8px;border:2px solid #eee;border-radius:14px;background:#fff;font:inherit;cursor:pointer;text-align:center}
+.em-opt .i{font-size:26px}
+.em-opt b{font-size:13px}
+.em-opt span:last-child{font-size:11px;color:var(--text-secondary,#666)}
+.em-opt.active{border-color:var(--emergency-red,#D32F2F);background:#FFF5F5}
+.er-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.er-chip{font-size:11px;padding:3px 8px;border-radius:10px;background:#f1f3f4;color:#333}
+.er-chip.ok{background:#E8F5E9;color:#1B5E20}
+.er-chip.warn{background:#FEF7E0;color:#8a6100}
+.er-chip.bad{background:#FFEBEE;color:#B71C1C}
+.er-card{border-left:4px solid var(--emergency-red,#D32F2F)}
+.er-med{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;margin:8px 0}
+.er-med .k{color:var(--text-secondary,#666)}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper button{width:32px;height:32px;border-radius:50%;border:1px solid #ddd;background:#fff;font-size:18px;line-height:1}
+.stepper b{min-width:28px;text-align:center;font-size:16px}
+
+/* Welcome: pick Patient or Health Provider first, then only that card stays above its form */
+.auth-choose{display:grid;gap:14px;margin:8px 0 6px}
+.auth-choose .role-card-big{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;padding:22px 16px;border:2px solid var(--primary);border-radius:18px;background:var(--primary-light);font:inherit;color:inherit;cursor:pointer;text-align:center;transition:transform .12s}
+.auth-choose .role-card-big:active{transform:scale(.98)}
+.auth-choose .role-card-big.provider{border-color:var(--provider-primary,#7C4DFF);background:var(--provider-light,#EDE7F6)}
+.auth-choose .role-card-big .icon{font-size:40px}
+.auth-choose .role-card-big .name{font-weight:700;font-size:18px}
+.auth-choose .role-card-big .desc{font-size:13px;color:var(--text-secondary)}
+.auth-choose .role-card-big .go{margin-top:8px;font-weight:600;font-size:13px;color:var(--primary)}
+.auth-choose .role-card-big.provider .go{color:var(--provider-primary,#7C4DFF)}
+.auth-screen .auth-header.compact{margin-bottom:8px}
+.auth-screen .auth-header.compact h2{font-size:20px}
+.role-card.picked{position:relative;display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:14px;border:2px solid var(--primary);border-radius:14px;background:var(--primary-light);text-align:left}
+.role-card.picked.provider{border-color:var(--provider-primary,#7C4DFF);background:var(--provider-light,#EDE7F6)}
+.role-card.picked .icon{font-size:28px;margin:0}
+.role-card.picked .name{font-weight:700;font-size:15px}
+.role-card.picked .desc{font-size:11px;color:var(--text-secondary)}
+.role-card.picked .change{position:absolute;top:8px;right:10px;font-size:12px}
+.invite-card{border:2px dashed var(--primary);background:linear-gradient(135deg,#fff,var(--primary-light))}
+body[data-side=provider] .invite-card{border-color:var(--provider-primary,#7C4DFF);background:linear-gradient(135deg,#fff,var(--provider-light,#EDE7F6))}

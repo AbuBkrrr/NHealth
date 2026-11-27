@@ -18,6 +18,14 @@ function lazyModule(load) {
 export const S = lazyModule(() => import('./shared.js'));
 export const P = lazyModule(() => import('./patient.js'));
 export const V = lazyModule(() => import('./providers.js'));
+const C = lazyModule(() => import('./common.js'));
+/** Provider home pages end with the invite card (patients have it inside their home). */
+const withInvite = (screen) => async (el, ...a) => {
+  const r = await screen(el, ...a);
+  const html = await C.inviteCard();
+  if (html && el.isConnected && !el.querySelector('.invite-card')) el.insertAdjacentHTML('beforeend', html);
+  return r;
+};
 
 const PATIENT = ['PATIENT'];
 const PROVIDERS = ['DOCTOR', 'NURSE', 'LAB', 'PHARMACY', 'AMBULANCE', 'INSTITUTION'];
@@ -62,7 +70,7 @@ route('/patient/insurance', P.insuranceScreen, { roles: PATIENT });
 route('/patient/records', P.recordsScreen, { roles: PATIENT });
 
 // Doctor
-route('/doctor/home', V.doctorHome, { roles: ['DOCTOR'] });
+route('/doctor/home', withInvite(V.doctorHome), { roles: ['DOCTOR'] });
 route('/doctor/requests', V.doctorRequests, { roles: ['DOCTOR'] });
 route('/doctor/patients', V.doctorPatients, { roles: ['DOCTOR'] });
 route('/doctor/patient/:id', V.doctorPatientDetail, { roles: ['DOCTOR'] });
@@ -71,7 +79,7 @@ route('/doctor/lab-results', V.doctorLabResults, { roles: ['DOCTOR'] });
 route('/doctor/emergencies', V.doctorEmergencies, { roles: ['DOCTOR'] });
 
 // Pharmacy
-route('/pharmacy/home', V.pharmacyHome, { roles: ['PHARMACY'] });
+route('/pharmacy/home', withInvite(V.pharmacyHome), { roles: ['PHARMACY'] });
 route('/pharmacy/inventory', V.pharmacyInventory, { roles: ['PHARMACY'] });
 route('/pharmacy/intake', V.pharmacyIntake, { roles: ['PHARMACY'] });
 route('/pharmacy/audit', V.pharmacyAudit, { roles: ['PHARMACY'] });
@@ -80,25 +88,26 @@ route('/pharmacy/orders', V.pharmacyOrders, { roles: ['PHARMACY'] });
 route('/pharmacy/customers', V.pharmacyCustomers, { roles: ['PHARMACY'] });
 
 // Lab
-route('/lab/home', V.labHome, { roles: ['LAB'] });
+route('/lab/home', withInvite(V.labHome), { roles: ['LAB'] });
 route('/lab/tests', V.labTests, { roles: ['LAB'] });
 route('/lab/catalog', V.labCatalog, { roles: ['LAB'] });
 
 // Nurse
-route('/nurse/home', V.nurseHome, { roles: ['NURSE'] });
+route('/nurse/home', withInvite(V.nurseHome), { roles: ['NURSE'] });
 route('/nurse/requests', V.nurseRequests, { roles: ['NURSE'] });
 
 // Ambulance
-route('/ambulance/home', V.ambulanceHome, { roles: ['AMBULANCE'] });
+route('/ambulance/home', withInvite(V.ambulanceHome), { roles: ['AMBULANCE'] });
 route('/ambulance/requests', V.ambulanceRequests, { roles: ['AMBULANCE'] });
 
 // Institution
-route('/institution/home', V.institutionHome, { roles: ['INSTITUTION'] });
+route('/institution/home', withInvite(V.institutionHome), { roles: ['INSTITUTION'] });
 route('/institution/profile', V.institutionProfile, { roles: ['INSTITUTION'] });
 route('/institution/departments', V.institutionDepartments, { roles: ['INSTITUTION'] });
 route('/institution/staff', V.institutionStaff, { roles: ['INSTITUTION'] });
 route('/institution/patients', V.institutionPatients, { roles: ['INSTITUTION'] });
 route('/institution/reports', V.institutionReports, { roles: ['INSTITUTION'] });
+route('/institution/er', V.institutionEr, { roles: ['INSTITUTION'] });
 
 // Admin
 route('/admin', V.adminHome, { roles: ['ADMIN'] });

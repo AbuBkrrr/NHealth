@@ -5,7 +5,7 @@ import { on } from '../lib/realtime.js';
 import { go } from '../lib/router.js';
 import { createMap } from '../lib/map.js';
 import { t } from '../lib/i18n.js';
-import { loadBalance, payModal, reviewModal, emergencyNumbers } from './common.js';
+import { loadBalance, payModal, reviewModal, emergencyNumbers, inviteCard } from './common.js';
 import { BLOOD, ORGANS, GENOTYPES } from './data.js';
 
 const upcoming = (a) => ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(a.status) && new Date(a.scheduledAt).getTime() > Date.now() - 2 * 3600e3;
@@ -26,7 +26,7 @@ export async function homeScreen(el) {
       <div class="quick-action emergency" data-go="/patient/emergency" tabindex="0"><span class="icon">🚨</span><span class="label">${t('Emergency')}</span></div>
       <div class="quick-action" data-go="/patient/appointments" tabindex="0"><span class="icon">📅</span><span class="label">${t('Appointments')}</span></div>
       <div class="quick-action pharmacy-action" data-go="/patient/pharmacy" tabindex="0"><span class="icon">💊</span><span class="label">${t('Pharmacy')}</span></div>
-      <div class="quick-action lab-action" data-go="/patient/labs" tabindex="0"><span class="icon">🔬</span><span class="label">${t('Labs')}</span></div>
+      <div class="quick-action lab-action" data-go="/patient/labs" tabindex="0"><span class="icon">🔬</span><span class="label">${t('Diagnostics')}</span></div>
       <div class="quick-action" data-go="/patient/providers" tabindex="0"><span class="icon">🏥</span><span class="label">${t('Providers')}</span></div>
       <div class="quick-action" data-go="/patient/donations" tabindex="0"><span class="icon">❤️</span><span class="label">${t('Donate')}</span></div>
       <div class="quick-action" data-go="/patient/insurance" tabindex="0"><span class="icon">🛡️</span><span class="label">${t('Insurance')}</span></div>
@@ -36,7 +36,7 @@ export async function homeScreen(el) {
       <div class="quick-action" data-go="/patient/records?tab=reminders" tabindex="0"><span class="icon">⏰</span><span class="label">Reminders</span></div>
       <div class="quick-action institution-action" data-go="/patient/institutions" tabindex="0"><span class="icon">🏨</span><span class="label">Facilities</span></div>
     </div>
-    <div id="fhp"></div><div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
+    <div id="fhp"></div>${inviteCard()}<div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
   get('/patient/insurance').then((p) => { const a = p.find((x) => x.status === 'ACTIVE'); $('#ins', el) && ($('#ins', el).innerHTML = a ? `<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">✓ ${esc(a.plan?.name || a.provider)} Active</span>` : ''); }).catch(() => null);
   get('/patient/appointments').then((list) => {
@@ -57,7 +57,7 @@ export async function homeScreen(el) {
   get('/directory?verified=1&sort=rating').then((list) => {
     const top = list.filter((x) => ['DOCTOR', 'NURSE'].includes(x.role)).slice(0, 2);
     $('#fhp', el) && ($('#fhp', el).innerHTML = `<div class="card find-providers"><div class="card-header"><span class="card-title">🔍 Find Health Providers</span><a class="link" data-go="/patient/providers">Search</a></div>
-      <div class="fp-chips">${[['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacists'], ['AMBULANCE', '🚑 Ambulance'], ['LAB', '🔬 Labs']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/providers?type=${k}" tabindex="0">${l}</span>`).join('')}</div>
+      <div class="fp-chips">${[['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacists'], ['AMBULANCE', '🚑 Ambulance'], ['LAB', '🔬 Diagnostics']].map(([k, l]) => `<span class="badge badge-provider" data-go="/patient/providers?type=${k}" tabindex="0">${l}</span>`).join('')}</div>
       ${top.map((x) => item({ avatarHtml: avatar(x.role, x.avatarUrl), title: (x.role === 'DOCTOR' ? 'Dr. ' : x.role === 'NURSE' ? 'Nurse ' : '') + esc(x.name), sub: [x.title || x.specialty, x.hospital, x.rating ? '⭐ ' + Number(x.rating).toFixed(1) : ''].filter(Boolean).map(esc).join(' • '), trailing: x.verified ? '<span class="badge badge-success">Verified</span>' : '', attrs: `data-go="/provider/${x.userId}"` })).join('')}</div>`);
   }).catch(() => null);
   get('/articles').then((a) => { if (a[0]) $('#tip', el).innerHTML = card(item({ icon: '💡', title: esc(a[0].title), sub: esc(a[0].summary), attrs: `data-go="/articles/${a[0].slug}"` })); }).catch(() => null);
@@ -121,11 +121,7 @@ export async function emergencyScreen(el) {
     ${card(cardHead('📞 Emergency Contacts') + nums.map((n) => `<a href="tel:${n}" style="text-decoration:none;color:inherit">${item({ icon: '📞', title: NUM_LABEL[n] || 'Emergency line', sub: n + ' • Toll free, 24/7', trailing: '<span style="color:var(--primary)">Call</span>' })}</a>`).join(''))}
     ${card(item({ icon: '🆘', title: 'My Emergency Medical ID', sub: 'QR card with blood group, allergies & contacts for first responders', attrs: 'data-go="/patient/records?tab=card"' }) + item({ icon: '🩹', title: 'First aid while help is on the way', attrs: 'data-go="/articles/first-aid-emergencies"' }))}`;
   let map = null, offs = [];
-  const draw = async () => {
-    const list = await getFresh('/patient/emergency').catch(() => []);
-    const active = list.find((r) => ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'].includes(r.status));
-    const body = $('#body', el);
-    if (!active) {
+  const ambulanceForm = async (body) => {
       const bal = await loadBalance();
       const min = state.config?.emergencyMinBalance ?? 5000;
       body.innerHTML = card(`<div style="text-align:center;font-size:40px">🚨</div><h3 style="text-align:center;color:var(--emergency-red);font-size:16px">Emergency Service</h3>
@@ -143,6 +139,24 @@ export async function emergencyScreen(el) {
         toast('🚑 Help requested - nearby ambulances alerted');
         draw();
       });
+  };
+  const draw = async () => {
+    const [list, trips] = await Promise.all([getFresh('/patient/emergency').catch(() => []), getFresh('/er/arrivals').catch(() => [])]);
+    const active = list.find((r) => ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'].includes(r.status));
+    const body = $('#body', el);
+    const trip = !active && trips.find((t) => ['REQUESTED', 'ACCEPTED'].includes(t.status) || (t.status === 'ARRIVED' && Date.now() - new Date(t.arrivedAt || t.createdAt).getTime() < 3 * 3600e3 && !sessionStorage.getItem('nh_er_seen_' + t.id)) || (t.status === 'DECLINED' && Date.now() - new Date(t.closedAt || t.createdAt).getTime() < 30 * 60e3 && !sessionStorage.getItem('nh_er_seen_' + t.id)));
+    if (trip) { cur = null; return erTrip(body, trip, nums, draw, (m) => { map?.destroy(); map = m; }); }
+    if (!active) {
+      cur = null;
+      const mode = sessionStorage.getItem('nh_em_mode') || 'amb';
+      body.innerHTML = `<div class="em-choice" role="tablist">
+          <button class="em-opt ${mode === 'amb' ? 'active' : ''}" data-mode="amb" role="tab" aria-selected="${mode === 'amb'}"><span class="i">🚑</span><b>Send an ambulance</b><span>Help comes to you</span></button>
+          <button class="em-opt ${mode === 'self' ? 'active' : ''}" data-mode="self" role="tab" aria-selected="${mode === 'self'}"><span class="i">🚗</span><b>I'll go to a hospital</b><span>The hospital gets ready before you arrive</span></button>
+        </div><div id="emc"></div>`;
+      $$('.em-opt', body).forEach((x) => (x.onclick = () => { sessionStorage.setItem('nh_em_mode', x.dataset.mode); draw(); }));
+      const box = $('#emc', body);
+      if (mode === 'self') return erChooser(box, nums, draw);
+      await ambulanceForm(box);
       return;
     }
     const steps = ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'];
@@ -227,8 +241,10 @@ export async function emergencyScreen(el) {
     on('emergency:accepted', (d) => { toast('🚑 Ambulance accepted' + (d.etaMinutes ? ' - ETA ' + d.etaMinutes + ' min' : '')); if (navigator.vibrate) navigator.vibrate([200, 100, 200]); draw(); }),
     on('emergency:status', (d) => { if (d?.status === 'ARRIVED') { toast('🚑 The ambulance has arrived'); if (navigator.vibrate) navigator.vibrate([300, 100, 300]); } draw(); }),
     on('ambulance:location', (d) => { if (!d.requestId || d.requestId === cur?.id) placeAmbulance(d.lat, d.lng, d.at || Date.now()); }),
+
+    on('er:updated', (d) => { if (d.status === 'ACCEPTED') { toast('✅ The hospital is ready for you'); if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } else if (d.status === 'DECLINED') toast('❌ The hospital cannot take you - choose another'); draw(); }),
   ];
-  return () => { offs.forEach((f) => f()); clearInterval(tick); clearInterval(poll); map?.destroy(); };
+  return () => { offs.forEach((f) => f()); clearInterval(tick); clearInterval(poll); stopErTrip(); map?.destroy(); };
 }
 
 /** Straight-line distance in km between two {lat, lng} points. */
@@ -237,6 +253,123 @@ function distKm(a, b) {
   const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// ---------------- Going to a hospital yourself ----------------
+const ER_TYPES = [['MEDICAL', '🩺 Medical emergency'], ['ACCIDENT', '🚗 Accident / injury'], ['MATERNITY', '🤰 Labour / maternity'], ['CARDIAC', '❤️ Chest pain / heart'], ['STROKE', '🧠 Stroke signs'], ['BREATHING', '🫁 Breathing difficulty'], ['CHILD', '👶 Sick child'], ['BURN', '🔥 Burns'], ['POISONING', '☠️ Poisoning'], ['MENTAL', '💬 Mental health crisis']];
+const TRANSPORTS = [['CAR', '🚗 Car'], ['TAXI', '🚕 Taxi / ride'], ['BIKE', '🏍️ Okada / bike'], ['WALK', '🚶 Walking'], ['OTHER', 'Other']];
+let erStop = () => {};
+/** Stops sharing the patient's position with the hospital (screen closed or trip over). */
+export const stopErTrip = () => { erStop(); erStop = () => {}; };
+
+function erChooser(box, nums, redraw) {
+  const last = (() => { try { return JSON.parse(sessionStorage.getItem('nh_er_form') || '{}'); } catch { return {}; } })();
+  box.innerHTML = card(`<p class="muted small" style="margin-top:0">Pick your emergency. We show the nearest hospitals open for emergencies right now, with doctors, nurses and beds free. The hospital you choose is told you are coming so the team is ready when you arrive.</p>
+    ${field({ name: 'type', label: 'What is happening?', type: 'select', options: ER_TYPES, value: last.type || 'MEDICAL' })}
+    ${field({ name: 'transport', label: 'How are you getting there?', type: 'select', options: TRANSPORTS, value: last.transport || 'CAR' })}
+    ${field({ name: 'notes', label: 'Anything the team should know? (optional)', placeholder: 'e.g. bleeding from the head, 34 weeks pregnant', value: last.notes || '' })}
+    <label class="check"><input type="checkbox" id="else" ${last.forSomeoneElse ? 'checked' : ''}> <span>This is for someone else (I am taking them)</span></label>
+    <button class="btn btn-danger btn-block mt8" id="find">🏥 Find the nearest emergency units</button>`, 'style="border:2px solid var(--emergency-red)"') + '<div id="hl"></div>';
+  const form = () => ({ type: $('[name=type]', box).value, transport: $('[name=transport]', box).value, notes: $('[name=notes]', box).value.trim() || undefined, forSomeoneElse: $('#else', box).checked });
+  const list = async (pos) => {
+    const f = form();
+    sessionStorage.setItem('nh_er_form', JSON.stringify(f));
+    const hl = $('#hl', box); hl.innerHTML = skeleton(3);
+    const hs = await get(`/er/hospitals?lat=${pos.lat}&lng=${pos.lng}&type=${f.type}`);
+    if (!hs.length) {
+      hl.innerHTML = card(empty('🏥', 'No emergency units on N-Health near you yet.', `<a class="btn btn-danger btn-sm" href="tel:${nums[0]}">📞 Call ${nums[0]}</a> <button class="btn btn-outline btn-sm" id="toamb">🚑 Request an ambulance</button>`));
+      $('#toamb', hl).onclick = () => { sessionStorage.setItem('nh_em_mode', 'amb'); redraw(); };
+      return;
+    }
+    const typeLabel = (ER_TYPES.find((t) => t[0] === f.type) || ER_TYPES[0])[1].replace(/^\S+\s/, '').toLowerCase();
+    hl.innerHTML = `<div class="section-title" style="margin:10px 4px 6px">Nearest emergency units</div>` + hs.map((h) => {
+      const fresh = h.erUpdatedAt && Date.now() - new Date(h.erUpdatedAt).getTime() < 12 * 3600e3;
+      return card(`<div class="row"><div class="avatar institution-avatar">🏥</div><div class="grow"><div style="font-weight:600">${esc(h.name)}</div>
+          <div class="small muted">${esc([h.address, h.city].filter(Boolean).join(', '))}</div></div>
+          <div style="text-align:right"><b>${h.distanceKm} km</b><div class="small muted">~${h.etaMinutes} min</div></div></div>
+        <div class="er-chips">
+          ${h.erOpen ? '<span class="er-chip ok">🟢 Taking emergencies</span>' : '<span class="er-chip bad">🔴 Not taking patients now</span>'}
+          <span class="er-chip ${h.erDoctorsOnDuty ? 'ok' : 'warn'}">👨‍⚕️ ${h.erDoctorsOnDuty} doctor${h.erDoctorsOnDuty === 1 ? '' : 's'} on duty</span>
+          <span class="er-chip ${h.erNursesOnDuty ? 'ok' : 'warn'}">👩‍⚕️ ${h.erNursesOnDuty} nurse${h.erNursesOnDuty === 1 ? '' : 's'}</span>
+          <span class="er-chip ${h.bedsAvailable ? 'ok' : 'warn'}">🛏️ ${h.bedsAvailable} bed${h.bedsAvailable === 1 ? '' : 's'} free</span>
+          ${h.needs ? (h.handlesType ? `<span class="er-chip ok">✓ Handles ${esc(typeLabel)}</span>` : `<span class="er-chip warn">⚠️ ${esc(typeLabel)} not listed</span>`) : ''}
+          ${h.incoming ? `<span class="er-chip warn">${h.incoming} patient${h.incoming > 1 ? 's' : ''} on the way</span>` : ''}
+        </div>
+        <div class="small muted">${fresh ? 'Updated ' + ago(h.erUpdatedAt) : '⚠️ Not updated recently - call to confirm'}</div>
+        <div class="row mt8">${h.erOpen ? `<button class="btn btn-danger btn-sm grow" data-goto="${h.id}" data-name="${esc(h.name)}">🚨 Go here - tell them I'm coming</button>` : ''}${h.phone ? `<a class="btn btn-outline btn-sm" href="tel:${esc(h.phone)}">📞</a>` : ''}</div>`, h.erOpen ? '' : 'style="opacity:.7"');
+    }).join('');
+    hl.onclick = async (e) => {
+      const b = e.target.closest('[data-goto]'); if (!b) return;
+      if (!(await confirmBox(`Tell ${b.dataset.name} you are coming? Their emergency team will see your location and medical summary so they can get ready.`, { ok: 'Yes, tell them' }))) return;
+      await busy(b, async () => {
+        const now = await locate({ timeout: 8000 }).catch(() => pos);
+        await post('/er/arrivals', { institutionId: b.dataset.goto, ...form(), lat: now.lat, lng: now.lng, contactPhone: state.user.phone || undefined });
+        if (navigator.vibrate) navigator.vibrate(200);
+        toast('🏥 Hospital alerted - start your journey');
+        redraw();
+      });
+    };
+  };
+  $('#find', box).onclick = (e) => busy(e.target, async () => {
+    toast('📍 Getting your location…');
+    const pos = await locate({ timeout: 12000 }).catch((err) => { throw new Error(err.message + '. Call ' + nums[0] + ' now.'); });
+    await list(pos);
+  });
+}
+
+async function erTrip(body, t, nums, redraw, setMap) {
+  stopErTrip();
+  const h = t.institution;
+  const head = {
+    REQUESTED: ['⏳', `Waiting for ${esc(h.name)} to confirm…`, 'They have been alerted. Start your journey - you do not need to wait.'],
+    ACCEPTED: ['✅', `${esc(h.name)} is ready for you`, 'The emergency team knows you are coming.'],
+    DECLINED: ['❌', `${esc(h.name)} cannot take you now`, esc(t.declineReason || '')],
+    ARRIVED: ['🏥', `You are at ${esc(h.name)}`, 'The emergency team has been told you are here.'],
+  }[t.status];
+  body.innerHTML = card(`<div class="row"><div style="font-size:28px">${head[0]}</div><div class="grow"><div style="font-weight:600;font-size:14px">${head[1]}</div><div class="muted small">${head[2]}</div></div></div>
+      ${t.status === 'ACCEPTED' && t.readyNote ? `<div class="banner success mt8">📋 ${esc(t.readyNote)}</div>` : ''}
+      ${t.status === 'REQUESTED' ? '<div class="banner warn mt8 hidden" id="slow">No answer yet. Call them, or choose another hospital.</div>' : ''}
+      ${['REQUESTED', 'ACCEPTED'].includes(t.status) ? `<div class="live-eta" id="erlive">Getting your position…</div><div class="map" id="ermap"></div>
+      <div class="row mt8"><a class="btn btn-primary btn-sm grow" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}&travelmode=${t.transport === 'WALK' ? 'walking' : 'driving'}">🧭 Directions</a>${h.phone ? `<a class="btn btn-success btn-sm grow" href="tel:${esc(h.phone)}">📞 Call hospital</a>` : ''}</div>
+      <div class="row mt8"><button class="btn btn-outline btn-sm grow" id="here">📍 I've arrived</button><button class="btn btn-outline btn-sm grow" id="other">Choose another</button><button class="btn btn-outline btn-sm" id="cx" style="border-color:var(--error);color:var(--error)">Cancel</button></div>` : ''}
+      ${t.status === 'DECLINED' ? '<button class="btn btn-danger btn-block mt8" id="other">🏥 Choose another hospital</button>' : ''}
+      ${t.status === 'ARRIVED' ? '<button class="btn btn-outline btn-block mt8" id="done">Done</button>' : ''}
+      <a class="btn btn-danger btn-sm btn-block mt8" href="tel:${nums[0]}">📞 Call ${nums[0]}</a>`, `style="border:2px solid ${t.status === 'DECLINED' ? 'var(--error)' : 'var(--success)'}"`);
+  const seen = () => sessionStorage.setItem('nh_er_seen_' + t.id, '1');
+  $('#other', body) && ($('#other', body).onclick = async () => {
+    if (t.status !== 'DECLINED') await post('/er/arrivals/' + t.id + '/cancel').catch(() => null);
+    seen(); sessionStorage.setItem('nh_em_mode', 'self'); redraw();
+  });
+  $('#done', body) && ($('#done', body).onclick = () => { seen(); redraw(); });
+  $('#cx', body) && ($('#cx', body).onclick = async () => { if (await confirmBox(`Tell ${h.name} you are not coming?`, { ok: 'Yes, cancel', danger: true })) { await post('/er/arrivals/' + t.id + '/cancel').catch(toastErr); seen(); redraw(); } });
+  $('#here', body) && ($('#here', body).onclick = async () => { await post('/er/arrivals/' + t.id + '/arrived').catch(toastErr); redraw(); });
+  if (!['REQUESTED', 'ACCEPTED'].includes(t.status)) return;
+  // Map: you and the hospital; your position is shared with the hospital while you travel.
+  let map = null;
+  try {
+    map = await createMap($('#ermap', body), [h.lat, h.lng], 14);
+    setMap(map);
+    map.setMarker('h', h.lat, h.lng, '🏥', h.name);
+    if (t.lat != null) { map.setMarker('me', t.lat, t.lng, '📍', 'You'); map.setLine('to', [t.lat, t.lng], [h.lat, h.lng]); }
+    map.fit();
+  } catch { /* map optional */ }
+  const show = (lat, lng) => {
+    const box = $('#erlive', body); if (!box) return;
+    const km = distKm({ lat, lng }, h);
+    const speed = t.transport === 'WALK' ? 5 : t.transport === 'BIKE' ? 25 : 30;
+    const min = Math.max(1, Math.round((km * 1.3 / speed) * 60));
+    box.innerHTML = `<b>${km < 0.15 ? 'You are almost there' : `${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'} to go • about ${min} min`}</b><div class="small muted">📡 ${esc(h.name)} can see you on the way</div>`;
+  };
+  if (t.lat != null) show(t.lat, t.lng);
+  let lastSent = 0;
+  const watch = navigator.geolocation?.watchPosition((p) => {
+    const lat = p.coords.latitude, lng = p.coords.longitude;
+    map?.moveMarker('me', lat, lng, '📍', 'You'); map?.setLine('to', [lat, lng], [h.lat, h.lng]);
+    show(lat, lng);
+    if (Date.now() - lastSent > 15000 && navigator.onLine) { lastSent = Date.now(); post('/er/arrivals/' + t.id + '/location', { lat, lng }).catch(() => null); }
+  }, () => null, { enableHighAccuracy: true, maximumAge: 5000 });
+  const slow = t.status === 'REQUESTED' ? setTimeout(() => $('#slow', body)?.classList.remove('hidden'), Math.max(0, 3 * 60e3 - (Date.now() - new Date(t.createdAt).getTime()))) : null;
+  erStop = () => { if (watch != null) navigator.geolocation.clearWatch(watch); clearTimeout(slow); };
 }
 
 // ================= APPOINTMENTS =================
@@ -350,7 +483,7 @@ export async function bookScreen(el, { userId }) {
 }
 
 // ================= PROVIDERS & FACILITIES =================
-const TYPES = [['ALL', 'All'], ['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacies'], ['LAB', '🔬 Labs'], ['AMBULANCE', '🚑 Ambulance'], ['INSTITUTION', '🏥 Facilities']];
+const TYPES = [['ALL', 'All'], ['DOCTOR', '👨‍⚕️ Doctors'], ['NURSE', '👩‍⚕️ Nurses'], ['PHARMACY', '💊 Pharmacies'], ['LAB', '🔬 Diagnostic centers'], ['AMBULANCE', '🚑 Ambulance'], ['INSTITUTION', '🏥 Facilities']];
 export async function providersScreen(el, _p, q, facilitiesOnly = false) {
   let type = facilitiesOnly ? 'INSTITUTION' : q.type || 'ALL', sort = 'rating', qv = '';
   el.innerHTML = appBar({ title: facilitiesOnly ? '🏥 Facilities' : '🏥 Providers', back: '/patient/home' }) +
@@ -514,7 +647,7 @@ export async function storeScreen(el, { id }, q) {
 // ================= LABS =================
 export async function labsScreen(el, _p, q) {
   let tab = q.tab || 'book';
-  el.innerHTML = appBar({ title: '🔬 Labs', back: '/patient/home' }) + tabs([['book', '🧪 Book a test'], ['results', '📋 My tests & results']], tab) + '<div id="tb"></div>';
+  el.innerHTML = appBar({ title: '🔬 Diagnostics', back: '/patient/home' }) + tabs([['book', '🧪 Book a test'], ['results', '📋 My tests & results']], tab) + '<div id="tb"></div>';
   const draw = async () => {
     const tb = $('#tb', el); tb.innerHTML = skeleton(3);
     if (tab === 'book') {
@@ -530,7 +663,7 @@ export async function labsScreen(el, _p, q) {
       const tests = await get('/patient/lab-tests');
       tb.innerHTML = tests.length ? tests.map((x) => card(`${item({ avatarHtml: '<div class="avatar lab-avatar">🔬</div>', title: esc(x.testType), sub: esc(x.lab?.labName || '') + ' • ' + dt(x.scheduledAt || x.createdAt), trailing: badge(x.status) })}
         ${x.result ? `<div class="banner ok">✅ Result ready</div>${(x.result.resultData?.results || []).map((r) => `<div class="kv"><span class="k">${esc(r.parameter)}</span><span class="v" style="color:${r.flag === 'HIGH' || r.flag === 'LOW' ? 'var(--error)' : 'inherit'}">${esc(r.value)} ${esc(r.unit || '')} ${r.referenceRange ? '<span class="muted">(' + esc(r.referenceRange) + ')</span>' : ''} ${r.flag && r.flag !== 'NORMAL' ? badge('FAILED', r.flag) : ''}</span></div>`).join('')}${x.result.resultData?.notes ? `<div class="muted small">${esc(x.result.resultData.notes)}</div>` : ''}` : ''}
-        <div class="row mt8">${x.paymentStatus === 'UNPAID' && x.status !== 'CANCELLED' ? `<button class="btn btn-lab btn-sm grow" data-paylab="${x.id}" data-amt="${x.fee}">💳 Pay ${money(x.fee)}</button>` : ''}${x.result ? `<button class="btn btn-outline btn-sm grow" data-pdf="${x.id}">⬇️ Result PDF</button>` : ''}${x.status === 'COMPLETED' ? `<button class="btn btn-outline btn-sm grow" data-revl="${x.id}">⭐</button>` : ''}</div>`)).join('') : empty('🔬', 'No lab tests yet');
+        <div class="row mt8">${x.paymentStatus === 'UNPAID' && x.status !== 'CANCELLED' ? `<button class="btn btn-lab btn-sm grow" data-paylab="${x.id}" data-amt="${x.fee}">💳 Pay ${money(x.fee)}</button>` : ''}${x.result ? `<button class="btn btn-outline btn-sm grow" data-pdf="${x.id}">⬇️ Result PDF</button>` : ''}${x.status === 'COMPLETED' ? `<button class="btn btn-outline btn-sm grow" data-revl="${x.id}">⭐</button>` : ''}</div>`)).join('') : empty('🔬', 'No tests or scans yet');
     }
   };
   $$('[data-tab]', el).forEach((x) => (x.onclick = () => { tab = x.dataset.tab; $$('[data-tab]', el).forEach((y) => y.classList.toggle('active', y === x)); draw(); }));
@@ -548,9 +681,9 @@ export async function labsScreen(el, _p, q) {
         setTimeout(() => payModal({ payableType: 'LAB_TEST', payableId: tst.id, amount: Number(tst.fee), title: c.name }).then(() => { tab = 'results'; draw(); }), 50);
       } });
     }
-    if (b.dataset.paylab && await payModal({ payableType: 'LAB_TEST', payableId: b.dataset.paylab, amount: Number(b.dataset.amt), title: 'Lab test' })) draw();
+    if (b.dataset.paylab && await payModal({ payableType: 'LAB_TEST', payableId: b.dataset.paylab, amount: Number(b.dataset.amt), title: 'Diagnostic test' })) draw();
     if (b.dataset.pdf) download('/lab-results/' + b.dataset.pdf + '/pdf', 'lab-result.pdf').catch(toastErr);
-    if (b.dataset.revl) reviewModal({ contextType: 'LAB_TEST', contextId: b.dataset.revl, name: 'the lab' });
+    if (b.dataset.revl) reviewModal({ contextType: 'LAB_TEST', contextId: b.dataset.revl, name: 'the diagnostic center' });
   });
   draw();
 }

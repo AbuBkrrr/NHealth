@@ -38,7 +38,7 @@ let touched = false; // the person has tapped or typed since this screen opened
 export const currentPattern = () => pattern;
 
 // Screens that keep their own live state (maps, chats, payments, forms): never redrawn underneath the person.
-const NO_AUTO_REFRESH = /^\/(book|patient\/emergency|patient\/wallet|ambulance|kyc|pharmacy\/pos|pharmacy\/intake|settings|support|go)/;
+const NO_AUTO_REFRESH = /^\/(book|patient\/emergency|institution\/er|patient\/wallet|ambulance|kyc|pharmacy\/pos|pharmacy\/intake|settings|support|go)/;
 /** Redraws the open screen with newer data, unless the person is using it. */
 export function softRefresh() {
   if (touched || document.hidden || document.getElementById('modal')?.classList.contains('active')) return;

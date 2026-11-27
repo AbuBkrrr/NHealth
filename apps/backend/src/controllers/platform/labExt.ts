@@ -46,7 +46,7 @@ export async function doctorLabRequest(req: Request, res: Response) {
   const cat = req.body.catalogId ? await prisma.labTestCatalog.findUnique({ where: { id: String(req.body.catalogId) } }) : null;
   const test = await prisma.labTest.create({ data: { patientId: patient.id, labId: l.id, catalogId: cat?.id, testType: cat?.name || str(req.body.testType, 160) || 'Lab test', fee: cat?.price ?? undefined, requestedByDoctorId: doc.id, notes: str(req.body.notes, 1000) } });
   await notify(l.userId, 'lab', 'Doctor test request 🔬', `A doctor requested ${test.testType} for a patient.`, { data: { labTestId: test.id } });
-  await notify(patient.userId, 'lab', 'Lab test ordered', `Your doctor ordered ${test.testType}. Pay and book a sample time in Labs.`, { data: { labTestId: test.id } });
+  await notify(patient.userId, 'lab', 'Test ordered', `Your doctor ordered ${test.testType}. Pay and book a time in Diagnostics.`, { data: { labTestId: test.id } });
   res.status(201).json(test);
 }
 /** GET /api/doctor-ops/lab-requests - tests this doctor ordered, with results. */
