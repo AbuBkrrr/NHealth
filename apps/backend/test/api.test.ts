@@ -527,3 +527,56 @@ describe('invite reward (coins)', () => {
     expect(cfg.body).toMatchObject({ coinValue: 10, inviteRewardCoins: 1 });
   });
 });
+
+describe('health jobs (gigs)', () => {
+  it('lets a verified pharmacy recruit a pharmacist, alerts matching workers, and runs applications to hire', async () => {
+    const tag = uniq();
+    const ph = await register('PHARMACY', { pharmacyName: 'Gig Pharmacy ' + tag, licenseNumber: 'PCN-G' + tag, address: 'Yaba' });
+    await prisma.user.update({ where: { id: ph.user.id }, data: { verificationStatus: 'VERIFIED' } });
+    await prisma.pharmacyProfile.update({ where: { userId: ph.user.id }, data: { state: 'Lagos', city: 'Yaba' } });
+    const worker = await register('PATIENT');
+    const other = await register('PATIENT');
+    // The worker sets up a work profile and wants alerts in Lagos
+    expect((await request(app).post('/api/gigs/x/apply').set(auth(worker.token))).status).toBe(404);
+    const wp = await request(app).put('/api/work-profile').set(auth(worker.token)).send({ profession: 'PHARMACIST', licenseNumber: 'PCN-123', yearsExperience: 4, states: ['Lagos'], cvUrl: 'https://files.example/cv.pdf' });
+    expect(wp.body).toMatchObject({ profession: 'PHARMACIST', licenseBody: 'PCN', openToWork: true });
+
+    // A pharmacy cannot recruit doctors; a patient cannot post
+    const base = { profession: 'PHARMACIST', positions: 2, experience: 'MID', employmentType: 'PART_TIME', shifts: ['NIGHT', 'WEEKEND'], payMin: 150000, payMax: 250000, payPeriod: 'MONTH', benefits: ['Meals', 'Not real'], description: 'Night and weekend pharmacist for a busy community pharmacy in Yaba.' };
+    expect((await request(app).post('/api/gigs').set(auth(ph.token)).send({ ...base, profession: 'DOCTOR' })).status).toBe(400);
+    expect((await request(app).post('/api/gigs').set(auth(worker.token)).send(base)).status).toBe(403);
+    expect((await request(app).post('/api/gigs').set(auth(ph.token)).send({ ...base, payMin: 300000 })).status).toBe(400); // max < min
+    const g = await request(app).post('/api/gigs').set(auth(ph.token)).send(base);
+    expect(g.status).toBe(201);
+    expect(g.body).toMatchObject({ orgName: 'Gig Pharmacy ' + tag, orgType: 'PHARMACY', state: 'Lagos', positions: 2, benefits: ['Meals'], alerted: 1 });
+    expect(await prisma.notification.count({ where: { userId: worker.user.id, type: 'gig' } })).toBe(1);
+
+    // Workers find and apply; one application per person; no profile, no application
+    const list = await request(app).get('/api/gigs?profession=PHARMACIST&state=Lagos').set(auth(worker.token));
+    expect(list.body.some((x: any) => x.id === g.body.id && x.typeLabel === 'Part-time')).toBe(true);
+    expect((await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(other.token)).send({})).status).toBe(400);
+    expect((await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(ph.token)).send({})).status).toBe(400); // own job
+    const a = await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(worker.token)).send({ coverNote: 'I am available nights', expectedPay: 200000 });
+    expect(a.status).toBe(201);
+    expect((await request(app).post(`/api/gigs/${g.body.id}/apply`).set(auth(worker.token)).send({})).status).toBe(409);
+
+    // Employer sees the applicant; contact details only after shortlisting; others cannot see
+    expect((await request(app).get(`/api/gigs/${g.body.id}/applicants`).set(auth(worker.token))).status).toBe(404);
+    let ap = (await request(app).get(`/api/gigs/${g.body.id}/applicants`).set(auth(ph.token))).body[0];
+    expect(ap.profile).toMatchObject({ professionLabel: 'Pharmacist', yearsExperience: 4, cvUrl: 'https://files.example/cv.pdf' });
+    expect(ap.applicant.email).toBeUndefined();
+    await request(app).patch(`/api/gigs/applications/${a.body.id}`).set(auth(ph.token)).send({ status: 'SHORTLISTED', employerNote: 'Interview Monday 10am' }).expect(200);
+    ap = (await request(app).get(`/api/gigs/${g.body.id}/applicants`).set(auth(ph.token))).body[0];
+    expect(ap.applicant.email).toBeDefined();
+    const mine = await request(app).get('/api/gigs/applications/mine').set(auth(worker.token));
+    expect(mine.body[0]).toMatchObject({ status: 'SHORTLISTED', employerNote: 'Interview Monday 10am' });
+    await request(app).patch(`/api/gigs/applications/${a.body.id}`).set(auth(ph.token)).send({ status: 'HIRED' }).expect(200);
+    const posted = await request(app).get('/api/gigs/mine/posted').set(auth(ph.token));
+    expect(posted.body[0]).toMatchObject({ applicants: 1, hired: 1, status: 'OPEN' }); // 2 positions, 1 hired
+
+    // Reports pause a job after 5; closing tells waiting applicants
+    for (let i = 0; i < 5; i++) await request(app).post(`/api/gigs/${g.body.id}/report`).set(auth(other.token)).send({ reason: 'asks for money' });
+    expect((await prisma.gig.findUnique({ where: { id: g.body.id } }))!.status).toBe('PAUSED');
+    expect((await request(app).patch(`/api/gigs/${g.body.id}`).set(auth(ph.token)).send({ status: 'OPEN' })).status).toBe(403);
+  });
+});

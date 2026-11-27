@@ -35,6 +35,7 @@ export async function homeScreen(el) {
       <div class="quick-action" data-go="/patient/records" tabindex="0"><span class="icon">📁</span><span class="label">${t('Records')}</span></div>
       <div class="quick-action" data-go="/patient/records?tab=reminders" tabindex="0"><span class="icon">⏰</span><span class="label">Reminders</span></div>
       <div class="quick-action institution-action" data-go="/patient/institutions" tabindex="0"><span class="icon">🏨</span><span class="label">Facilities</span></div>
+      <div class="quick-action" data-go="/jobs" tabindex="0"><span class="icon">💼</span><span class="label">Health jobs</span></div>
     </div>
     <div id="fhp"></div>${inviteCard()}<div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });

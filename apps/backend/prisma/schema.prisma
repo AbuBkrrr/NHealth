@@ -1688,3 +1688,87 @@ model FacilityListing {
   @@index([state])
   @@index([lat, lng])
 }
+
+/// A job or shift posted by a verified provider (hospital, clinic, pharmacy, diagnostic center, ambulance service, practice).
+model Gig {
+  id              String           @id @default(uuid())
+  posterId        String
+  orgName         String
+  orgType         String // the poster's account type: INSTITUTION | PHARMACY | LAB | AMBULANCE | DOCTOR | NURSE
+  profession      String // NURSE, DOCTOR, PHARMACIST, LAB_SCIENTIST, ... (see controllers/platform/gigs.ts)
+  title           String
+  specialty       String?
+  positions       Int              @default(1)
+  experience      String           @default("ANY") // ANY | ENTRY | JUNIOR | MID | SENIOR | CONSULTANT
+  employmentType  String           @default("FULL_TIME") // FULL_TIME | PART_TIME | LOCUM | CONTRACT | INTERNSHIP
+  shifts          String[]         @default([]) // DAY | NIGHT | WEEKEND | ON_CALL | ROTATING
+  hoursPerWeek    Int?
+  startDate       DateTime?
+  endDate         DateTime?
+  payMin          Decimal?         @db.Decimal(12, 2)
+  payMax          Decimal?         @db.Decimal(12, 2)
+  payPeriod       String           @default("MONTH") // HOUR | SHIFT | DAY | MONTH | YEAR
+  payNegotiable   Boolean          @default(false)
+  licenseRequired Boolean          @default(true)
+  qualifications  String?
+  benefits        String[]         @default([])
+  description     String
+  state           String?
+  city            String?
+  address         String?
+  lat             Float?
+  lng             Float?
+  urgent          Boolean          @default(false)
+  status          String           @default("OPEN") // OPEN | PAUSED | FILLED | CLOSED
+  deadline        DateTime?
+  views           Int              @default(0)
+  reports         Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  applications    GigApplication[]
+
+  @@index([status, profession, state])
+  @@index([posterId])
+}
+
+model GigApplication {
+  id            String    @id @default(uuid())
+  gigId         String
+  gig           Gig       @relation(fields: [gigId], references: [id], onDelete: Cascade)
+  applicantId   String
+  coverNote     String?
+  expectedPay   Decimal?  @db.Decimal(12, 2)
+  availableFrom DateTime?
+  status        String    @default("APPLIED") // APPLIED | SHORTLISTED | INTERVIEW | OFFERED | HIRED | NOT_SELECTED | WITHDRAWN
+  employerNote  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([gigId, applicantId])
+  @@index([applicantId])
+}
+
+/// A health worker's job profile (any account can have one: doctors, nurses, and people who register as patients).
+model WorkProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  profession      String
+  specialty       String?
+  licenseBody     String?
+  licenseNumber   String?
+  yearsExperience Int      @default(0)
+  skills          String?
+  summary         String?
+  cvUrl           String?
+  cvFileId        String?
+  employmentTypes String[] @default([])
+  states          String[] @default([])
+  expectedPay     Decimal? @db.Decimal(12, 2)
+  payPeriod       String   @default("MONTH")
+  openToWork      Boolean  @default(true)
+  alerts          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([profession, openToWork])
+}

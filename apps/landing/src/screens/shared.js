@@ -40,6 +40,7 @@ export async function notificationsScreen(el) {
     if (t === 'kyc') return go('/kyc');
     if (t === 'donation') return go(d.campaignId ? '/donations/campaign/' + d.campaignId : '/patient/donations');
     if (t === 'reminder') return go('/patient/records?tab=reminders');
+    if (t === 'gig' && d.gigId) return go('/jobs/' + d.gigId); // employers see an 'Applicants' button there
   });
   return on('notification', load);
 }
