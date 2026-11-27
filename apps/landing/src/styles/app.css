@@ -121,6 +121,8 @@ img, video, canvas { max-width: 100%; }
 .pitch-body { padding: 16px 16px 24px; max-width: 760px; margin: 0 auto; }
 .pitch-body .auth-role-selector { margin-top: -36px; position: relative; }
 .pitch-body .role-card { background: #fff; box-shadow: var(--shadow); }
+.pitch-loc { padding: 6px 14px; margin-bottom: 12px; }
+.pitch-loc .list-item { border-bottom: none; }
 .pitch .quick-action .label { display: block; }
 .pitch-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; white-space: normal; }
 .pitch-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -129,3 +131,49 @@ img, video, canvas { max-width: 100%; }
 .consent-bar { position: fixed; left: 10px; right: 10px; bottom: 10px; z-index: 9999; background: #1f2937; color: #fff; border-radius: 12px; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; font-size: 13px; box-shadow: var(--shadow-lg); }
 .consent-bar a { color: #93c5fd; }
 .consent-bar .btn-outline { color: #fff; border-color: #fff; }
+
+/* ============================================================
+   Original design (Nhealth.html): patients in blue, every provider in one purple,
+   3 large quick-action tiles per row, larger bottom bar.
+   ============================================================ */
+:root {
+  --provider-primary: #7C4DFF; --provider-secondary: #B388FF; --provider-light: #EDE7F6; --emergency-amber: #FFA000;
+  --doctor-color: #7C4DFF; --doctor-light: #EDE7F6; --pharmacy-color: #7C4DFF; --pharmacy-light: #EDE7F6;
+  --lab-color: #7C4DFF; --lab-light: #EDE7F6; --ambulance-color: #7C4DFF; --ambulance-light: #EDE7F6;
+  --nurse-color: #7C4DFF; --nurse-light: #EDE7F6; --institution-color: #7C4DFF; --institution-light: #EDE7F6;
+  --admin-color: #7C4DFF; --admin-light: #EDE7F6;
+}
+body[data-side="provider"] { --primary: #7C4DFF; --primary-dark: #5E35B1; --primary-light: #EDE7F6; }
+.app-bar .title span, .app-bar .title[class*="-title"] span { color: var(--primary); }
+body[data-side="provider"] .app-bar .title span { color: var(--provider-primary); }
+.quick-actions { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.quick-action { padding: 16px 8px; }
+.quick-action .icon { font-size: 28px; margin-bottom: 6px; }
+.quick-action .label { font-size: 11px; }
+.bottom-nav button { padding: 4px 12px; min-width: 50px; }
+.bottom-nav button .nav-icon { font-size: 22px; }
+.bottom-nav button .nav-label { font-size: 9px; }
+.bottom-nav button .badge { font-size: 9px; padding: 1px 6px; border-radius: 10px; min-width: 18px; right: 4px; }
+.provider-stats { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.provider-stats:has(> :nth-child(4):last-child) { grid-template-columns: repeat(2, 1fr); }
+.provider-stat .number { font-size: 24px; color: var(--provider-primary); }
+.service-request { padding: 16px; border-left-color: var(--provider-primary); }
+.badge-provider { background: var(--provider-light); color: var(--provider-primary); }
+.btn-provider { background: var(--provider-primary); color: #fff; }
+.role-card.provider-card, .auth-role-selector .role-card[data-side="PROVIDER"] { border-color: var(--provider-secondary); }
+.auth-role-selector .role-card[data-side="PROVIDER"].selected, .auth-role-selector .role-card[data-side="PROVIDER"]:hover { border-color: var(--provider-primary); background: var(--provider-light); }
+body[data-side="provider"] .balance-card { background: linear-gradient(135deg, var(--provider-primary) 0%, #5E35B1 100%); }
+.find-providers { border: 2px solid var(--provider-primary); }
+.find-providers .link { color: var(--provider-primary); }
+.fp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.fp-chips .badge { font-size: 10px; padding: 3px 9px; cursor: pointer; }
+@media (max-width: 420px) {
+  .quick-actions { gap: 8px; }
+  .quick-action { padding: 12px 4px; }
+  .quick-action .icon { font-size: 22px; }
+  .quick-action .label { font-size: 10px; }
+  .provider-stats { gap: 8px; }
+  .bottom-nav button { padding: 4px 6px; min-width: 40px; }
+}
+/* Patient side: plain white tiles; only Emergency keeps its red border (original design) */
+body[data-side="patient"] .quick-action:not(.emergency) { border: none; background: #fff; }

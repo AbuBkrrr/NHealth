@@ -353,3 +353,38 @@ describe('marketing links', () => {
     expect(qr.headers['content-type']).toContain('image/svg+xml');
   });
 });
+
+describe('provider verification documents', () => {
+  it('cannot approve a provider until ID, proof of address and licence are uploaded', async () => {
+    const { signToken } = await import('../src/utils/jwt');
+    const boss = await prisma.user.create({ data: { email: `v-${uniq()}@test.io`, name: 'Boss', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const t = signToken({ userId: boss.id, role: 'ADMIN' as any, isSuperAdmin: true, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    const doc = await register('DOCTOR', { licenseNumber: 'MDCN-' + uniq() });
+    const approve = () => request(app).post('/api/admin-ops/verifications/' + doc.user.id).set(auth(t)).send({ decision: 'VERIFIED', overrideKyc: true });
+    let r = await approve();
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('Government-issued ID');
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    for (const type of ['IDENTITY', 'PROOF_OF_ADDRESS']) await request(app).post('/api/verification/documents').set(auth(doc.token)).send({ type, dataUri: png }).expect(201);
+    // An expired licence does not count
+    await request(app).post('/api/verification/documents').set(auth(doc.token)).send({ type: 'LICENSE', dataUri: png, expiresAt: '2020-01-01' }).expect(201);
+    r = await approve();
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('licence');
+    const q = await request(app).get('/api/admin-ops/verifications?status=PENDING').set(auth(t));
+    expect(q.body.find((u: any) => u.id === doc.user.id).missingDocuments).toEqual(['Health / practising licence']);
+    await request(app).post('/api/verification/documents').set(auth(doc.token)).send({ type: 'LICENSE', dataUri: png, expiresAt: '2030-01-01' }).expect(201);
+    expect((await approve()).status).toBe(200);
+  });
+});
+
+describe('marketing precise location', () => {
+  it('stores a position only from the device that made the open', async () => {
+    const dev = crypto.randomUUID(), other = crypto.randomUUID();
+    const open = await request(app).post('/api/mkt/open').send({ deviceId: dev }).expect(200);
+    await request(app).post('/api/mkt/locate').send({ visitId: open.body.visitId, deviceId: other, lat: 6.45, lng: 3.39, accuracy: 7 }).expect(404);
+    await request(app).post('/api/mkt/locate').send({ visitId: open.body.visitId, deviceId: dev, lat: 6.4541237, lng: 3.3947112, accuracy: 7.24 }).expect(200);
+    const v = await prisma.marketingVisit.findUnique({ where: { id: open.body.visitId } });
+    expect(v).toMatchObject({ lat: 6.454124, lng: 3.394711, accuracyM: 7.2 });
+  });
+});

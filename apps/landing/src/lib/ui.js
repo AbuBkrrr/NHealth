@@ -78,7 +78,8 @@ export function appBar({ title, back, roleCls = '', actions = '', danger = false
   const defaultActions = `<button class="bell" data-go="/notifications" aria-label="Notifications">🔔${unread}</button><button data-go="/profile" aria-label="Profile">👤</button>`;
   return `${statusBar()}<div class="app-bar" ${style}>${left}<div class="title ${roleCls}" ${danger ? 'style="color:white"' : ''}>${title}</div><div class="app-bar-actions">${actions === null ? '' : actions || defaultActions}</div></div>`;
 }
-export const brandTitle = () => 'N-<span>Health</span>';
+// Original design: patients see N-Health, every provider sees N-Provider (purple).
+export const brandTitle = () => (state.user && state.user.role !== 'PATIENT' ? 'N-<span>Provider</span>' : 'N-<span>Health</span>');
 
 export function tabs(list, active, attr = 'data-tab') {
   return `<div class="tab-container">${list.map(([k, label]) => `<div class="tab ${k === active ? 'active' : ''}" ${attr}="${k}" tabindex="0">${label}</div>`).join('')}</div>`;

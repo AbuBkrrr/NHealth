@@ -239,6 +239,15 @@ async function verifyPhone() {
 }
 
 // ================= KYC (Didit) & provider documents =================
+// Every provider must upload these three before an admin can approve them (enforced by the API too).
+const REQUIRED_DOCS = [
+  ['IDENTITY', 'Government-issued ID', 'NIN slip, international passport, driver\'s licence, voter\'s card or national ID'],
+  ['PROOF_OF_ADDRESS', 'Proof of address', 'Utility bill, bank statement or tenancy agreement from the last 3 months'],
+  ['LICENSE', 'Health / practising licence', 'Your current licence from MDCN, PCN, MLSCN, NMCN or the State Ministry of Health'],
+];
+const DOC_LABEL = { IDENTITY: 'Government-issued ID', PROOF_OF_ADDRESS: 'Proof of address', LICENSE: 'Health / practising licence', CERTIFICATE: 'Certificate / degree', CAC: 'CAC / business registration', PRACTICE_PERMIT: 'Premises / practice permit', VEHICLE: 'Vehicle documents', INSURANCE: 'Indemnity insurance', OTHER: 'Other' };
+const docOk = (docs, type) => docs.find((d) => d.type === type && d.status !== 'REJECTED' && (!d.expiresAt || new Date(d.expiresAt) > new Date()));
+const missingCount = (docs) => REQUIRED_DOCS.filter(([t]) => !docOk(docs, t)).length;
 export async function kycScreen(el) {
   const s = await get('/kyc/status');
   const docs = isProvider() ? await get('/verification/documents') : [];
@@ -257,25 +266,27 @@ export async function kycScreen(el) {
       ${last?.documentType ? `<div class="kv"><span class="k">Document</span><span class="v">${esc(last.documentType)} ${last.documentLast4 ? '•••• ' + esc(last.documentLast4) : ''} ${esc(last.documentCountry || '')}</span></div>` : ''}
       ${st !== 'APPROVED' ? `<button class="btn btn-primary btn-block mt8" id="start" ${s.configured ? '' : 'disabled'}>${st === 'PENDING' ? 'Continue verification' : 'Verify my identity'}</button>${s.configured ? '' : '<p class="muted small center mt8">Identity verification is being set up - please check back soon.</p>'}
       ${st === 'PENDING' || st === 'IN_REVIEW' ? '<button class="btn btn-outline btn-block mt8" id="refresh">Check status</button>' : ''}` : ''}`) +
-    (isProvider() ? card(cardHead('⚕️ Licence & practice documents', badge(s.verificationStatus)) + `
+    (isProvider() ? card(cardHead('⚕️ Verification documents', badge(s.verificationStatus)) + `
       ${s.verificationNote ? `<div class="banner warn">${esc(s.verificationNote)}</div>` : ''}
-      <p class="muted mb8">Upload your practising licence and certificates (PDF or photo). An N-Health compliance officer checks them with the issuing council (MDCN, PCN, MLSCN, NMCN, CAC…) before your profile goes live.</p>
-      ${docs.length ? docs.map((d) => item({ icon: '📄', title: esc(d.title), sub: esc(d.type) + ' • ' + dateOnly(d.createdAt) + (d.reviewNote ? ' • ' + esc(d.reviewNote) : ''), trailing: badge(d.status) })).join('') : empty('📄', 'No documents uploaded yet')}
-      <button class="btn btn-outline btn-block mt8" id="upload">⬆️ Upload document</button>`) : '');
+      <p class="muted mb8">Before your profile goes live, upload these three documents (PDF or photo). An N-Health compliance officer checks them, and your licence with the issuing council (MDCN, PCN, MLSCN, NMCN…).</p>
+      ${REQUIRED_DOCS.map(([type, label, hint]) => { const d = docOk(docs, type); return item({ icon: d ? '✅' : '⬜', title: esc(label), sub: d ? esc(d.title) + ' • ' + dateOnly(d.createdAt) : esc(hint), trailing: d ? badge(d.status) : `<button class="btn btn-primary btn-sm" data-up="${type}">Upload</button>` }); }).join('')}
+      ${missingCount(docs) ? `<div class="banner info mt8">📋 ${missingCount(docs)} of 3 required documents still to upload.</div>` : '<div class="banner info mt8">✅ All required documents uploaded. We will review them shortly.</div>'}
+      ${docs.filter((d) => !REQUIRED_DOCS.some(([t]) => t === d.type) || d.status === 'REJECTED').map((d) => item({ icon: '📄', title: esc(d.title), sub: esc(DOC_LABEL[d.type] || d.type) + ' • ' + dateOnly(d.createdAt) + (d.reviewNote ? ' • ' + esc(d.reviewNote) : ''), trailing: badge(d.status) })).join('')}
+      <button class="btn btn-outline btn-block mt8" data-up="">⬆️ Upload another document</button>`) : '');
   $('#start', el)?.addEventListener('click', (e) => busy(e.target, async () => {
     const r = await post('/kyc/session', { returnUrl: location.origin + '/?kyc=done' });
     if (r.url) location.href = r.url; else { toast('✅ Already verified'); kycScreen(el); }
   }));
   $('#refresh', el)?.addEventListener('click', (e) => busy(e.target, async () => { await post('/kyc/refresh'); await refreshMe(); kycScreen(el); }));
-  $('#upload', el)?.addEventListener('click', async () => {
+  el.querySelectorAll('[data-up]').forEach((btn) => btn.addEventListener('click', async () => {
     const f = await pickFile('image/*,application/pdf'); if (!f) return;
     let dataUri; try { dataUri = await fileToDataUri(f); } catch (e) { return toastErr(e); }
     formModal('Document details', [
-      { name: 'type', label: 'Type', type: 'select', options: [['LICENSE', 'Practising licence'], ['CERTIFICATE', 'Certificate / degree'], ['CAC', 'CAC / business registration'], ['PRACTICE_PERMIT', 'Premises / practice permit'], ['VEHICLE', 'Vehicle documents'], ['INSURANCE', 'Indemnity insurance'], ['OTHER', 'Other']] },
+      { name: 'type', label: 'Type', type: 'select', options: Object.entries(DOC_LABEL), value: btn.dataset.up || 'CERTIFICATE' },
       { name: 'title', label: 'Title', value: f.name.replace(/\.[^.]+$/, '') },
       { name: 'expiresAt', label: 'Expiry date (if any)', type: 'date' },
     ], { submit: 'Upload', onSubmit: async (v) => { await post('/verification/documents', { ...v, dataUri, expiresAt: v.expiresAt || undefined }); toast('✅ Uploaded - we will review it shortly'); kycScreen(el); } });
-  });
+  }));
 }
 
 // ================= SETTINGS & PRIVACY =================

@@ -153,7 +153,7 @@ export function legal(kind) {
     <p><b>3. Coins.</b> N-Health coins are a closed-loop prepaid credit for healthcare services on the platform. They are not money, cannot be transferred between users and cannot be withdrawn as cash. Top-ups are processed by licensed payment partners.</p>
     <p><b>4. Escrow & refunds.</b> Some payments are held in escrow until you confirm the service. Appointments cancelled 12+ hours ahead, or declined by the provider, are refunded in coins.</p>
     <p><b>5. Conduct.</b> No harassment, fraud, fake campaigns or misuse of medical information. Fundraising campaigns are reviewed before going live.</p>
-    <p><b>Marketing measurement.</b> When you open an N-Health link or QR code, we record the open with a random ID your browser keeps (no name or contact details), your device type and approximate city, to see which campaigns work. Ad cookies load only if you accept them. Your IP address is stored only as a one-way hash.</p>
+    <p><b>Marketing measurement.</b> When you open an N-Health link or QR code, we record the open with a random ID your browser keeps (no name or contact details), your device type and approximate city, to see which campaigns work. If you choose to allow location, we also record your precise position at that moment; you can refuse, and the page works the same. Ad cookies load only if you accept them. Your IP address is stored only as a one-way hash.</p>
     <p><b>6. Liability.</b> Providers are responsible for the care they deliver. N-Health is liable only to the extent required by law.</p></div>`;
   const privacy = `<div class="modal-title">🔒 Privacy Policy</div><div class="muted" style="line-height:1.6">
     <p>We follow the Nigeria Data Protection Act (NDPA 2023) and GDPR principles.</p>

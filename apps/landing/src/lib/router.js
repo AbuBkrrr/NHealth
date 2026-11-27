@@ -51,6 +51,7 @@ export async function render() {
   const el = document.createElement('div');
   el.className = 'screen active';
   app.replaceChildren(el);
+  document.body.dataset.side = state.user && state.user.role !== 'PATIENT' ? 'provider' : 'patient';
   renderNav(match.nav && state.user ? path : null);
   try {
     const c = await match.screen(el, params, query);
