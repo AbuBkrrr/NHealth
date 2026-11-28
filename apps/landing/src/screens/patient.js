@@ -20,7 +20,7 @@ export async function homeScreen(el) {
     <div class="welcome-sub">Your complete health companion</div>
     <div class="balance-card"><div class="balance-label">Reward coins</div><div class="balance-amount" id="bal">…</div>
       <div style="font-size:11px;opacity:.85;margin-top:2px" id="ins"></div>
-      <div class="balance-actions"><button class="btn-primary" data-go="/patient/wallet">🪙 My coins</button><button class="btn-outline" data-go="/patient/wallet?tab=history">📊 History</button></div></div>
+      <div class="balance-actions"><button class="btn-primary" id="checkin">📅 Check in +1 🪙</button><button class="btn-outline" data-go="/patient/wallet">🎯 Quests</button></div></div>
     ${u.kycStatus === 'IN_REVIEW' ? '<div class="banner info" data-go="/kyc">⏳ Your identity documents are being checked. We will notify you when it is done.</div>' : u.kycStatus !== 'APPROVED' ? '<div class="banner info">🪪 Verify your identity to unlock emergency dispatch, insurance and donations.<button class="btn btn-sm btn-primary" data-go="/kyc">Verify</button></div>' : ''}
     <div class="quick-actions">
       <div class="quick-action emergency" data-go="/patient/emergency" tabindex="0"><span class="icon">🚨</span><span class="label">${t('Emergency')}</span></div>
@@ -40,6 +40,10 @@ export async function homeScreen(el) {
     <div id="fhp"></div>${inviteCard()}<div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
   loadInviteStats(el);
+  $('#checkin', el)?.addEventListener('click', (e) => busy(e.target, async () => {
+    try { const r = await post('/quests/checkin/claim'); toast(`📅 Checked in: +${r.coins} 🪙${r.streak > 1 ? ' • 🔥 ' + r.streak + '-day streak' : ''}`); loadBalance().then((b) => { const x = $('#bal', el); if (x) x.textContent = '🪙 ' + coins(b); }); e.target.textContent = '✓ Checked in today'; }
+    catch (err) { if (err.status === 409) { e.target.textContent = '✓ Checked in today'; toast('You already checked in today. See you tomorrow!'); } else throw err; }
+  }));
   get('/patient/insurance').then((p) => { const a = p.find((x) => x.status === 'ACTIVE'); $('#ins', el) && ($('#ins', el).innerHTML = a ? `<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">✓ ${esc(a.plan?.name || a.provider)} Active</span>` : ''); }).catch(() => null);
   get('/patient/appointments').then((list) => {
     const up = list.filter(upcoming).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 3);
@@ -120,20 +124,39 @@ export async function walletScreen(el, _p, q) {
   }
 }
 
+/** The quest board: health actions that earn reward coins (claim when done). */
+async function drawQuests(box, refresh) {
+  if (!box) return;
+  const qb = await get('/quests').catch(() => null);
+  if (!qb?.enabled) { box.innerHTML = ''; return; }
+  box.innerHTML = card(cardHead('🎯 Health quests', `<span class="small muted">Today ${qb.earnedToday}/${qb.dailyCap} 🪙${qb.streak ? ' • 🔥 ' + qb.streak + '-day streak' : ''}</span>`) +
+    qb.quests.map((q) => item({ icon: q.icon, title: `${esc(q.title)} <span class="badge badge-provider">+${q.coins} 🪙</span>`, sub: esc(q.hint) + (q.repeat === 'daily' ? ' • every day' : q.repeat === 'each' ? ` • each time${q.doneCount ? ' (' + q.doneCount + ' so far)' : ''}` : ''),
+      trailing: q.done ? '<span style="color:var(--success)">✓ Done</span>' : q.claimable ? `<button class="btn btn-primary btn-sm" data-claim="${q.key}">Claim</button>` : (q.go ? `<button class="btn btn-outline btn-sm" data-go="${q.go}">Go</button>` : '') })).join(''));
+  box.onclick = async (e) => {
+    const b = e.target.closest('[data-claim]'); if (!b) return;
+    await busy(b, async () => { const r = await post('/quests/' + b.dataset.claim + '/claim'); toast(`🪙 +${r.coins} coin${r.coins === 1 ? '' : 's'}${r.streak > 1 ? ' • 🔥 ' + r.streak + '-day streak' : ''}`); loadBalance(); refresh?.(); });
+  };
+}
+
 /** Coins are free rewards (like loyalty points): earned by inviting friends and in promotions, never bought or cashed out. */
 async function rewardsScreen(el) {
   const reward = state.config?.inviteRewardCoins || 1;
   el.innerHTML = appBar({ title: '🪙 My coins', back: '/patient/home' }) + `
     <div class="balance-card"><div class="balance-label">Reward coins</div><div class="balance-amount" id="bal">…</div><div class="small" style="opacity:.85">Use them towards care on N-Health</div></div>
-    ${card(cardHead('How to earn coins') + `
+    <div id="quests">${skeleton(2)}</div>
+    ${card(cardHead('More ways to earn') + `
       ${item({ icon: '👥', title: `Invite friends: ${reward} coin${reward > 1 ? 's' : ''} each`, sub: 'When a friend joins with your link and confirms their email or phone', attrs: 'data-go="/patient/home"' })}
       ${item({ icon: '🎁', title: 'Promotions', sub: 'Watch your notifications for N-Health offers' })}`)}
+    ${state.config?.donationPartner ? card(cardHead('💚 Donate your coins') + `<p class="small muted">Give coins to ${esc(state.config.donationPartner.name)}, our registered NGO partner. N-Health turns them into a real donation from its own funds.</p><button class="btn btn-success btn-block btn-sm" id="givecoins">Donate coins</button>`) : ''}
     ${card(cardHead('How coins work') + `<div class="small muted" style="line-height:1.6">
       • When you pay for a booking, order or test, choose <b>Use my coins</b> if you have enough.<br>
       • Coins are a free reward from N-Health. They can't be bought, sold, sent to someone else or exchanged for cash.<br>
+      • Using or donating coins is final. Coins don't expire, but N-Health may change the programme with notice.<br>
       • You pay for care by card (the money goes straight to the provider) or in cash at the service.</div>`)}
     <div id="history">${skeleton(3)}</div>`;
   const b = await loadBalance(); $('#bal', el).textContent = '🪙 ' + coins(b);
+  drawQuests($('#quests', el), () => rewardsScreen(el));
+  $('#givecoins', el)?.addEventListener('click', () => formModal('💚 Donate coins', [{ name: 'coins', label: `Coins to give (you have ${coins(state.balance || 0)})`, type: 'number', min: 1, required: true }], { submit: 'Donate', intro: `<p class="muted mb8">To ${esc(state.config.donationPartner.name)}. This can't be undone.</p>`, onSubmit: async (v) => { await post('/coins/donate', { coins: Math.floor(Number(v.coins)) }); toast('💚 Thank you for giving!'); rewardsScreen(el); } }));
   const tx = await get('/credits/transactions').catch(() => []);
   $('#history', el).innerHTML = card(cardHead('📊 Coin history') + (tx.length ? tx.map((x) => item({
     avatarHtml: `<div class="avatar" style="background:${Number(x.amount) >= 0 ? '#E6F4EA;color:var(--success)' : '#FCE8E6;color:var(--error)'}">${Number(x.amount) >= 0 ? '🎁' : '🪙'}</div>`,

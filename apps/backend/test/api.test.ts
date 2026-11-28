@@ -745,3 +745,41 @@ describe('no licence needed: rewards-only coins, direct payments, NGO donations,
     expect(v.body.channel).toBe('email'); // WhatsApp isn't configured in tests
   });
 });
+
+describe('health quests and coin donations (Muslim Pro-style rewards)', () => {
+  it('earns coins for real health actions once per period, within a daily cap, and donates coins to the NGO', async () => {
+    const pat = await register('PATIENT');
+    const claim = (k: string) => request(app).post(`/api/quests/${k}/claim`).set(auth(pat.token));
+    const board = await request(app).get('/api/quests').set(auth(pat.token));
+    expect(board.body.quests.find((q: any) => q.key === 'checkin')).toMatchObject({ claimable: true, coins: 1 });
+    expect((await claim('checkin')).body).toMatchObject({ coins: 1, streak: 1 });
+    expect((await claim('checkin')).status).toBe(409); // once a day
+    expect((await claim('profile')).status).toBe(400); // not done yet
+    await request(app).patch('/api/auth/profile').set(auth(pat.token)).send({ bloodType: 'O+', genotype: 'AA', emergencyPhone: '08030000000' });
+    expect((await claim('profile')).body.coins).toBe(5);
+    expect((await claim('nonsense')).status).toBe(404);
+    const after = await request(app).get('/api/quests').set(auth(pat.token));
+    expect(after.body).toMatchObject({ earnedToday: 6, streak: 1 });
+    expect(after.body.quests.find((q: any) => q.key === 'profile')).toMatchObject({ done: true, claimable: false });
+    // Daily cap
+    const admin = await prisma.user.create({ data: { email: `adq-${uniq()}@test.io`, name: 'Admin', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const { saveQuestSettings } = await import('../src/services/quests');
+    await saveQuestSettings({ dailyCap: 7 }, admin.id);
+    try {
+      await prisma.medicationReminder.create({ data: { userId: pat.user.id, medication: 'Vitamin C', times: ['08:00'] } });
+      expect((await claim('reminder')).body.coins).toBe(1); // only 1 left under the cap of 7
+      await prisma.vaccination.create({ data: { userId: pat.user.id, vaccine: 'Hepatitis B', givenAt: new Date() } });
+      expect((await claim('vaccine')).status).toBe(429);
+    } finally { await saveQuestSettings({ dailyCap: 20 }, admin.id); }
+    // Donating coins needs the partner NGO; N-Health owes the NGO their value
+    expect((await request(app).post('/api/coins/donate').set(auth(pat.token)).send({ coins: 3 })).status).toBe(400);
+    const { saveDonationPartner } = await import('../src/services/settings');
+    await saveDonationPartner({ enabled: true, name: 'Care Foundation', accountNumber: '0099887766' }, admin.id);
+    try {
+      expect((await request(app).post('/api/coins/donate').set(auth(pat.token)).send({ coins: 3 })).status).toBe(201);
+      expect((await request(app).post('/api/coins/donate').set(auth(pat.token)).send({ coins: 500 })).status).toBe(400);
+      const bal = await request(app).get('/api/credits/balance').set(auth(pat.token));
+      expect(Number(bal.body.balance)).toBe((7 - 3) * 10);
+    } finally { await saveDonationPartner({ enabled: false }, admin.id); }
+  });
+});

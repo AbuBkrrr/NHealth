@@ -1,4 +1,4 @@
-import { get, post, postLater, pendingWrites, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
+import { get, getFresh, post, postLater, pendingWrites, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
 import { esc, $, $$, appBar, card, cardHead, item, avatar, badge, empty, skeleton, toast, toastErr, formModal, modal, confirmBox, busy, dt, ago, relDay, dateOnly, timeOnly, money, coins, fileToDataUri, pickFile, field, readForm, tabs, closeModal, webOrigin } from '../lib/ui.js';
 import { on, emit } from '../lib/realtime.js';
@@ -253,7 +253,7 @@ const DOC_LABEL = { IDENTITY: 'Government-issued ID', PROOF_OF_ADDRESS: 'Proof o
 const docOk = (docs, type) => docs.find((d) => d.type === type && d.status !== 'REJECTED' && (!d.expiresAt || new Date(d.expiresAt) > new Date()));
 const missingCount = (docs) => REQUIRED_DOCS.filter(([t]) => !docOk(docs, t)).length;
 export async function kycScreen(el) {
-  const s = await get('/kyc/status');
+  const s = await getFresh('/kyc/status'); // always the latest decision, never a saved copy
   const docs = isProvider() ? await get('/verification/documents') : [];
   const st = s.kycStatus;
   const box = {
@@ -412,6 +412,9 @@ export async function articlesScreen(el) {
 }
 export async function articleScreen(el, { slug }) {
   const a = await get('/articles/' + slug);
+  // Reading for 20 seconds completes the daily "Read a health article" quest.
+  const readTimer = state.user?.role === 'PATIENT' ? setTimeout(() => { if (el.isConnected) post('/quests/read/claim').then((r) => toast(`📖 +${r.coins} 🪙 for reading today`)).catch(() => null); }, 20000) : null;
+  setTimeout(() => { const stop = () => clearTimeout(readTimer); window.addEventListener('hashchange', stop, { once: true }); });
   el.innerHTML = appBar({ title: '📖 ' + esc(a.category), back: '/articles' }) + card(`<h3 style="font-size:16px;margin-bottom:6px">${esc(a.title)}</h3><p class="muted mb8">${dateOnly(a.publishedAt)}</p>${esc(a.body).split('\n').map((p) => `<p style="font-size:13px;line-height:1.6;margin-bottom:8px">${p}</p>`).join('')}<div class="banner info">ℹ️ General information only - not a substitute for professional medical advice.</div>`);
 }
 

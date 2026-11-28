@@ -1,7 +1,8 @@
 # Coins and invite rewards
 
 ## Coins are a free reward, like loyalty points
-- **How people get coins:**
+- **How people get coins** (the Muslim Pro model: earned through activity, never bought):
+  - **Health quests** (see below);
   - inviting friends (see below);
   - promotions an admin grants;
   - coins returned when a booking paid with coins is cancelled.
@@ -15,6 +16,33 @@
 - **Prices:** all prices are shown in naira, because patients pay providers in money (card or cash).
 
 This follows the same model as other reward apps. For example, Muslim Pro's Stars and Crescents are earned through in-app activity, never bought, and redeemed only for in-app rewards or donations the company makes.
+
+## Health quests
+Patients earn coins for actions that are good for their health. The quest board is on **My coins** (Home → 🎯 Quests), and the server checks every quest before paying it.
+
+| Quest | Coins (default) | How often |
+|---|---|---|
+| Daily check-in (button on the home card; builds a 🔥 streak) | 1 | every day |
+| Read a health article for 20 seconds | 1 | every day |
+| Complete health profile (blood group, genotype, emergency contact) | 5 | once |
+| Confirm email | 2 | once |
+| Confirm phone | 2 | once |
+| Verify identity | 10 | once |
+| Set a medication reminder | 2 | once |
+| Record a vaccination | 2 | once |
+| Have a check-up (a completed appointment) | 5 | once |
+| Donate blood (each completed pledge) | 20 | each time |
+
+- **Daily limit:** 20 coins a day from quests.
+- **Admin control:** in Admin → Donation campaigns → Health quests, super admins change coins per quest (0 switches one off), change the daily limit, or pause all quests.
+- **Providers** can earn the check-in, reading, email, phone and identity quests.
+- **Cost:** each coin a patient later uses costs N-Health `COIN_VALUE_NGN` (₦10). For example, 10,000 patients checking in daily is 10,000 coins (₦100,000) a day if all of them are spent. Keep the daily limit and coin values within your marketing budget.
+
+## Donating coins (like Muslim Pro's Crescents)
+- When the partner NGO is switched on, patients can **Donate coins** from My coins.
+- The coins are used up, and N-Health pays their value to the NGO from its own funds.
+- Admin → Donation campaigns → **Coin donations to pay** shows the total owed to the NGO each month.
+- Donating is final, as is using coins.
 
 ## Invite rewards
 - **How invites work:** every user has an invite card on their home page (Share, WhatsApp, Copy). The link (`https://www.nhealth.com.ng/?ref=CODE`) opens sign-up with the code filled in. Provider flyers carry the provider's code too.
