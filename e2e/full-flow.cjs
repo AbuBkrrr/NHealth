@@ -176,7 +176,7 @@ const mail = (r) => `${r}.${S}@test.io`;
     await pb.fill('#reason', 'Chest pain on exertion'); await pb.click('#confirm'); await pb.waitForTimeout(2000);
     await pb.screenshot({ path: OUT + 'patient_book_paymodal.png' });
     const modal = await pb.textContent('#modal');
-    /Use my reward coins/.test(modal) && /Cash/.test(modal) && /₦/.test(modal) ? pass('booking via UI → payment chooser in naira (cash, reward coins)') : fail('booking pay chooser', modal.slice(0, 200));
+    /Pay it all with my coins/.test(modal) && /Use some of my coins/.test(modal) && /Cash/.test(modal) && /₦/.test(modal) ? pass('booking via UI → payment chooser in naira (cash, all or part in coins)') : fail('booking pay chooser', modal.slice(0, 200));
     await pb.click('[data-m="coins"]'); await pb.click('#paynow'); await pb.waitForTimeout(2000);
     pass('paid appointment with reward coins via UI');
   } else fail('calendar shows days with slots');

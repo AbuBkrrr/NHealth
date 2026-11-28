@@ -158,7 +158,8 @@ async function rewardsScreen(el) {
     ${card(cardHead('🏪 Pay at a pharmacy counter') + '<p class="small muted">Show the pharmacist a one-time code to pay with your coins (over-the-counter items only). Nobody can use your coins without it.</p><button class="btn btn-outline btn-block btn-sm" id="poscode">Show my code</button>')}
     ${state.config?.donationPartner ? card(cardHead('💚 Donate your coins') + `<p class="small muted">Give coins to ${esc(state.config.donationPartner.name)}, our registered NGO partner. N-Health turns them into a real donation from its own funds.</p><button class="btn btn-success btn-block btn-sm" id="givecoins">Donate coins</button>`) : ''}
     ${card(cardHead('How coins work') + `<div class="small muted" style="line-height:1.6">
-      • When you pay for a booking, order or test, choose <b>Use my coins</b> if you have enough.<br>
+      • When you pay for a booking, order or test, use your coins for all of it or part of it, and pay the rest by card or cash.<br>
+      • At pharmacies, coins pay the delivery fee and over-the-counter items (not prescription-only medicines).<br>
       • Coins are a free reward from N-Health. They can't be bought, sold, sent to someone else or exchanged for cash.<br>
       • Using or donating coins is final. Coins don't expire, but N-Health may change the programme with notice.<br>
       • You pay for care by card (the money goes straight to the provider) or in cash at the service.</div>`)}
