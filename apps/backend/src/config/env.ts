@@ -15,9 +15,14 @@ const envSchema = z.object({
   // Integrations - each feature switches on when its key is present.
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('N-Health <no-reply@nhealth.com.ng>'),
-  TERMII_API_KEY: z.string().optional(),
-  TERMII_SENDER_ID: z.string().default('N-Health'),
-  TERMII_BASE_URL: z.string().default('https://api.ng.termii.com'),
+  // WhatsApp Business (Meta Cloud API). N-Health sends no SMS: messages go in-app, by email and on WhatsApp.
+  WHATSAPP_TOKEN: z.string().optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_API_VERSION: z.string().default('v21.0'),
+  WHATSAPP_TEMPLATE_OTP: z.string().default('nhealth_code'),
+  WHATSAPP_TEMPLATE_UPDATE: z.string().default('nhealth_update'),
+  WHATSAPP_TEMPLATE_NEWS: z.string().default('nhealth_news'),
+  WHATSAPP_TEMPLATE_LANG: z.string().default('en'),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
@@ -38,7 +43,15 @@ const envSchema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   SERVICE_FEE_PERCENT: z.coerce.number().default(5),
   POS_TAX_PERCENT: z.coerce.number().default(5),
-  EMERGENCY_MIN_BALANCE: z.coerce.number().default(5000),
+  // Coins are free rewards only. Selling coins (top-ups) is stored value and needs a CBN licence or licensed partner:
+  // leave this off unless you have one.
+  COIN_TOPUP_ENABLED: z.enum(['true', 'false']).default('false'),
+  // Shown on the privacy policy and terms (NDPA 2023 requires the data controller's identity and DPO contact).
+  COMPANY_LEGAL_NAME: z.string().default('N-Health'),
+  COMPANY_RC_NUMBER: z.string().optional(),
+  COMPANY_ADDRESS: z.string().optional(),
+  DPO_EMAIL: z.string().default('privacy@nhealth.com.ng'),
+  SUPPORT_EMAIL: z.string().default('support@nhealth.com.ng'),
   SENTRY_DSN: z.string().optional(),
 });
 

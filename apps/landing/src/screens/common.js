@@ -1,7 +1,7 @@
 // Reusable flows shared by several screens: payment, reviews, emergency numbers.
 import { get, post } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
-import { esc, $, $$, modal, toast, money, coins, busy, toCoins, webOrigin } from '../lib/ui.js';
+import { esc, $, $$, modal, toast, money, coins, busy, webOrigin } from '../lib/ui.js';
 import { go } from '../lib/router.js';
 
 export async function loadBalance() {
@@ -11,56 +11,58 @@ export async function loadBalance() {
 const PURPOSE = { APPOINTMENT: 'appointment', PHARMACY_ORDER: 'pharmacy', LAB_TEST: 'lab', NURSE_REQUEST: 'nurse' };
 
 /**
- * Payment chooser: N-Health coins (instant) or PayScrow escrow (card/transfer, held until the service is confirmed).
- * Resolves true when paid (or escrow checkout opened).
+ * Payment chooser. Money always goes straight to the provider: card/transfer/USSD through a licensed gateway that
+ * settles to the provider's own account, PayScrow escrow (a licensed escrow partner), or cash at the service.
+ * Reward coins (free, never sold) can be used instead when the patient has enough.
+ * Resolves true when paid (or checkout opened).
  */
 export function payModal({ payableType, payableId, amount, title = 'Complete payment' }) {
   return new Promise((resolve) => {
     loadBalance().then((bal) => {
-      const enough = bal >= amount;
+      const enough = bal > 0 && bal >= amount;
       const escrow = state.config?.escrow && PURPOSE[payableType];
       const cash = state.config?.cashEnabled && PURPOSE[payableType];
       const card = PURPOSE[payableType] && (state.config?.gateways || []).some((g) => g === 'paystack' || g === 'flutterwave');
+      const price = money(amount, { naira: true, convert: false });
+      const opts = [
+        card && ['card', '💳', 'Card / Transfer / USSD', 'Paid straight to the provider\'s account'],
+        cash && ['cash', '💵', 'Cash', 'Pay the provider at the service'],
+        escrow && ['escrow', '🔒', 'Escrow', 'Held by our licensed escrow partner until the service is done'],
+        enough && ['coins', '🪙', 'Use my reward coins', `You have ${coins(bal)} coins`],
+      ].filter(Boolean);
       modal(`<div class="modal-title">💳 ${esc(title)}</div>
-        <div class="booking-summary"><div class="total">Amount: ${money(amount)}</div></div>
-        <div class="payment-methods mt12">
-          <div class="payment-method ${enough ? 'selected' : 'disabled'}" data-m="coins"><div class="icon">🪙</div><div class="name">N-Health Coins</div><div class="desc">Balance ${coins(bal)}</div></div>
-          ${card ? '<div class="payment-method" data-m="card"><div class="icon">💳</div><div class="name">Card / Transfer / USSD</div><div class="desc">${money(amount, { naira: true, convert: false })}, paid straight to the provider</div></div>' : ''}
-        ${escrow ? '<div class="payment-method" data-m="escrow"><div class="icon">🔒</div><div class="name">Escrow</div><div class="desc">Card / transfer, released after service</div></div>' : ''}
-        ${cash ? '<div class="payment-method" data-m="cash"><div class="icon">💵</div><div class="name">Cash</div><div class="desc">Pay the provider ${money(amount, { naira: true, convert: false })} directly</div></div>' : ''}
-        </div>
-        ${!enough ? '<div class="banner warn">Not enough coins. <button class="btn btn-sm btn-primary" data-topup>Top up</button></div>' : ''}
-        <button class="btn btn-primary btn-block mt12" id="paynow" ${!enough && !escrow && !cash && !card ? 'disabled' : ''}>Pay ${money(amount)}</button>
+        <div class="booking-summary"><div class="total">Amount: ${price}</div></div>
+        <div class="payment-methods mt12">${opts.map(([k, i, n, d]) => `<div class="payment-method" data-m="${k}"><div class="icon">${i}</div><div class="name">${n}</div><div class="desc">${d}</div></div>`).join('')}</div>
+        ${opts.length ? '' : '<div class="banner warn">Payment isn\'t available for this provider yet. Please contact them.</div>'}
+        <button class="btn btn-primary btn-block mt12" id="paynow" ${opts.length ? '' : 'disabled'}>Continue</button>
         <button class="btn btn-outline btn-block mt8" data-later>Pay later</button>`, (box, close) => {
-        let m = enough ? 'coins' : card ? 'card' : escrow ? 'escrow' : cash ? 'cash' : 'coins';
+        let m = opts[0]?.[0];
         const sel = () => $$('[data-m]', box).forEach((x) => x.classList.toggle('selected', x.dataset.m === m));
         sel();
-        $$('[data-m]', box).forEach((x) => (x.onclick = () => { if (x.classList.contains('disabled')) return; m = x.dataset.m; sel(); }));
-        box.querySelector('[data-topup]')?.addEventListener('click', () => { close(); resolve(false); go('/patient/wallet?amount=' + Math.ceil(toCoins(amount - bal))); });
+        $$('[data-m]', box).forEach((x) => (x.onclick = () => { m = x.dataset.m; sel(); }));
         box.querySelector('[data-later]').onclick = () => { close(); resolve(false); };
         $('#paynow', box).onclick = (e) => busy(e.target, async () => {
           if (m === 'card') {
-          const r = await post('/payments/card', { payableType, payableId, returnUrl: webOrigin() + '/' });
-          sessionStorage.setItem('nh_paid', r.internalRef);
-          close(); resolve(true);
-          if (r.checkoutUrl) location.href = r.checkoutUrl; else throw new Error('Checkout unavailable');
-          return;
-        }
-        if (m === 'cash') {
-          await post('/payments', { payableType, payableId, method: 'CASH' });
-          toast('💵 Pay the provider in cash - they will confirm receipt in the app');
-          close(); resolve(true); return;
-        }
-        if (m === 'coins') {
+            const r = await post('/payments/card', { payableType, payableId, returnUrl: webOrigin() + '/' });
+            sessionStorage.setItem('nh_paid', r.internalRef);
+            close(); resolve(true);
+            if (r.checkoutUrl) location.href = r.checkoutUrl; else throw new Error('Checkout unavailable');
+            return;
+          }
+          if (m === 'cash') {
+            await post('/payments', { payableType, payableId, method: 'CASH' });
+            toast('💵 Pay the provider in cash - they will confirm receipt in the app');
+            close(); resolve(true); return;
+          }
+          if (m === 'coins') {
             await post('/payments', { payableType, payableId, method: 'WALLET' });
             loadBalance();
-            toast('✅ Paid with coins');
-            close(); resolve(true);
-          } else {
-            const r = await post('/escrow/initiate', { purpose: PURPOSE[payableType], purposeId: payableId, description: title });
-            close(); resolve(true);
-            if (r.paymentLink) location.href = r.paymentLink;
+            toast('✅ Paid with your reward coins');
+            close(); resolve(true); return;
           }
+          const r = await post('/escrow/initiate', { purpose: PURPOSE[payableType], purposeId: payableId, description: title });
+          close(); resolve(true);
+          if (r.paymentLink) location.href = r.paymentLink;
         });
       });
     });

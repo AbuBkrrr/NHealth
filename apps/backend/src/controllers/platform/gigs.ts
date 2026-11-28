@@ -220,7 +220,7 @@ export async function decideApplication(req: Request, res: Response) {
   const body = status === 'NOT_SELECTED'
     ? `${a.gig.orgName} has filled ${a.gig.title} with another candidate. Thank you for applying.`
     : `${a.gig.orgName} - ${a.gig.title}.${note ? ' "' + note + '"' : ''} Open N-Health to reply.`;
-  await notify(a.applicantId, 'gig', STATUS_MSG[status], body, { push: true, sms: ['INTERVIEW', 'OFFERED', 'HIRED'].includes(status), data: { gigId: a.gigId } });
+  await notify(a.applicantId, 'gig', STATUS_MSG[status], body, { push: true, whatsapp: ['INTERVIEW', 'OFFERED', 'HIRED'].includes(status), data: { gigId: a.gigId } });
   if (status === 'HIRED') {
     const hired = await prisma.gigApplication.count({ where: { gigId: a.gigId, status: 'HIRED' } });
     if (hired >= a.gig.positions && a.gig.status === 'OPEN') await prisma.gig.update({ where: { id: a.gigId }, data: { status: 'FILLED' } });

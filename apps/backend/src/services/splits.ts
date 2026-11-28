@@ -10,7 +10,7 @@ import { getFinance } from './settings';
  * institution: then `staffSharePercent` of it goes to the institution and the rest to the provider.
  * The platform keeps the commission plus any patient booking fee.
  */
-export type Payable = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'EMERGENCY';
+export type Payable = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'EMERGENCY' | 'DONATION';
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface Payee {
@@ -63,6 +63,17 @@ export async function planFor(type: Payable, id: string, patientUserId: string):
     if (!n || n.patientId !== p.id) throw Object.assign(new Error('Request not found'), { status: 404 });
     if (!n.nurse) throw Object.assign(new Error('A nurse must accept the request before payment'), { status: 409 });
     total = gross = Number(n.fee) || Number(n.nurse.hourlyRate) * (n.durationHours || 1); providerUserId = n.nurse.userId;
+  } else if (type === 'DONATION') {
+    // Donations: everything goes to the receiving hospital, N-Health takes nothing.
+    const d = await prisma.donation.findUnique({ where: { id } });
+    const c = d?.campaignId ? await prisma.donationCampaign.findUnique({ where: { id: d.campaignId }, include: { institution: true } }) : null;
+    if (!d || d.patientId !== p.id || d.status !== 'PENDING' || !c) throw Object.assign(new Error('Donation not found'), { status: 404 });
+    const rcv = await donationReceiver(c);
+    if (!rcv) throw Object.assign(new Error('This campaign has no receiving organisation yet'), { status: 400 });
+    const amount = r2(Number(d.amount));
+    // userId is empty for the partner NGO (it has no N-Health account): nothing is posted to an earnings ledger.
+    const payee: Payee = { userId: rcv.userId || '', role: 'INSTITUTION', amount, bank: { bankCode: '', bankName: rcv.bankName, accountNumber: rcv.accountNumber, accountName: rcv.accountName, paystackSubaccount: rcv.paystackSubaccount, flutterwaveSubaccount: rcv.flutterwaveSubaccount } };
+    return { total: amount, gross: amount, commissionRate: 0, commission: 0, patientFee: 0, platformAmount: 0, payees: [payee], providerUserId: rcv.userId || '' };
   } else {
     throw Object.assign(new Error('Direct payment is not available for this item'), { status: 400 });
   }
@@ -114,4 +125,17 @@ export function platformAccount() {
   const R = process.env;
   if (!R.PLATFORM_BANK_CODE || !R.PLATFORM_ACCOUNT_NUMBER) return null;
   return { bankCode: R.PLATFORM_BANK_CODE, accountNumber: R.PLATFORM_ACCOUNT_NUMBER, accountName: R.PLATFORM_ACCOUNT_NAME || 'N-Health' };
+}
+
+/**
+ * Who receives a campaign's money: the partner NGO when one is switched on (Admin → Donation partner), otherwise the
+ * campaign's hospital. Either way the money goes into the receiver's own account, never N-Health's.
+ */
+export async function donationReceiver(c: { institution?: { userId: string; name: string } | null }) {
+  const { getDonationPartner } = await import('./settings');
+  const ngo = await getDonationPartner();
+  if (ngo.enabled) return { kind: 'NGO' as const, userId: null as string | null, name: ngo.name, regNumber: ngo.regNumber, bankName: ngo.bankName, accountNumber: ngo.accountNumber, accountName: ngo.accountName || ngo.name, paystackSubaccount: ngo.paystackSubaccount || null, flutterwaveSubaccount: ngo.flutterwaveSubaccount || null };
+  if (!c.institution) return null;
+  const b = await prisma.bankAccount.findFirst({ where: { userId: c.institution.userId, isPrimary: true } });
+  return { kind: 'HOSPITAL' as const, userId: c.institution.userId as string | null, name: c.institution.name, regNumber: '', bankName: b?.bankName || '', accountNumber: b?.accountNumber || '', accountName: b?.verifiedName || b?.accountName || '', paystackSubaccount: b?.paystackSubaccount || null, flutterwaveSubaccount: b?.flutterwaveSubaccount || null };
 }

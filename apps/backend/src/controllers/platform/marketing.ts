@@ -4,14 +4,14 @@ import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { ApiError } from '../../utils/ApiError';
 import { sendEmail } from '../../services/email';
-import { sendSms } from '../../services/sms';
+import { sendWhatsAppNews } from '../../services/whatsapp';
 import { notify } from '../../services/notify';
 import { str, uid } from './util';
 import {
   parseUa, locate, hashIp, getMarketingSettings, saveMarketingSettings, linkUrl, unsubToken, readUnsubToken,
 } from '../../services/marketing';
 
-const CHANNELS = ['qr', 'whatsapp', 'instagram', 'facebook', 'tiktok', 'x', 'linkedin', 'youtube', 'email', 'sms', 'flyer', 'radio', 'tv', 'partner', 'event', 'other'];
+const CHANNELS = ['qr', 'whatsapp', 'instagram', 'facebook', 'tiktok', 'x', 'linkedin', 'youtube', 'email', 'flyer', 'radio', 'tv', 'partner', 'event', 'other'];
 const AUDIENCES = ['ALL', 'PATIENT', 'PROVIDER', 'INSTITUTION'];
 const INTERESTS = ['PATIENT', 'DOCTOR', 'PHARMACY', 'LAB', 'NURSE', 'AMBULANCE', 'INSTITUTION', 'PARTNER', 'INVESTOR'];
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -287,7 +287,7 @@ export async function putSettings(req: Request, res: Response) { res.json(await 
 
 // ------------------------------------------------------------------ broadcasts
 interface Audience { users?: boolean; roles?: string[]; countries?: string[]; leads?: boolean; leadInterests?: string[] }
-async function recipients(a: Audience, channel: 'email' | 'sms') {
+async function recipients(a: Audience, channel: 'email' | 'whatsapp') {
   const out: { name: string; to: string; unsub: string }[] = [];
   const seen = new Set<string>();
   if (a.users) {
@@ -313,8 +313,8 @@ async function recipients(a: Audience, channel: 'email' | 'sms') {
 /** POST /api/admin-ops/marketing/broadcasts { channel, subject, body, audience, linkId, dryRun } */
 export async function broadcast(req: Request, res: Response) {
   const b = req.body || {};
-  const channel = b.channel === 'sms' ? 'sms' : 'email';
-  const body = str(b.body, channel === 'sms' ? 480 : 5000);
+  const channel = b.channel === 'whatsapp' ? 'whatsapp' : 'email';
+  const body = str(b.body, channel === 'whatsapp' ? 900 : 5000);
   const subject = str(b.subject, 150);
   const audience: Audience = { users: !!b.audience?.users, leads: !!b.audience?.leads, roles: b.audience?.roles || [], countries: (b.audience?.countries || []).map((c: string) => String(c).toUpperCase()), leadInterests: b.audience?.leadInterests || [] };
   if (!audience.users && !audience.leads) throw ApiError.badRequest('Choose who receives it');
@@ -338,11 +338,11 @@ export async function broadcast(req: Request, res: Response) {
       try {
         ok = channel === 'email'
           ? await sendEmail(r.to, subject!, subject!, `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p><p><a href="${trackUrl}">Open N-Health</a></p><p style="font-size:12px;color:#888">You receive this because you agreed to hear from N-Health. <a href="${unsubBase + r.unsub}">Unsubscribe</a></p>`)
-          : await sendSms(r.to, text + ' Reply STOP to opt out.');
+          : await sendWhatsAppNews(r.to, text + ' ' + trackUrl);
       } catch { ok = false; }
       ok ? sent++ : failed++;
       if ((sent + failed) % 20 === 0) await prisma.marketingBroadcast.update({ where: { id: bc.id }, data: { sent, failed } }).catch(() => null);
-      await new Promise((ok2) => setTimeout(ok2, channel === 'sms' ? 400 : 150));
+      await new Promise((ok2) => setTimeout(ok2, channel === 'whatsapp' ? 250 : 150));
     }
     await prisma.marketingBroadcast.update({ where: { id: bc.id }, data: { sent, failed, status: 'DONE' } }).catch(() => null);
   })().catch(() => null);

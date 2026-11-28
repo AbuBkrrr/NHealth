@@ -26,7 +26,7 @@ For a patient who can get there themselves (car, taxi, okada, on foot), or someo
    - when the information was last updated
 
    Hospitals that are open and handle the emergency come first.
-3. **"Go here - tell them I'm coming".** The hospital gets an alert (in the app, by push notification and by SMS), and so do its doctors and nurses on staff. The alert includes the patient's medical summary: blood group, genotype, allergies, conditions, medication and next of kin.
+3. **"Go here - tell them I'm coming".** The hospital gets an alert (in the app, by push notification and on WhatsApp), and so do its doctors and nurses on staff. The alert includes the patient's medical summary: blood group, genotype, allergies, conditions, medication and next of kin.
 4. **The hospital accepts and gets ready.** It sends a note such as "Come to the Emergency entrance, the trauma team is waiting", and the patient sees "✅ Lagos City Hospital is ready for you".
    - If the hospital cannot take the patient, it gives a reason and the patient chooses the next nearest hospital.
    - If there is no answer within 3 minutes, the patient is prompted to call or choose another hospital.

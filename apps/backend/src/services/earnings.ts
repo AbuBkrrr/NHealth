@@ -204,7 +204,7 @@ export async function markPayout(reference: string, status: 'PAID' | 'FAILED' | 
     await entry({ providerUserId: p.providerUserId, type: 'PAYOUT_REVERSAL', amount: Number(p.amount), method: 'PAYOUT', sourceType: 'PAYOUT', sourceId: p.id, payoutId: p.id, description: `Payout ${status.toLowerCase()} - returned to balance${reason ? ': ' + reason : ''}` });
     await notify(p.providerUserId, 'payment', 'Payout not completed', `Your payout of ${Number(p.amount).toLocaleString()} could not be completed and is back in your balance.${reason ? ' ' + reason : ''} Check your bank details.`, { email: true });
   } else {
-    await notify(p.providerUserId, 'payment', 'Payout sent 🏦', `${Number(p.amount).toLocaleString()} was sent to ${p.bankName} ••${p.accountNumber.slice(-4)}.`, { email: true, sms: true });
+    await notify(p.providerUserId, 'payment', 'Payout sent 🏦', `${Number(p.amount).toLocaleString()} was sent to ${p.bankName} ••${p.accountNumber.slice(-4)}.`, { email: true, whatsapp: true });
   }
   return upd;
 }
@@ -241,6 +241,7 @@ export async function adjust(providerUserId: string, amount: number, description
 export async function recordDirectSettlement(type: string, id: string, plan: SplitPlan, settled: Record<string, boolean>, gateway: string) {
   const label = type.replace('_', ' ').toLowerCase();
   for (const p of plan.payees) {
+    if (!p.userId) continue; // the partner NGO (donations) has no earnings ledger
     const base = { providerUserId: p.userId, sourceType: type, sourceId: id, gross: plan.gross, commissionRate: plan.commissionRate };
     if (settled[p.userId]) {
       await entry({ ...base, type: 'DIRECT_SETTLED', amount: 0, method: 'DIRECT', description: `${label} paid by card - ${p.amount.toLocaleString()} settled to your bank by ${gateway}` });
@@ -255,6 +256,7 @@ export async function recordDirectSettlement(type: string, id: string, plan: Spl
 /** Reverses earnings for a refunded direct card payment (recovered from future balances where already settled). */
 export async function clawbackDirect(type: string, id: string, plan: SplitPlan, reason: string) {
   for (const p of plan.payees) {
+    if (!p.userId) continue;
     await entry({ providerUserId: p.userId, type: 'REFUND_CLAWBACK', amount: -p.amount, method: 'DIRECT', sourceType: type, sourceId: id, description: `Refund to patient: ${reason}` });
   }
 }

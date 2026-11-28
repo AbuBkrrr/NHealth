@@ -85,3 +85,47 @@ export async function saveFinance(patch: any, adminId: string): Promise<FinanceS
   cache = null;
   return next;
 }
+
+/**
+ * The registered NGO that receives money donations (Admin → Donation campaigns → Donation partner).
+ * When enabled, every money donation is paid straight into the NGO's own account (card split or bank transfer):
+ * N-Health never holds donated money. The hospital on a campaign is shown as the beneficiary.
+ */
+export interface DonationPartner {
+  enabled: boolean;
+  name: string;
+  regNumber: string; // CAC incorporated trustees (IT) number
+  email: string;
+  website: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  paystackSubaccount: string; // ACCT_xxx, created in the Paystack dashboard for the NGO's account
+  flutterwaveSubaccount: string; // RS_xxx
+}
+const EMPTY_PARTNER: DonationPartner = { enabled: false, name: '', regNumber: '', email: '', website: '', bankName: '', accountNumber: '', accountName: '', paystackSubaccount: '', flutterwaveSubaccount: '' };
+let partnerCache: { at: number; v: DonationPartner } | null = null;
+
+export async function getDonationPartner(): Promise<DonationPartner> {
+  if (partnerCache && Date.now() - partnerCache.at < 30_000) return partnerCache.v;
+  const row = await prisma.platformSetting.findUnique({ where: { key: 'donation_partner' } }).catch(() => null);
+  const v = { ...EMPTY_PARTNER, ...((row?.value as Partial<DonationPartner>) || {}) };
+  partnerCache = { at: Date.now(), v };
+  return v;
+}
+
+export async function saveDonationPartner(patch: any, adminId: string): Promise<DonationPartner> {
+  const cur = await getDonationPartner();
+  const s = (k: keyof DonationPartner, max = 160) => (typeof patch?.[k] === 'string' ? String(patch[k]).trim().slice(0, max) : (cur[k] as string));
+  const next: DonationPartner = {
+    enabled: typeof patch?.enabled === 'boolean' ? patch.enabled : cur.enabled,
+    name: s('name'), regNumber: s('regNumber', 40), email: s('email'), website: s('website', 200), bankName: s('bankName', 80),
+    accountNumber: s('accountNumber', 20).replace(/\D/g, ''), accountName: s('accountName'), paystackSubaccount: s('paystackSubaccount', 40), flutterwaveSubaccount: s('flutterwaveSubaccount', 40),
+  };
+  if (next.enabled && (!next.name || !(next.accountNumber || next.paystackSubaccount || next.flutterwaveSubaccount))) {
+    throw Object.assign(new Error('Add the NGO\'s name and its bank account (or payment subaccount) before switching it on'), { status: 400 });
+  }
+  await prisma.platformSetting.upsert({ where: { key: 'donation_partner' }, create: { key: 'donation_partner', value: next as any, updatedById: adminId }, update: { value: next as any, updatedById: adminId } });
+  partnerCache = null;
+  return next;
+}

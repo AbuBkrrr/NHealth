@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { issueOtp, checkOtp } from '../services/otp';
 import { sendEmail } from '../services/email';
-import { sendSms } from '../services/sms';
+import { sendWhatsAppCode } from '../services/whatsapp';
 import { notify } from '../services/notify';
 import { invalidateUserState } from '../middleware/auth';
 import { rewardInviter } from '../services/coins';
@@ -379,7 +379,7 @@ export async function forgotPassword(req: Request, res: Response) {
     const code = await issueOtp(email, 'password_reset', user.id);
     await sendEmail(email, 'Reset your N-Health password', 'Password reset code',
       `Use this code to reset your password: <b style="font-size:20px;letter-spacing:3px">${code}</b><br>It expires in 10 minutes. If you didn't request this, you can ignore this email.`);
-    if (user.phone) await sendSms(user.phone, `Your N-Health password reset code is ${code}. Expires in 10 min. Never share it.`);
+    if (user.phone) await sendWhatsAppCode(user.phone, code);
   }
   return res.json({ message: 'If that email exists, a code has been sent.' });
 }
@@ -445,8 +445,11 @@ export async function sendVerifyPhone(req: Request, res: Response) {
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
   if (!user?.phone) throw ApiError.badRequest('Add a phone number to your profile first');
   const code = await issueOtp(user.phone, 'phone_verify', user.id);
-  await sendSms(user.phone, `Your N-Health verification code is ${code}. Expires in 10 min.`);
-  res.json({ message: 'Verification code sent by SMS' });
+  const sent = await sendWhatsAppCode(user.phone, code);
+  // Without WhatsApp set up (or when the number isn't on WhatsApp) the code goes to the account email instead.
+  if (!sent) await sendEmail(user.email, 'Your N-Health phone verification code', 'Phone verification code',
+    `Use this code to confirm your phone number: <b style="font-size:20px;letter-spacing:3px">${code}</b><br>It expires in 10 minutes.`);
+  res.json({ message: sent ? 'Verification code sent on WhatsApp' : 'Verification code sent to your email', channel: sent ? 'whatsapp' : 'email' });
 }
 
 export async function confirmVerifyPhone(req: Request, res: Response) {

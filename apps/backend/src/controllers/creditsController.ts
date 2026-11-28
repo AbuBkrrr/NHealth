@@ -37,6 +37,8 @@ export async function gateways(_req: Request, res: Response) {
 // Creates a pending log and a hosted checkout. Coins are only added after the gateway confirms.
 // ============================================================
 export async function initiatePurchase(req: Request, res: Response) {
+  // Selling coins is stored value (CBN). Coins are free rewards only unless a licensed partner is in place.
+  if (env.raw.COIN_TOPUP_ENABLED !== 'true') throw ApiError.forbidden('Coins can\'t be bought. Earn them by inviting friends, and pay for services by card or cash.');
   const userId = req.user!.userId;
   const amount = Number(req.body.amount);
   const gateway = String(req.body.gateway || '').toLowerCase() as Gateway;

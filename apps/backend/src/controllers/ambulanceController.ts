@@ -146,7 +146,7 @@ export async function acceptRequest(req: Request, res: Response) {
   const patient = await prisma.patientProfile.findUnique({ where: { id: request.patientId }, select: { userId: true } });
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('emergency:accepted', { ...updated, ambulance: { vehicleNumber: ambulance.vehicleNumber, phone: ambulance.phone, lat: ambulance.currentLat, lng: ambulance.currentLng } });
-    await notify(patient.userId, 'emergency', '🚑 Ambulance on the way', `Vehicle ${ambulance.vehicleNumber} accepted${updated?.etaMinutes ? ' - ETA ' + updated.etaMinutes + ' min' : ''}.`, { sms: true, data: { requestId: request.id } });
+    await notify(patient.userId, 'emergency', '🚑 Ambulance on the way', `Vehicle ${ambulance.vehicleNumber} accepted${updated?.etaMinutes ? ' - ETA ' + updated.etaMinutes + ' min' : ''}.`, { whatsapp: true, data: { requestId: request.id } });
   }
   // Tell every other ambulance dashboard this call is no longer up for grabs.
   req.app.get('io')?.to('role:AMBULANCE').emit('emergency:claimed', { id: request.id });

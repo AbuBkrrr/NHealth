@@ -141,6 +141,8 @@ r.post('/donations/campaigns', auth, sensitiveLimiter, h(don.createCampaign));
 r.get('/donations/campaigns/:id', auth, h(don.getCampaign));
 r.post('/donations/campaigns/:id/donate', auth, requireRole('PATIENT'), sensitiveLimiter, h(don.donate));
 r.get('/donations/campaigns/:id/pledges', auth, h(don.campaignPledges));
+r.get('/donations/campaigns/:id/transfers', auth, h(don.pendingTransfers));
+r.post('/donations/:donationId/received', auth, requireRole('INSTITUTION', 'ADMIN'), h(don.confirmTransfer));
 r.post('/donations/eligibility', auth, h(don.bloodEligibility));
 r.get('/donations/pledges', auth, h(don.myPledges));
 r.post('/donations/pledges', auth, h(don.createPledge));
@@ -153,6 +155,7 @@ r.get('/donations/centers', auth, h(don.listCenters));
 // Insurance catalogue
 r.get('/insurance/plans', auth, h(don.listInsurancePlans));
 r.post('/insurance/policies/:id/pay', auth, requireRole('PATIENT'), sensitiveLimiter, h(don.payPremium));
+r.post('/insurance/plans/:id/enrol', auth, requireRole('PATIENT'), sensitiveLimiter, h(don.requestEnrolment));
 
 // Institution management
 const I = [auth, requireRole('INSTITUTION')];
@@ -228,6 +231,10 @@ r.get('/privacy/access-log', auth, h(priv.myAccessLog));
 
 // Admin extensions
 const A = [auth, requireRole('ADMIN')];
+// Donation partner NGO (receives donations directly) and transfers waiting for confirmation
+r.get('/admin-ops/donation-partner', ...A, h(don.getPartner));
+r.put('/admin-ops/donation-partner', ...A, requireSuperAdmin, h(don.putPartner));
+r.get('/admin-ops/donations/pending', ...A, h(don.adminPendingDonations));
 r.get('/admin-ops/stats', ...A, h(adm.platformStats));
 r.get('/admin-ops/verifications', ...A, h(adm.verificationQueue));
 r.post('/admin-ops/verifications/:userId', ...A, h(adm.decideVerification));
@@ -277,6 +284,6 @@ r.get('/admin-ops/revenue', ...A, h(fin.revenue));
 // Integration health (live checks against each provider)
 r.get('/admin-ops/integrations', ...A, requireSuperAdmin, h(integ.integrationStatus));
 r.post('/admin-ops/integrations/test-email', ...A, requireSuperAdmin, h(integ.testEmail));
-r.post('/admin-ops/integrations/test-sms', ...A, requireSuperAdmin, h(integ.testSms));
+r.post('/admin-ops/integrations/test-whatsapp', ...A, requireSuperAdmin, h(integ.testWhatsApp));
 
 export default r;

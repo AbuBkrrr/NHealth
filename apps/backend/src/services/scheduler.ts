@@ -32,7 +32,7 @@ export async function runOnce(now = new Date()) {
   });
   for (const a of soon) {
     const when = a.scheduledAt.toISOString();
-    await notify(a.patient.userId, 'appointment', 'Appointment reminder', `You have an appointment with Dr. ${a.doctor.user.name} at ${when}.`, { email: true, sms: true, data: { appointmentId: a.id, at: when } });
+    await notify(a.patient.userId, 'appointment', 'Appointment reminder', `You have an appointment with Dr. ${a.doctor.user.name} at ${when}.`, { email: true, whatsapp: true, data: { appointmentId: a.id, at: when } });
     await notify(a.doctor.user.id, 'appointment', 'Upcoming appointment', `Appointment scheduled at ${when}.`, { data: { appointmentId: a.id } });
     await prisma.appointment.update({ where: { id: a.id }, data: { reminderSentAt: now } });
   }

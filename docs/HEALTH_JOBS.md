@@ -34,7 +34,7 @@ Verified providers recruit health workers; health workers find jobs and shifts.
 **After posting:**
 - **Alerts:** health workers who are open to work in that profession and state are alerted at once.
 - **Reviewing applicants:** each applicant shows their profession, experience, licence, ID and licence-verified badges, expected pay, availability, note and CV.
-- **Moving applicants along:** Shortlist, Invite to interview, Make offer, Hired or Not selected. Each step notifies the applicant, by SMS for interview, offer and hired.
+- **Moving applicants along:** Shortlist, Invite to interview, Make offer, Hired or Not selected. Each step notifies the applicant, on WhatsApp for interview, offer and hired.
 - **Contact details:** the applicant's phone and email appear once they are shortlisted.
 - **Filling and closing:** a job fills itself when enough people are hired. Closing it tells everyone still waiting.
 

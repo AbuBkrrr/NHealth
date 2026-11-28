@@ -14,9 +14,12 @@ export const coinValue = () => Number(state.config?.coinValue) || 10;
 export const toCoins = (amountNgn) => Number(amountNgn || 0) / coinValue();
 const fmtCoins = (c) => c.toLocaleString(undefined, { maximumFractionDigits: Math.abs(c) < 100 && c % 1 ? 1 : 0 });
 export const coinText = (amountNgn) => { const c = toCoins(amountNgn); return '🪙 ' + fmtCoins(c) + (Math.abs(c) === 1 ? ' coin' : ' coins'); };
-/** A price. Patients see coins; providers (paid in naira to their bank) see naira. naira:true forces naira (card/cash at the till). */
+/**
+ * A price, in naira. Coins are free rewards (never sold), so prices are always shown in money.
+ * (Only if coin sales are switched on through a licensed partner do patients see prices in coins.)
+ */
 export function money(amountNgn, { currency, convert = true, naira = false } = {}) {
-  if (!naira && (!state.user || state.user.role === 'PATIENT')) return coinText(amountNgn);
+  if (!naira && state.config?.coinSales && (!state.user || state.user.role === 'PATIENT')) return coinText(amountNgn);
   const cur = currency || state.user?.currency || 'NGN';
   const rate = convert && cur !== 'NGN' ? state.config?.rates?.[cur] : 1;
   const v = Number(amountNgn || 0) * (rate || 1);

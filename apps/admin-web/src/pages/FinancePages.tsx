@@ -114,7 +114,7 @@ export function IntegrationsPage() {
   const [to, setTo] = useState('');
   const [phone, setPhone] = useState('');
   const [msg, setMsg] = useState('');
-  const test = async (kind: 'email' | 'sms') => {
+  const test = async (kind: 'email' | 'whatsapp') => {
     setMsg('Sending…');
     try { const r = await api.post('/admin-ops/integrations/test-' + kind, kind === 'email' ? { to: to || undefined } : { to: phone }); setMsg(`Sent to ${r.data.to} ✓ - check that it arrived`); } catch (e) { setMsg(getErrorMessage(e)); }
   };
@@ -134,7 +134,7 @@ export function IntegrationsPage() {
       <div className="card">
         <h3>Send a test</h3>
         <div className="toolbar"><input placeholder="email (defaults to yours)" value={to} onChange={(e) => setTo(e.target.value)} /><button onClick={() => test('email')}>Test email (Resend)</button></div>
-        <div className="toolbar"><input placeholder="+2348012345678" value={phone} onChange={(e) => setPhone(e.target.value)} /><button onClick={() => test('sms')}>Test SMS (Termii)</button></div>
+        <div className="toolbar"><input placeholder="+2348012345678" value={phone} onChange={(e) => setPhone(e.target.value)} /><button onClick={() => test('whatsapp')}>Test WhatsApp</button></div>
         <div>{msg}</div>
       </div>
     </div>
