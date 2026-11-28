@@ -146,6 +146,68 @@ async function drawQuests(box, refresh) {
   };
 }
 
+/** Step 1-3: find the person, confirm their profile (like OPay), choose coins and send the offer. */
+function helpSomeone(done) {
+  formModal('💚 Help someone pay for care', [{ name: 'q', label: 'Their phone number, email, N-Health ID or user ID', required: true, placeholder: 'e.g. 0803 123 4567' }], {
+    submit: 'Find', onSubmit: async (v) => {
+      const u = await get('/coins/help/find?q=' + encodeURIComponent(v.q.trim()));
+      setTimeout(() => confirmRecipient(u, done), 50);
+    },
+  });
+}
+function confirmRecipient(u, done) {
+  const myCoins = Math.floor((state.balance || 0) / (state.config?.coinValue || 10));
+  modal(`<div class="modal-title">Is this the right person?</div>
+    <div class="center">${avatar('PATIENT', u.avatarUrl).replace('class="avatar', 'style="width:72px;height:72px;font-size:32px;margin:0 auto 8px" class="avatar')}
+      <div style="font-weight:700;font-size:17px">${esc(u.name)}</div>
+      <div class="small muted">N-Health ID ${esc(u.nhealthId || '')}</div>
+      <div class="small muted">${[u.phone && '📱 ' + esc(u.phone), u.email && '✉️ ' + esc(u.email)].filter(Boolean).join(' • ')}</div>
+      <div class="small muted">Member since ${dateOnly(u.memberSince)}</div>
+      <div class="mt8">${u.identityVerified ? '<span class="badge badge-verified">✓ Identity verified</span>' : ''} ${u.contactConfirmed ? '<span class="badge">Contact confirmed</span>' : '<span class="badge badge-warning">Contact not confirmed yet</span>'}</div></div>
+    <div class="form-group mt12"><label>Coins to offer (you have ${myCoins})</label><input type="number" id="hc" min="1" max="${myCoins}" inputmode="numeric" placeholder="e.g. 100"></div>
+    <div class="form-group"><label>Message (optional)</label><input id="hn" maxlength="140" placeholder="Get well soon"></div>
+    <p class="small muted">${esc(u.name.split(' ')[0])} can use your coins on one of their own bills within 7 days. Unused coins come back to you.</p>
+    <button class="btn btn-primary btn-block" id="hsend">Yes, send coins</button><button class="btn btn-outline btn-block mt8" data-close>Not this person</button>`, (box, close) => {
+    $('#hsend', box).onclick = (e) => busy(e.target, async () => {
+      const coins = Math.floor(Number($('#hc', box).value));
+      if (!(coins >= 1)) throw new Error('Enter how many coins to offer');
+      await post('/coins/help', { toUserId: u.id, coins, note: $('#hn', box).value || undefined });
+      await loadBalance();
+      close(); toast(`💚 ${coins} coins offered to ${u.name.split(' ')[0]}`); done?.();
+    });
+  });
+}
+/** Offers waiting for me (use on a bill / decline) and offers I sent (cancel while unused). */
+async function drawOffers(box, refresh) {
+  if (!box) return;
+  const list = await getFresh('/coins/help').catch(() => []);
+  if (!list.length) { box.innerHTML = ''; return; }
+  const label = { OFFERED: 'Waiting', USED: 'Used', DECLINED: 'Declined', CANCELLED: 'Cancelled', EXPIRED: 'Expired' };
+  box.innerHTML = '<div class="mt12">' + list.slice(0, 10).map((o) => {
+    const inbound = o.direction === 'RECEIVED';
+    const who = esc((inbound ? o.from?.name : o.to?.name) || '');
+    const actions = o.status !== 'OFFERED' ? '' : inbound
+      ? `<div class="row mt8"><button class="btn btn-success btn-sm grow" data-useo="${o.id}">Use on a bill</button><button class="btn btn-outline btn-sm grow" data-deco="${o.id}">Decline</button></div>`
+      : `<div class="row mt8"><button class="btn btn-outline btn-sm grow" data-cano="${o.id}">Cancel offer</button></div>`;
+    return item({ icon: inbound ? '🎁' : '💚', title: inbound ? `${who} offered you ${o.coins} coins` : `You offered ${who} ${o.coins} coins`, sub: (o.note ? '"' + esc(o.note) + '" • ' : '') + (o.status === 'USED' ? `${o.usedCoins} used` : label[o.status]) + ' • ' + ago(o.createdAt) }) + actions;
+  }).join('') + '</div>';
+  box.onclick = async (e) => {
+    const b = e.target.closest('[data-useo],[data-deco],[data-cano]'); if (!b) return;
+    if (b.dataset.deco) return busy(b, async () => { await post(`/coins/help/${b.dataset.deco}/decline`); toast('Offer declined - coins returned to the sender'); refresh(); });
+    if (b.dataset.cano) return busy(b, async () => { await post(`/coins/help/${b.dataset.cano}/cancel`); await loadBalance(); toast('Offer cancelled - coins are back'); refresh(); });
+    const id = b.dataset.useo;
+    const bills = await get(`/coins/help/${id}/bills`).catch(toastErr);
+    if (!bills) return;
+    modal(`<div class="modal-title">Use the coins on which bill?</div>` + (bills.length ? bills.map((x) => item({ icon: { APPOINTMENT: '📅', PHARMACY_ORDER: '💊', LAB_TEST: '🔬', NURSE_REQUEST: '🩺' }[x.payableType] || '🧾', title: esc(x.title), sub: money(x.total) + (x.note ? ' • ' + esc(x.note) : ''), attrs: `data-bt="${x.payableType}" data-bid="${x.payableId}" tabindex="0"` })).join('')
+      : empty('🧾', 'You have no unpaid bills yet. Book care or order medicines first, then come back to use the coins.')), (mb, close) => {
+      mb.onclick = (ev) => { const r = ev.target.closest('[data-bid]'); if (!r) return; busy(r, async () => {
+        const u = await post(`/coins/help/${id}/use`, { payableType: r.dataset.bt, payableId: r.dataset.bid });
+        close(); toast(u.paidInFull ? `✅ Bill paid with ${u.usedCoins} coins` : `✅ ${u.usedCoins} coins applied - pay ${money(u.remaining)} by card or cash`); refresh();
+      }); };
+    });
+  };
+}
+
 /** Coins are free rewards (like loyalty points): earned by inviting friends and in promotions, never bought or cashed out. */
 async function rewardsScreen(el) {
   const reward = state.config?.inviteRewardCoins || 1;
@@ -155,17 +217,20 @@ async function rewardsScreen(el) {
     ${card(cardHead('More ways to earn') + `
       ${item({ icon: '👥', title: `Invite friends: ${reward} coin${reward > 1 ? 's' : ''} each`, sub: 'When a friend joins with your link and confirms their email or phone', attrs: 'data-go="/patient/home"' })}
       ${item({ icon: '🎁', title: 'Promotions', sub: 'Watch your notifications for N-Health offers' })}`)}
+    ${card(cardHead('💚 Help someone pay for care') + '<p class="small muted">Offer some of your coins towards a family member\'s or friend\'s bill. They choose which of their bills to use them on; anything unused comes back to you. Coins never go into their balance.</p><button class="btn btn-primary btn-block btn-sm" id="helpbtn">Help someone</button><div id="offers"></div>')}
     ${card(cardHead('🏪 Pay at a pharmacy counter') + '<p class="small muted">Show the pharmacist a one-time code to pay with your coins (over-the-counter items only). Nobody can use your coins without it.</p><button class="btn btn-outline btn-block btn-sm" id="poscode">Show my code</button>')}
     ${state.config?.donationPartner ? card(cardHead('💚 Donate your coins') + `<p class="small muted">Give coins to ${esc(state.config.donationPartner.name)}, our registered NGO partner. N-Health turns them into a real donation from its own funds.</p><button class="btn btn-success btn-block btn-sm" id="givecoins">Donate coins</button>`) : ''}
     ${card(cardHead('How coins work') + `<div class="small muted" style="line-height:1.6">
       • When you pay for a booking, order or test, use your coins for all of it or part of it, and pay the rest by card or cash.<br>
       • At pharmacies, coins pay the delivery fee and over-the-counter items (not prescription-only medicines).<br>
-      • Coins are a free reward from N-Health. They can't be bought, sold, sent to someone else or exchanged for cash.<br>
+      • Coins are a free reward from N-Health. They can't be bought, sold, moved into someone else's balance or exchanged for cash. You can offer them towards a family member's or friend's bill.<br>
       • Using or donating coins is final. Coins don't expire, but N-Health may change the programme with notice.<br>
       • You pay for care by card (the money goes straight to the provider) or in cash at the service.</div>`)}
     <div id="history">${skeleton(3)}</div>`;
   const b = await loadBalance(); $('#bal', el).textContent = '🪙 ' + coins(b);
   drawQuests($('#quests', el), () => rewardsScreen(el));
+  drawOffers($('#offers', el), () => rewardsScreen(el));
+  $('#helpbtn', el)?.addEventListener('click', () => helpSomeone(() => rewardsScreen(el)));
   $('#poscode', el)?.addEventListener('click', (e) => busy(e.target, async () => {
     const r = await post('/coins/pos-code');
     modal(`<div class="modal-title">🏪 Your counter code</div><div class="center" style="font-size:40px;font-weight:700;letter-spacing:8px;margin:12px 0">${esc(r.code)}</div><p class="small muted center">Tell the pharmacist this code and your N-Health email. It works once, for ${r.expiresInMinutes} minutes. Only share it at the counter.</p>`);

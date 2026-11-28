@@ -208,7 +208,10 @@ const mail = (r) => `${r}.${S}@test.io`;
   const rx = (await j('/patient/prescriptions', null, patient.token)).data[0];
   await must('Rx-only drug blocked without prescription', j('/patient/orders', { pharmacyId: para.pharmacyId, items: [{ inventoryId: amox.id, name: 'x', qty: 1, price: 1 }] }, patient.token), (r) => r.status === 400);
   const order = await must('order with prescription (server prices)', j('/patient/orders', { pharmacyId: para.pharmacyId, prescriptionId: rx.id, deliveryMethod: 'DELIVERY', deliveryAddress: '5 Allen Ave', items: [{ inventoryId: amox.id, name: 'x', qty: 2, price: 1 }, { inventoryId: para.id, name: 'x', qty: 1, price: 1 }] }, patient.token), (r) => r.status === 201 && Number(r.data.total) === 5500);
-  await must('pay order with coins', j('/payments', { payableType: 'PHARMACY_ORDER', payableId: order.id, method: 'WALLET' }, patient.token), (r) => r.status === 201);
+  // Coins never pay prescription-only medicines (only delivery and over-the-counter items): pay this order in cash.
+  await must('coins refused for prescription-only medicines', j('/payments', { payableType: 'PHARMACY_ORDER', payableId: order.id, method: 'WALLET' }, patient.token), (r) => r.status === 400);
+  const orderCash = await must('pay prescription order in cash', j('/payments', { payableType: 'PHARMACY_ORDER', payableId: order.id, method: 'CASH' }, patient.token), (r) => r.status === 201);
+  await must('pharmacy confirms the cash', j(`/payments/${orderCash.id}/confirm`, {}, pharm.token));
   for (const st of ['READY', 'OUT_FOR_DELIVERY', 'DELIVERED']) await must('pharmacy order → ' + st, j(`/pharmacy/orders/${order.id}/status`, { status: st }, pharm.token));
   await must('invoice PDF', j(`/patient/orders/${order.id}/invoice.pdf`, null, patient.token).catch(() => ({ status: 200 })));
 

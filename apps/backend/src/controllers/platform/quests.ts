@@ -61,3 +61,40 @@ export async function posCode(req: Request, res: Response) {
   const { issueOtp } = await import('../../services/otp');
   res.status(201).json({ code: await issueOtp(u.email, 'pos_pay', uid(req)), expiresInMinutes: 10 });
 }
+
+// ---- Help someone pay for care with your coins (coins never enter their balance) ----
+/** GET /api/coins/help/find?q= - find a member by phone, email, N-Health ID or user ID and show a profile to confirm. */
+export async function helpFind(req: Request, res: Response) {
+  const { findRecipient } = await import('../../services/coinGifts');
+  res.json(await findRecipient(uid(req), String(req.query.q || '')));
+}
+/** POST /api/coins/help { toUserId, coins, note } */
+export async function helpOffer(req: Request, res: Response) {
+  const { offerCoins } = await import('../../services/coinGifts');
+  res.status(201).json(await offerCoins(uid(req), String(req.body?.toUserId || ''), Number(req.body?.coins), req.body?.note));
+}
+/** GET /api/coins/help - offers I sent and offers waiting for me */
+export async function helpList(req: Request, res: Response) {
+  const { myOffers } = await import('../../services/coinGifts');
+  res.json(await myOffers(uid(req)));
+}
+/** GET /api/coins/help/:id/bills - my unpaid bills an offer can pay towards */
+export async function helpBills(req: Request, res: Response) {
+  const { billsForOffer } = await import('../../services/coinGifts');
+  const s = await prisma.coinSponsorship.findUnique({ where: { id: req.params.id } });
+  if (!s || s.toUserId !== uid(req)) throw ApiError.notFound('Offer not found');
+  res.json(await billsForOffer(uid(req)));
+}
+/** POST /api/coins/help/:id/use { payableType, payableId } */
+export async function helpUse(req: Request, res: Response) {
+  const { useOffer } = await import('../../services/coinGifts');
+  res.json(await useOffer(uid(req), req.params.id, String(req.body?.payableType || ''), String(req.body?.payableId || '')));
+}
+export async function helpDecline(req: Request, res: Response) {
+  const { declineOffer } = await import('../../services/coinGifts');
+  await declineOffer(uid(req), req.params.id); res.json({ ok: true });
+}
+export async function helpCancel(req: Request, res: Response) {
+  const { cancelOffer } = await import('../../services/coinGifts');
+  await cancelOffer(uid(req), req.params.id); res.json({ ok: true });
+}

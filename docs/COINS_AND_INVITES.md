@@ -9,7 +9,19 @@
 - **Coins are never sold.**
   - Buying coins is switched off (`COIN_TOPUP_ENABLED=false`), so the top-up screen is gone and the API refuses top-ups.
   - Selling coins for naira and letting people pay providers with them would be stored value, which needs a CBN licence or a licensed partner. See [COMPLIANCE_MODEL.md](COMPLIANCE_MODEL.md).
-- **Coins can't be withdrawn, transferred to another person or exchanged for cash.** The terms of service say so, and the app enforces it.
+- **Coins can't be withdrawn, moved into another person's balance or exchanged for cash.** The terms of service say so, and the app enforces it.
+- **Helping someone pay for care** (My coins → Help someone), the licence-free alternative to transfers:
+  1. The sender finds a member by phone, email, N-Health ID or user ID.
+  2. They confirm the profile (name, photo, masked phone and email, member since, verified badges), choose coins and send.
+  3. The coins leave the sender's balance but **never enter the recipient's balance**. The recipient applies the offer to one of **their own unpaid bills**, and the provider is paid for that part by N-Health, as with any coin payment.
+  4. Unused, declined, cancelled or expired (7 days) coins go back to the sender. If the bill is later cancelled, the coins go back to the sender, never to the recipient.
+
+  Limits:
+  - up to 500 coins offered per person per day;
+  - recipients must have confirmed their email or phone;
+  - the pharmacy rule applies (delivery and over-the-counter items only).
+
+  Person-to-person transfers into another person's balance would make coins transferable stored value, which needs a CBN licence. This design avoids that.
 - **Using coins:** for a booking, pharmacy order, test or home-care visit:
   - **All of the bill:** choose **Pay it all with my coins** if they have enough.
   - **Part of the bill:** tick **Use some of my coins and pay the rest**, choose how many, then pay what's left by card or cash. The bill, the booking card and the cash amount the provider collects all show the coins taken off.

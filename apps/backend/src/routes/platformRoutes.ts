@@ -58,6 +58,14 @@ r.get('/quests', auth, h(quest.board));
 r.post('/quests/:key/claim', auth, sensitiveLimiter, h(quest.claim));
 r.post('/coins/donate', auth, sensitiveLimiter, h(quest.donateCoins));
 r.post('/coins/pos-code', auth, requireRole('PATIENT'), sensitiveLimiter, h(quest.posCode));
+// Help someone pay for care with your coins (never a transfer to their balance)
+r.get('/coins/help/find', auth, sensitiveLimiter, h(quest.helpFind));
+r.get('/coins/help', auth, h(quest.helpList));
+r.post('/coins/help', auth, sensitiveLimiter, h(quest.helpOffer));
+r.get('/coins/help/:id/bills', auth, h(quest.helpBills));
+r.post('/coins/help/:id/use', auth, sensitiveLimiter, h(quest.helpUse));
+r.post('/coins/help/:id/decline', auth, h(quest.helpDecline));
+r.post('/coins/help/:id/cancel', auth, h(quest.helpCancel));
 r.get('/medicines/search', auth, h(fac.searchMedicines));
 
 // Unified provider profile

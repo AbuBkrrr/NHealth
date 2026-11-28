@@ -903,3 +903,61 @@ describe('pharmacy delivery fee and coins (no regulatory issue)', () => {
     expect((await sell(otc.body.id, { patientCode: code })).status).toBe(201); // the code wasn't used up by the refused sale
   });
 });
+
+describe('help someone pay for care with your coins (no transfer between balances)', () => {
+  it('finds and confirms the recipient, applies the offer to their own bill, never credits their balance, and returns unused coins', async () => {
+    const { grantRewardCoins } = await import('../src/services/coins');
+    const sender = await register('PATIENT');
+    const friend = await register('PATIENT');
+    await grantRewardCoins(sender.user.id, 400, 'TEST-HELP-' + uniq(), 'test coins');
+    const bal = async (t: string) => Number((await request(app).get('/api/credits/balance').set(auth(t))).body.balance) / 10;
+    const friendPhone = '080' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
+    await prisma.user.update({ where: { id: friend.user.id }, data: { phone: friendPhone } });
+    // Find by phone (any format), email or N-Health ID; the profile is masked for confirmation
+    const byPhone = await request(app).get('/api/coins/help/find?q=' + encodeURIComponent('+234' + friendPhone.slice(1))).set(auth(sender.token));
+    expect(byPhone.status).toBe(200);
+    expect(byPhone.body).toMatchObject({ id: friend.user.id, name: 'PATIENT Tester' });
+    expect(byPhone.body.phone).toContain('•••');
+    expect(byPhone.body.email).not.toContain(friend.email.split('@')[0]);
+    expect((await request(app).get('/api/coins/help/find?q=' + friend.email).set(auth(sender.token))).body.id).toBe(friend.user.id);
+    expect((await request(app).get('/api/coins/help/find?q=' + sender.email).set(auth(sender.token))).status).toBe(400); // yourself
+    // The recipient must have confirmed their email or phone
+    expect((await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 100 })).status).toBe(400);
+    await prisma.user.update({ where: { id: friend.user.id }, data: { emailVerifiedAt: new Date() } });
+    expect((await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 999 })).status).toBe(400); // more than they have
+    const offer = await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 300, note: 'Get well' });
+    expect(offer.status).toBe(201);
+    expect(await bal(sender.token)).toBe(100);
+    expect(await bal(friend.token)).toBe(0); // nothing lands in the friend's balance
+    // The friend applies it to their own pharmacy order (delivery + OTC = 2,500, so 250 coins used, 50 returned)
+    const ph = await register('PHARMACY', { pharmacyName: 'Help Pharm ' + uniq(), licenseNumber: 'PCN-H' + uniq() });
+    await request(app).patch('/api/provider-profile').set(auth(ph.token)).send({ homeDelivery: true, deliveryFee: 1500 });
+    const otc = await request(app).post('/api/pharmacy/inventory').set(auth(ph.token)).send({ name: 'ORS', stock: 10, price: 500 });
+    const pid = (await prisma.pharmacyProfile.findUnique({ where: { userId: ph.user.id } }))!.id;
+    const order = await request(app).post('/api/patient/orders').set(auth(friend.token)).send({ pharmacyId: pid, deliveryMethod: 'DELIVERY', deliveryAddress: 'Kano', items: [{ inventoryId: otc.body.id, name: 'x', qty: 2, price: 1 }] });
+    const bills = await request(app).get(`/api/coins/help/${offer.body.id}/bills`).set(auth(friend.token));
+    expect(bills.body.some((b: any) => b.payableId === order.body.id)).toBe(true);
+    expect((await request(app).get(`/api/coins/help/${offer.body.id}/bills`).set(auth(sender.token))).status).toBe(404); // only the recipient
+    const used = await request(app).post(`/api/coins/help/${offer.body.id}/use`).set(auth(friend.token)).send({ payableType: 'PHARMACY_ORDER', payableId: order.body.id });
+    expect(used.body).toMatchObject({ usedCoins: 250, paidInFull: true, remaining: 0 });
+    expect(await bal(sender.token)).toBe(150); // 50 unused coins came back
+    expect(await bal(friend.token)).toBe(0);
+    expect((await prisma.pharmacyOrder.findUnique({ where: { id: order.body.id } }))!.paymentStatus).toBe('PAID');
+    expect((await request(app).post(`/api/coins/help/${offer.body.id}/use`).set(auth(friend.token)).send({ payableType: 'PHARMACY_ORDER', payableId: order.body.id })).status).toBe(409);
+    // Pharmacy declines the order: coins go back to the SENDER, never to the friend
+    await request(app).post(`/api/pharmacy/orders/${order.body.id}/status`).set(auth(ph.token)).send({ status: 'CANCELLED', reason: 'Out of stock' });
+    expect(await bal(sender.token)).toBe(400);
+    expect(await bal(friend.token)).toBe(0);
+    // Decline and cancel return coins to the sender too
+    const o2 = await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 100 });
+    expect((await request(app).post(`/api/coins/help/${o2.body.id}/decline`).set(auth(friend.token))).status).toBe(200);
+    const o3 = await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 50 });
+    expect((await request(app).post(`/api/coins/help/${o3.body.id}/cancel`).set(auth(sender.token))).status).toBe(200);
+    expect(await bal(sender.token)).toBe(400);
+    const list = await request(app).get('/api/coins/help').set(auth(friend.token));
+    expect(list.body.map((x: any) => x.status).sort()).toEqual(['CANCELLED', 'DECLINED', 'USED']);
+    // Daily limit
+    await grantRewardCoins(sender.user.id, 1000, 'TEST-HELP2-' + uniq(), 'more');
+    expect((await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 400 })).status).toBe(400);
+  });
+});
