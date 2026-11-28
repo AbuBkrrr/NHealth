@@ -866,3 +866,40 @@ describe('reward coins on part of a bill', () => {
     expect((await balanceOf(doc.user.id)).balance).toBeCloseTo(Number(appt.fee) * (1 - rate / 100), 2);
   });
 });
+
+describe('pharmacy delivery fee and coins (no regulatory issue)', () => {
+  it('adds the delivery fee, lets coins pay delivery and over-the-counter items but not prescription-only medicines, and needs the patient\'s code at the counter', async () => {
+    const ph = await register('PHARMACY', { pharmacyName: 'Del Pharm ' + uniq(), licenseNumber: 'PCN-D' + uniq() });
+    await request(app).patch('/api/provider-profile').set(auth(ph.token)).send({ homeDelivery: true, deliveryFee: 1500 });
+    const pat = await register('PATIENT');
+    const { grantRewardCoins } = await import('../src/services/coins');
+    await grantRewardCoins(pat.user.id, 1000, 'TEST-DEL-' + uniq(), 'test coins');
+    const otc = await request(app).post('/api/pharmacy/inventory').set(auth(ph.token)).send({ name: 'Paracetamol', stock: 20, price: 500 });
+    const pom = await request(app).post('/api/pharmacy/inventory').set(auth(ph.token)).send({ name: 'Amoxicillin', stock: 20, price: 3000, requiresPrescription: true });
+    const pid = (await prisma.pharmacyProfile.findUnique({ where: { userId: ph.user.id } }))!.id;
+    // Delivery order: fee added to the total; pickup: no fee
+    const del = await request(app).post('/api/patient/orders').set(auth(pat.token)).send({ pharmacyId: pid, deliveryMethod: 'DELIVERY', deliveryAddress: '5 Allen Ave', items: [{ inventoryId: otc.body.id, name: 'x', qty: 2, price: 1 }] });
+    expect(Number(del.body.total)).toBe(2500);
+    expect(Number(del.body.deliveryFee)).toBe(1500);
+    const pick = await request(app).post('/api/patient/orders').set(auth(pat.token)).send({ pharmacyId: pid, items: [{ inventoryId: otc.body.id, name: 'x', qty: 1, price: 1 }] });
+    expect(Number(pick.body.total)).toBe(500);
+    // Over-the-counter order with delivery: coins may pay all of it
+    expect((await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: del.body.id, method: 'WALLET' })).status).toBe(201);
+    // Order with a prescription-only medicine (prescription checked) + delivery: coins only for delivery + OTC
+    const pp = await prisma.patientProfile.findUnique({ where: { userId: pat.user.id } });
+    const mixed = await prisma.pharmacyOrder.create({ data: { patientId: pp!.id, pharmacyId: pid, items: [{ inventoryId: otc.body.id, name: 'Paracetamol', qty: 1, price: 500 }, { inventoryId: pom.body.id, name: 'Amoxicillin', qty: 1, price: 3000 }], total: 5000, deliveryFee: 1500, deliveryMethod: 'DELIVERY' } });
+    const bill = await request(app).get(`/api/coins/bill?payableType=PHARMACY_ORDER&payableId=${mixed.id}`).set(auth(pat.token));
+    expect(bill.body).toMatchObject({ total: 5000, maxCoins: 200, coinNote: expect.stringMatching(/prescription/) });
+    expect((await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: mixed.id, method: 'WALLET' })).status).toBe(400);
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: mixed.id, coins: 201 })).status).toBe(400);
+    const part = await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: mixed.id, coins: 150 }); // the delivery fee
+    expect(part.body).toMatchObject({ amount: 1500, remaining: 3500 });
+    // Pharmacy counter: coins need the patient's one-time code, and never pay prescription-only medicines
+    const sell = (inventoryId: string, extra: any) => request(app).post('/api/pharmacy-ops/pos/checkout').set(auth(ph.token)).send({ items: [{ inventoryId, qty: 1 }], paymentMethod: 'CREDITS', patientEmail: pat.email, ...extra });
+    expect((await sell(otc.body.id, {})).status).toBe(400);
+    expect((await sell(otc.body.id, { patientCode: '123456' })).status).toBe(400);
+    const code = (await request(app).post('/api/coins/pos-code').set(auth(pat.token))).body.code;
+    expect((await sell(pom.body.id, { patientCode: code, prescriptionChecked: true })).status).toBe(400);
+    expect((await sell(otc.body.id, { patientCode: code })).status).toBe(201); // the code wasn't used up by the refused sale
+  });
+});

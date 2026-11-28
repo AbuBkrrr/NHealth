@@ -99,6 +99,13 @@ export async function posCheckout(req: Request, res: Response) {
   const method = ['CASH', 'CARD', 'TRANSFER', 'CREDITS'].includes(req.body.paymentMethod) ? req.body.paymentMethod : 'CASH';
   const patient = req.body.patientEmail ? await prisma.user.findUnique({ where: { email: String(req.body.patientEmail).toLowerCase() } }) : null;
   if (method === 'CREDITS' && !patient) throw ApiError.badRequest('Enter the patient\'s N-Health email to charge coins');
+  if (method === 'CREDITS') {
+    // The patient approves with the one-time code from their app (My coins → Pay at a pharmacy counter).
+    const rxItems = await prisma.inventory.count({ where: { id: { in: items.map((i: any) => String(i.inventoryId)) }, requiresPrescription: true } });
+    if (rxItems) throw ApiError.badRequest('Prescription-only medicines can\'t be paid with coins. Take cash, card or transfer for them.');
+    const { checkOtp } = await import('../../services/otp');
+    if (!(await checkOtp(patient!.email, 'pos_pay', String(req.body.patientCode || ''), true))) throw ApiError.badRequest('Ask the patient for the 6-digit code in their N-Health app (My coins → Pay at a pharmacy counter)');
+  }
   const receiptNo = 'RCP-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
   const sale = await prisma.$transaction(async (tx) => {
     const lines: any[] = [];

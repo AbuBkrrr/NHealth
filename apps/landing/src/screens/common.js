@@ -28,15 +28,17 @@ export function payModal({ payableType, payableId, amount, title = 'Complete pay
       const cash = state.config?.cashEnabled && coinable;
       const card = coinable && (state.config?.gateways || []).some((g) => g === 'paystack' || g === 'flutterwave');
       // Coins for part of the bill: at most what they have, leaving at least ₦1 to pay by card or cash.
-      const maxPart = Math.min(myCoins, Math.ceil(owed / cv) - 1);
+      const capCoins = bill?.maxCoins ?? Infinity; // pharmacy orders: delivery fee + over-the-counter items only
+      const maxPart = Math.min(myCoins, capCoins, Math.ceil(owed / cv) - 1);
       const canPart = coinable && !applied && maxPart >= 1 && (card || cash);
-      const canAll = myCoins * cv >= owed && owed > 0;
+      const canAll = myCoins * cv >= owed && owed > 0 && capCoins * cv >= total;
       const naira = (n) => money(n, { naira: true, convert: false });
       modal(`<div class="modal-title">💳 ${esc(title)}</div>
         <div class="booking-summary"><div class="total">Bill: ${naira(total)}</div>
           ${applied ? `<div class="small mt8">🪙 ${bill.appliedCoins} coins applied (−${naira(applied)}) <button class="link" id="unapply">Remove</button></div>` : ''}
           <div class="small" id="topay" style="font-weight:600;margin-top:4px">${applied ? 'Left to pay: ' + naira(owed) : ''}</div></div>
         ${canPart ? `<label class="check mt12"><input type="checkbox" id="usepart"> <span>Use some of my coins (you have ${myCoins}) and pay the rest</span></label>
+          ${bill?.coinNote ? `<div class="small muted">${esc(bill.coinNote)}.</div>` : ''}
           <div class="row mt8 hidden" id="partbox"><input type="number" id="partn" min="1" max="${maxPart}" value="${maxPart}" inputmode="numeric" style="max-width:110px"> <span class="small muted">coins (up to ${maxPart})</span></div>` : ''}
         <div class="payment-methods mt12" id="pm"></div>
         <button class="btn btn-primary btn-block mt12" id="paynow">Continue</button>

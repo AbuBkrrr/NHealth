@@ -249,14 +249,14 @@ export async function pharmacyPos(el) {
       <div class="receipt-item"><span>Subtotal</span><span>${money(sub)}</span></div><div class="receipt-item"><span>Tax (${taxPct}%)</span><span>${money(tax)}</span></div><div class="receipt-total"><span>Total</span><span>${money(sub + tax)}</span></div>
       <div class="form-row mt8"><div class="form-group"><label>Customer</label><input id="cn" placeholder="Walk-in"></div><div class="form-group"><label>Phone</label><input id="cp" type="tel"></div></div>
       <div class="form-group"><label>Payment</label><select id="pm"><option value="CASH">💵 Cash</option><option value="CARD">💳 Card (terminal)</option><option value="TRANSFER">🏦 Transfer</option><option value="CREDITS">🪙 Patient's N-Health coins</option></select></div>
-      <div class="form-group hidden" id="pe"><input id="email" type="email" placeholder="Patient's N-Health email"></div>
+      <div class="form-group hidden" id="pe"><input id="email" type="email" placeholder="Patient's N-Health email"><input id="pcode" class="mt8" inputmode="numeric" maxlength="6" placeholder="Code from the patient's app (My coins → Pay at a pharmacy counter)"><div class="small muted mt8">Coins can't pay for prescription-only medicines.</div></div>
       ${pom ? '<label class="check"><input type="checkbox" id="rxok"> <span>I have checked a valid prescription for the POM items</span></label>' : ''}
       <button class="btn btn-pharmacy btn-block" id="co">Checkout & Deduct Stock</button>` : empty('🧾', 'Search a product to start a sale')));
     $('#clr', el)?.addEventListener('click', () => { cart.clear(); drawCart(); });
     $('#pm', el)?.addEventListener('change', (e) => $('#pe', el).classList.toggle('hidden', e.target.value !== 'CREDITS'));
     $('#co', el)?.addEventListener('click', (e) => busy(e.target, async () => {
       if (pom && !$('#rxok', el).checked) throw new Error('Confirm the prescription for POM items');
-      const sale = await post('/pharmacy-ops/pos/checkout', { items: lines.map((l) => ({ inventoryId: l.i.id, qty: l.qty })), paymentMethod: $('#pm', el).value, customerName: $('#cn', el).value || undefined, customerPhone: $('#cp', el).value || undefined, patientEmail: $('#email', el)?.value || undefined, prescriptionChecked: pom ? true : undefined });
+      const sale = await post('/pharmacy-ops/pos/checkout', { items: lines.map((l) => ({ inventoryId: l.i.id, qty: l.qty })), paymentMethod: $('#pm', el).value, customerName: $('#cn', el).value || undefined, customerPhone: $('#cp', el).value || undefined, patientEmail: $('#email', el)?.value || undefined, patientCode: $('#pcode', el)?.value || undefined, prescriptionChecked: pom ? true : undefined });
       lines.forEach((l) => { l.i.stock -= l.qty; });
       cart.clear(); drawCart();
       modal(`<div class="modal-title">🧾 Receipt ${esc(sale.receiptNo)}</div>${(sale.items || []).map((x) => `<div class="receipt-item"><span>${esc(x.name)} × ${x.qty}</span><span>${money(x.qty * x.price)}</span></div>`).join('')}<div class="receipt-item"><span>Tax</span><span>${money(sale.tax)}</span></div><div class="receipt-total"><span>Total</span><span>${money(sale.total)}</span></div><div class="muted small center mt8">${dt(sale.createdAt)} • ${esc(sale.paymentMethod)}</div><button class="btn btn-outline btn-block mt8" onclick="window.print()">🖨️ Print</button>`);

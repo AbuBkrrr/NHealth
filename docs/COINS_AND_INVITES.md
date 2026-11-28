@@ -14,6 +14,8 @@
   - **All of the bill:** choose **Pay it all with my coins** if they have enough.
   - **Part of the bill:** tick **Use some of my coins and pay the rest**, choose how many, then pay what's left by card or cash. The bill, the booking card and the cash amount the provider collects all show the coins taken off.
   - Coins on part of a bill can be **removed** before paying, and are **returned** if the bill is cancelled.
+  - **Pharmacy orders:** coins can pay the **delivery fee** (set by each pharmacy in its practice details) and **over-the-counter items**, but not **prescription-only medicines**. Nigerian rules restrict inducements to buy prescription medicines, so the app limits the coins it accepts, says why, and asks the patient to pay the rest by card or cash.
+  - **At the pharmacy counter:** the patient taps **My coins → Pay at a pharmacy counter** and gives the pharmacist a one-time code (valid 10 minutes). Without the code nobody can spend their coins. Prescription-only items can't be paid with coins at the counter either.
   - Coins can't be used for donations or insurance premiums, or with escrow.
 - **Who pays for used coins:** N-Health. The provider still earns their full share, so reward coins are a marketing cost.
   - Card: the gateway settles the provider's share of what the patient paid straight to their bank, and N-Health credits the coin part to their earnings balance. N-Health's commission and booking fee are unchanged.

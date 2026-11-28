@@ -61,6 +61,10 @@ export async function payWithCoins(userId: string, payableType: Payable, payable
   // Coins already applied to part of this bill count towards it.
   const amount = Math.round((r.amount - (await coinCredit(payableType, payableId))) * 100) / 100;
   if (amount <= 0) throw ApiError.badRequest('Nothing to pay for this item');
+  // Pharmacy orders with prescription-only medicines can't be paid entirely with coins.
+  const { coinCap } = await import('./coinParts');
+  const lim = await coinCap(payableType, payableId, r.amount);
+  if (lim.cap < r.amount) throw ApiError.badRequest(`${lim.note}. Use some coins and pay the rest by card or cash.`);
   await getOrCreateLedger(userId);
   const reference = ref();
   const ledger = await prisma.creditLedger.findUnique({ where: { userId } });

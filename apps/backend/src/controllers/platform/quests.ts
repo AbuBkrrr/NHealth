@@ -53,3 +53,11 @@ export async function coinDonationReport(_req: Request, res: Response) {
 /** GET/PUT /api/admin-ops/quests - coins per quest, daily cap, on/off. */
 export async function getSettings(_req: Request, res: Response) { res.json({ ...(await getQuestSettings()), quests: QUESTS, coinValue: COIN_VALUE_NGN }); }
 export async function putSettings(req: Request, res: Response) { res.json(await saveQuestSettings(req.body || {}, uid(req))); }
+
+/** POST /api/coins/pos-code - a one-time code the patient shows at a pharmacy counter to approve paying with coins. */
+export async function posCode(req: Request, res: Response) {
+  const u = await prisma.user.findUnique({ where: { id: uid(req) }, select: { email: true } });
+  if (!u) throw ApiError.notFound('Account not found');
+  const { issueOtp } = await import('../../services/otp');
+  res.status(201).json({ code: await issueOtp(u.email, 'pos_pay', uid(req)), expiresInMinutes: 10 });
+}

@@ -10,6 +10,7 @@ router.use(requireAuth);
 router.get('/doctors', asyncHandler(provider.listDoctors));
 router.get('/pharmacies', asyncHandler(provider.listPharmacies));
 router.get('/pharmacies/:pharmacyId/inventory', asyncHandler(provider.pharmacyInventory));
+router.get('/pharmacies/:pharmacyId/info', asyncHandler(provider.pharmacyInfo));
 router.get('/labs', asyncHandler(provider.listLabs));
 router.get('/ambulances', asyncHandler(provider.listAvailableAmbulances));
 router.get('/nurses', asyncHandler(provider.listAvailableNurses));

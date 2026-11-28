@@ -315,6 +315,7 @@ model PharmacyProfile {
   rating       Float   @default(0)
   reviewCount  Int     @default(0)
   homeDelivery Boolean @default(false)
+  deliveryFee  Decimal @default(0) // charged on delivery orders; patients may pay it with reward coins
 
   stockIntakes        StockIntake[]
   stockAudits         StockAudit[]
@@ -506,6 +507,7 @@ model PharmacyOrder {
   currency        String  @default("NGN")
   deliveryMethod  String  @default("PICKUP")
   deliveryAddress String?
+  deliveryFee     Decimal @default(0) // included in total
   declineReason   String?
 
   @@index([patientId])

@@ -11,6 +11,22 @@ import { getOrCreateLedger, spendCredits, refundCredits } from './creditsService
 
 export const COIN_PAYABLES = ['APPOINTMENT', 'PHARMACY_ORDER', 'LAB_TEST', 'NURSE_REQUEST'];
 
+/**
+ * The most of a bill reward coins may pay. Pharmacy orders: only the delivery fee and over-the-counter items, never
+ * prescription-only medicines (Nigerian rules restrict inducements to buy prescription medicines). Other bills: all of it.
+ */
+export async function coinCap(payableType: string, payableId: string, billTotal: number): Promise<{ cap: number; note?: string }> {
+  if (payableType !== 'PHARMACY_ORDER') return { cap: billTotal };
+  const o = await prisma.pharmacyOrder.findUnique({ where: { id: payableId } });
+  if (!o) return { cap: 0 };
+  const lines = (o.items as any[]) || [];
+  const inv = await prisma.inventory.findMany({ where: { id: { in: lines.map((l) => l.inventoryId) } }, select: { id: true, requiresPrescription: true } });
+  const rx = new Set(inv.filter((i) => i.requiresPrescription).map((i) => i.id));
+  const otc = lines.filter((l) => !rx.has(l.inventoryId)).reduce((s, l) => s + Number(l.qty) * Number(l.price), 0);
+  const cap = Math.min(billTotal, Math.round((otc + Number(o.deliveryFee || 0)) * 100) / 100);
+  return { cap, note: rx.size ? 'Coins can pay the delivery fee and over-the-counter items, not prescription-only medicines' : undefined };
+}
+
 /** Naira value of the coins applied to a bill (0 if none). */
 export async function coinCredit(payableType: string, payableId: string): Promise<number> {
   const r = await prisma.coinRedemption.findUnique({ where: { payableType_payableId: { payableType, payableId } } });
@@ -34,6 +50,8 @@ export async function applyCoins(userId: string, payableType: string, payableId:
   if (await getRedemption(payableType, payableId)) throw ApiError.conflict('Coins are already applied to this bill');
   const amount = coins * COIN_VALUE_NGN;
   if (amount >= billTotal) throw ApiError.badRequest('That covers the whole bill: choose "Use my reward coins" to pay it all with coins');
+  const { cap, note } = await coinCap(payableType, payableId, billTotal);
+  if (amount > cap) throw ApiError.badRequest(`${note || 'Too many coins for this bill'} - up to ${Math.floor(cap / COIN_VALUE_NGN)} coins here`);
   await getOrCreateLedger(userId);
   const ledger = await prisma.creditLedger.findUnique({ where: { userId } });
   if (!ledger || Number(ledger.balance) < amount) throw ApiError.badRequest('You don\'t have that many coins');

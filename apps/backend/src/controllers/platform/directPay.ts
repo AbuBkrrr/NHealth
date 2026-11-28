@@ -67,7 +67,9 @@ export async function coinPartStatus(req: Request, res: Response) {
   const r = await getRedemption(payableType, payableId);
   const ledger = await prisma.creditLedger.findUnique({ where: { userId: uid(req) } });
   const applied = r ? Number(r.amount) : 0;
-  res.json({ total, applied, appliedCoins: r?.coins || 0, remaining: Math.round((total - applied) * 100) / 100, balanceCoins: Math.floor(Number(ledger?.balance || 0) / COIN_VALUE_NGN), coinValue: COIN_VALUE_NGN });
+  const { coinCap } = await import('../../services/coinParts');
+  const lim = await coinCap(payableType, payableId, total);
+  res.json({ maxCoins: Math.floor(lim.cap / COIN_VALUE_NGN), coinNote: lim.note || null, total, applied, appliedCoins: r?.coins || 0, remaining: Math.round((total - applied) * 100) / 100, balanceCoins: Math.floor(Number(ledger?.balance || 0) / COIN_VALUE_NGN), coinValue: COIN_VALUE_NGN });
 }
 export async function applyCoinPart(req: Request, res: Response) {
   const { applyCoins } = await import('../../services/coinParts');

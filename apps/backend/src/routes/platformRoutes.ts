@@ -57,6 +57,7 @@ r.get('/flyer/me', auth, h(flyer.myFlyer));
 r.get('/quests', auth, h(quest.board));
 r.post('/quests/:key/claim', auth, sensitiveLimiter, h(quest.claim));
 r.post('/coins/donate', auth, sensitiveLimiter, h(quest.donateCoins));
+r.post('/coins/pos-code', auth, requireRole('PATIENT'), sensitiveLimiter, h(quest.posCode));
 r.get('/medicines/search', auth, h(fac.searchMedicines));
 
 // Unified provider profile

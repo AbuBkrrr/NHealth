@@ -145,7 +145,7 @@ export async function listOrders(req: Request, res: Response) {
 export async function createOrder(req: Request, res: Response) {
   const data = createOrderSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
-  const pharmacy = await prisma.pharmacyProfile.findUnique({ where: { id: data.pharmacyId }, select: { id: true, userId: true, pharmacyName: true } });
+  const pharmacy = await prisma.pharmacyProfile.findUnique({ where: { id: data.pharmacyId }, select: { id: true, userId: true, pharmacyName: true, deliveryFee: true } });
   if (!pharmacy) throw ApiError.notFound('Pharmacy not found');
   let rx: any = null;
   if (data.prescriptionId) {
@@ -166,9 +166,11 @@ export async function createOrder(req: Request, res: Response) {
       if (updated.count === 0) throw ApiError.conflict(`Not enough stock for ${inv.name}`);
       lines.push({ inventoryId: inv.id, name: inv.name, qty: item.qty, price: Number(inv.price) });
     }
-    const total = lines.reduce((sum, i) => sum + i.qty * i.price, 0);
+    // Delivery orders add the pharmacy's delivery fee (patients may pay it with reward coins).
+    const deliveryFee = deliveryMethod === 'DELIVERY' ? Number(pharmacy.deliveryFee || 0) : 0;
+    const total = lines.reduce((sum, i) => sum + i.qty * i.price, 0) + deliveryFee;
     return tx.pharmacyOrder.create({
-      data: { patientId: patient.id, pharmacyId: pharmacy.id, prescriptionId: data.prescriptionId, items: lines, total,
+      data: { patientId: patient.id, pharmacyId: pharmacy.id, prescriptionId: data.prescriptionId, items: lines, total, deliveryFee,
         deliveryMethod, deliveryAddress: deliveryMethod === 'DELIVERY' ? String(req.body.deliveryAddress || patient.address || '') : null },
     });
   });

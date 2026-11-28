@@ -155,6 +155,7 @@ async function rewardsScreen(el) {
     ${card(cardHead('More ways to earn') + `
       ${item({ icon: '👥', title: `Invite friends: ${reward} coin${reward > 1 ? 's' : ''} each`, sub: 'When a friend joins with your link and confirms their email or phone', attrs: 'data-go="/patient/home"' })}
       ${item({ icon: '🎁', title: 'Promotions', sub: 'Watch your notifications for N-Health offers' })}`)}
+    ${card(cardHead('🏪 Pay at a pharmacy counter') + '<p class="small muted">Show the pharmacist a one-time code to pay with your coins (over-the-counter items only). Nobody can use your coins without it.</p><button class="btn btn-outline btn-block btn-sm" id="poscode">Show my code</button>')}
     ${state.config?.donationPartner ? card(cardHead('💚 Donate your coins') + `<p class="small muted">Give coins to ${esc(state.config.donationPartner.name)}, our registered NGO partner. N-Health turns them into a real donation from its own funds.</p><button class="btn btn-success btn-block btn-sm" id="givecoins">Donate coins</button>`) : ''}
     ${card(cardHead('How coins work') + `<div class="small muted" style="line-height:1.6">
       • When you pay for a booking, order or test, choose <b>Use my coins</b> if you have enough.<br>
@@ -164,6 +165,10 @@ async function rewardsScreen(el) {
     <div id="history">${skeleton(3)}</div>`;
   const b = await loadBalance(); $('#bal', el).textContent = '🪙 ' + coins(b);
   drawQuests($('#quests', el), () => rewardsScreen(el));
+  $('#poscode', el)?.addEventListener('click', (e) => busy(e.target, async () => {
+    const r = await post('/coins/pos-code');
+    modal(`<div class="modal-title">🏪 Your counter code</div><div class="center" style="font-size:40px;font-weight:700;letter-spacing:8px;margin:12px 0">${esc(r.code)}</div><p class="small muted center">Tell the pharmacist this code and your N-Health email. It works once, for ${r.expiresInMinutes} minutes. Only share it at the counter.</p>`);
+  }));
   $('#givecoins', el)?.addEventListener('click', () => formModal('💚 Donate coins', [{ name: 'coins', label: `Coins to give (you have ${coins(state.balance || 0)})`, type: 'number', min: 1, required: true }], { submit: 'Donate', intro: `<p class="muted mb8">To ${esc(state.config.donationPartner.name)}. This can't be undone.</p>`, onSubmit: async (v) => { await post('/coins/donate', { coins: Math.floor(Number(v.coins)) }); toast('💚 Thank you for giving!'); rewardsScreen(el); } }));
   const tx = await get('/credits/transactions').catch(() => []);
   $('#history', el).innerHTML = card(cardHead('📊 Coin history') + (tx.length ? tx.map((x) => item({
@@ -716,6 +721,7 @@ export async function pharmacyScreen(el, _p, q) {
 }
 const orderCard = (o) => card(`${item({ avatarHtml: '<div class="avatar pharmacy-avatar">📦</div>', title: esc(o.pharmacy?.pharmacyName || 'Pharmacy'), sub: dt(o.createdAt) + ' • ' + (o.deliveryMethod === 'DELIVERY' ? '🛵 Delivery' : '🏪 Pickup'), trailing: badge(o.status) })}
   ${(o.items || []).map((i) => `<div class="kv"><span class="k">${esc(i.name)} × ${i.qty}</span><span class="v">${money(i.qty * i.price)}</span></div>`).join('')}
+  ${Number(o.deliveryFee) ? `<div class="kv"><span class="k">🛵 Delivery</span><span class="v">${money(o.deliveryFee)}</span></div>` : ''}
   <div class="kv"><span class="k"><b>Total</b></span><span class="v"><b>${money(o.total)}</b> ${badge(o.paymentStatus)}</span></div>${o.coinsApplied ? `<div class="kv"><span class="k">🪙 ${o.coinsApplied} coins used</span><span class="v">−${money(o.coinsValue)} • left <b>${money(Number(o.total) - o.coinsValue)}</b></span></div>` : ''}${o.declineReason ? `<div class="muted small">Reason: ${esc(o.declineReason)}</div>` : ''}
   <div class="row mt8">${o.paymentStatus !== 'PAID' && o.status === 'PENDING' ? `<button class="btn btn-pharmacy btn-sm grow" data-paor="${o.id}" data-amt="${o.total}">💳 Pay</button>` : ''}<button class="btn btn-outline btn-sm grow" data-inv="${o.id}">⬇️ Invoice</button>${o.status === 'DELIVERED' ? `<button class="btn btn-outline btn-sm grow" data-revo="${o.id}" data-name="${esc(o.pharmacy?.pharmacyName || '')}">⭐ Review</button>` : ''}<button class="btn btn-outline btn-sm grow" data-go="/chat/${o.pharmacy?.userId}">💬</button></div>`);
 
@@ -732,7 +738,8 @@ export async function ordersScreen(el) {
 }
 
 export async function storeScreen(el, { id }, q) {
-  const [inv, rxList] = await Promise.all([get('/providers/pharmacies/' + id + '/inventory'), get('/patient/prescriptions').catch(() => [])]);
+  const [inv, rxList, info] = await Promise.all([get('/providers/pharmacies/' + id + '/inventory'), get('/patient/prescriptions').catch(() => []), get('/providers/pharmacies/' + id + '/info').catch(() => null)]);
+  const delFee = Number(info?.deliveryFee || 0);
   const rxId = q.rx || sessionStorage.getItem('nh_rx') || '';
   sessionStorage.removeItem('nh_rx');
   const cartKey = 'nh_cart_' + id;
@@ -755,10 +762,15 @@ export async function storeScreen(el, { id }, q) {
     $('#cart', el).innerHTML = card(cardHead('🛒 Cart') + lines.map((l) => `<div class="pos-cart-item"><div class="item-info"><div class="item-name">${esc(l.i.name)}</div><div class="item-price">${money(l.i.price)}</div></div><div class="item-qty"><button data-dec="${l.i.id}">−</button><span class="qty">${l.qty}</span><button data-inc="${l.i.id}">+</button></div></div>`).join('') + `
       <div class="receipt-total">Total: ${money(total)}</div>
       ${needsRx ? `<div class="form-group mt8"><label>Prescription <span style="color:var(--error)">*</span></label><select id="rxsel"><option value="">— Select a prescription —</option>${rxList.map((r) => `<option value="${r.id}" ${r.id === rxId ? 'selected' : ''}>Dr. ${esc(r.doctor?.user?.name || '')} • ${dateOnly(r.issuedAt)} • ${esc((r.medications || []).map((m) => m.name).join(', ').slice(0, 40))}</option>`).join('')}</select></div>` : ''}
-      <div class="form-group"><label>Delivery</label><select id="dm"><option value="PICKUP">🏪 Pick up at pharmacy</option><option value="DELIVERY">🛵 Deliver to me</option></select></div>
+      <div class="form-group"><label>Delivery</label><select id="dm"><option value="PICKUP">🏪 Pick up at pharmacy</option><option value="DELIVERY">🛵 Deliver to me${delFee ? ' (+' + money(delFee) + ')' : ''}</option></select></div>
+      ${delFee ? `<div class="small muted hidden" id="delnote">🛵 Delivery fee ${money(delFee)}: you can pay it with your reward coins.</div>` : ''}
       <div class="form-group hidden" id="addrg"><input id="addr" placeholder="Delivery address" value="${esc(state.user.patientProfile?.address || '')}"></div>
       <button class="btn btn-pharmacy btn-block" id="checkout">Checkout ${money(total)}</button>`);
-    $('#dm', el).onchange = (e) => $('#addrg', el).classList.toggle('hidden', e.target.value !== 'DELIVERY');
+    $('#dm', el).onchange = (e) => {
+      const d = e.target.value === 'DELIVERY';
+      $('#addrg', el).classList.toggle('hidden', !d); $('#delnote', el)?.classList.toggle('hidden', !d);
+      $('#checkout', el).textContent = 'Checkout ' + money(total + (d ? delFee : 0));
+    };
     $('#checkout', el).onclick = (e) => busy(e.target, async () => {
       const rx = $('#rxsel', el)?.value;
       if (needsRx && !rx) throw new Error('Select the prescription for prescription-only items');
