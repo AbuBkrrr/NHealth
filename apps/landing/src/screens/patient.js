@@ -42,10 +42,16 @@ export async function homeScreen(el) {
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
   loadInviteStats(el);
   $('#vemailb', el)?.addEventListener('click', () => import('./shared.js').then((m) => m.verifyEmail(() => $('#vemail', el)?.remove())));
-  $('#checkin', el)?.addEventListener('click', (e) => busy(e.target, async () => {
-    try { const r = await post('/quests/checkin/claim'); toast(`📅 Checked in: +${r.coins} 🪙${r.streak > 1 ? ' • 🔥 ' + r.streak + '-day streak' : ''}`); loadBalance().then((b) => { const x = $('#bal', el); if (x) x.textContent = '🪙 ' + coins(b); }); e.target.textContent = '✓ Checked in today'; }
-    catch (err) { if (err.status === 409) { e.target.textContent = '✓ Checked in today'; toast('You already checked in today. See you tomorrow!'); } else throw err; }
-  }));
+  const ci = $('#checkin', el);
+  const doneCi = () => { ci.textContent = '✓ Checked in today'; ci.disabled = true; };
+  ci?.addEventListener('click', async () => {
+    let done = false;
+    await busy(ci, async () => {
+      try { const r = await post('/quests/checkin/claim'); done = true; toast(`📅 Checked in: +${r.coins} 🪙${r.streak > 1 ? ' • 🔥 ' + r.streak + '-day streak' : ''}`); loadBalance().then((b) => { const x = $('#bal', el); if (x) x.textContent = '🪙 ' + coins(b); }); }
+      catch (err) { if (err.status === 409) { done = true; toast('You already checked in today. See you tomorrow!'); } else throw err; }
+    });
+    if (done) doneCi();
+  });
   get('/patient/insurance').then((p) => { const a = p.find((x) => x.status === 'ACTIVE'); $('#ins', el) && ($('#ins', el).innerHTML = a ? `<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">✓ ${esc(a.plan?.name || a.provider)} Active</span>` : ''); }).catch(() => null);
   get('/patient/appointments').then((list) => {
     const up = list.filter(upcoming).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 3);
