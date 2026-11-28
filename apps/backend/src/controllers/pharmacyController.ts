@@ -249,7 +249,7 @@ export async function updateOrderStatus(req: Request, res: Response) {
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('order:updated', updated);
     const txt: Record<string, string> = { PROCESSING: 'is being prepared', READY: 'is ready for pickup', OUT_FOR_DELIVERY: 'is on its way 🛵', DELIVERED: 'was delivered', CANCELLED: 'was declined' };
-    await notify(patient.userId, 'order', 'Order update', `Your pharmacy order ${txt[updated.status] || updated.status}.`, { sms: updated.status === 'READY', data: { orderId: order.id } });
+    await notify(patient.userId, 'order', 'Order update', `Your pharmacy order ${txt[updated.status] || updated.status}.`, { whatsapp: updated.status === 'READY', data: { orderId: order.id } });
   }
 
   res.json(updated);

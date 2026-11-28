@@ -11,6 +11,7 @@ import * as er from '../controllers/platform/er';
 import * as fac from '../controllers/platform/facilities';
 import * as gig from '../controllers/platform/gigs';
 import * as flyer from '../controllers/platform/flyer';
+import * as quest from '../controllers/platform/quests';
 import * as ph from '../controllers/platform/pharmacyExt';
 import * as lab from '../controllers/platform/labExt';
 import * as priv from '../controllers/platform/privacy';
@@ -52,6 +53,10 @@ r.post('/facilities/:id/claim', auth, sensitiveLimiter, h(fac.claim));
 r.get('/public/providers/:id', marketingLimiter, h(flyer.getPublic));
 r.post('/public/providers/:id/visit', marketingLimiter, h(flyer.recordVisit));
 r.get('/flyer/me', auth, h(flyer.myFlyer));
+// Health quests (earn reward coins) and coin donations to the partner NGO
+r.get('/quests', auth, h(quest.board));
+r.post('/quests/:key/claim', auth, sensitiveLimiter, h(quest.claim));
+r.post('/coins/donate', auth, sensitiveLimiter, h(quest.donateCoins));
 r.get('/medicines/search', auth, h(fac.searchMedicines));
 
 // Unified provider profile
@@ -141,6 +146,8 @@ r.post('/donations/campaigns', auth, sensitiveLimiter, h(don.createCampaign));
 r.get('/donations/campaigns/:id', auth, h(don.getCampaign));
 r.post('/donations/campaigns/:id/donate', auth, requireRole('PATIENT'), sensitiveLimiter, h(don.donate));
 r.get('/donations/campaigns/:id/pledges', auth, h(don.campaignPledges));
+r.get('/donations/campaigns/:id/transfers', auth, h(don.pendingTransfers));
+r.post('/donations/:donationId/received', auth, requireRole('INSTITUTION', 'ADMIN'), h(don.confirmTransfer));
 r.post('/donations/eligibility', auth, h(don.bloodEligibility));
 r.get('/donations/pledges', auth, h(don.myPledges));
 r.post('/donations/pledges', auth, h(don.createPledge));
@@ -153,6 +160,7 @@ r.get('/donations/centers', auth, h(don.listCenters));
 // Insurance catalogue
 r.get('/insurance/plans', auth, h(don.listInsurancePlans));
 r.post('/insurance/policies/:id/pay', auth, requireRole('PATIENT'), sensitiveLimiter, h(don.payPremium));
+r.post('/insurance/plans/:id/enrol', auth, requireRole('PATIENT'), sensitiveLimiter, h(don.requestEnrolment));
 
 // Institution management
 const I = [auth, requireRole('INSTITUTION')];
@@ -228,6 +236,13 @@ r.get('/privacy/access-log', auth, h(priv.myAccessLog));
 
 // Admin extensions
 const A = [auth, requireRole('ADMIN')];
+r.get('/admin-ops/coin-donations', ...A, h(quest.coinDonationReport));
+r.get('/admin-ops/quests', ...A, h(quest.getSettings));
+r.put('/admin-ops/quests', ...A, requireSuperAdmin, h(quest.putSettings));
+// Donation partner NGO (receives donations directly) and transfers waiting for confirmation
+r.get('/admin-ops/donation-partner', ...A, h(don.getPartner));
+r.put('/admin-ops/donation-partner', ...A, requireSuperAdmin, h(don.putPartner));
+r.get('/admin-ops/donations/pending', ...A, h(don.adminPendingDonations));
 r.get('/admin-ops/stats', ...A, h(adm.platformStats));
 r.get('/admin-ops/verifications', ...A, h(adm.verificationQueue));
 r.post('/admin-ops/verifications/:userId', ...A, h(adm.decideVerification));
@@ -277,6 +292,6 @@ r.get('/admin-ops/revenue', ...A, h(fin.revenue));
 // Integration health (live checks against each provider)
 r.get('/admin-ops/integrations', ...A, requireSuperAdmin, h(integ.integrationStatus));
 r.post('/admin-ops/integrations/test-email', ...A, requireSuperAdmin, h(integ.testEmail));
-r.post('/admin-ops/integrations/test-sms', ...A, requireSuperAdmin, h(integ.testSms));
+r.post('/admin-ops/integrations/test-whatsapp', ...A, requireSuperAdmin, h(integ.testWhatsApp));
 
 export default r;

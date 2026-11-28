@@ -112,7 +112,7 @@ const createPaymentSchema = z.object({
 export async function createPayment(req: Request, res: Response) {
   const data = createPaymentSchema.parse(req.body);
 
-  // WALLET = pay with N-Health coins (closed-loop, prepaid via a licensed gateway). Settles instantly.
+  // WALLET = redeem reward coins (earned free, never sold). N-Health pays the provider from its own funds.
   if (data.method === 'WALLET') {
     const payment = await payWithCoins(req.user!.userId, data.payableType as any, data.payableId);
     return res.status(201).json(payment);
@@ -137,7 +137,7 @@ export async function createPayment(req: Request, res: Response) {
   // Manual USSD/transfer instructions are a development simulation only. In production all card,
   // transfer and USSD money moves through Paystack/Flutterwave top-ups or PayScrow escrow.
   if (env.nodeEnv === 'production') {
-    throw ApiError.badRequest('Pay with N-Health coins, or use escrow checkout. Top up coins by card, transfer or USSD.');
+    throw ApiError.badRequest('Pay by card (it goes straight to the provider) or in cash at the service.');
   }
 
   const patient = await prisma.patientProfile.findUnique({ where: { userId: req.user!.userId } });

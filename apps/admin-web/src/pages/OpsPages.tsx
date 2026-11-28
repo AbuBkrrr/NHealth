@@ -167,7 +167,11 @@ export function CampaignsPage() {
   return (
     <div>
       <h1 className="page-title">Donation campaigns</h1>
-      <p className="page-subtitle">Verify the story, beneficiary and hospital before a campaign goes live.</p>
+      <p className="page-subtitle">Verify the story, beneficiary and hospital before a campaign goes live. Donations are paid straight to the partner NGO (or the hospital), never to N-Health.</p>
+      <DonationPartnerCard />
+      <CoinDonations />
+      <PendingDonations />
+      <QuestsCard />
       <div className="toolbar">{['PENDING_REVIEW', 'ACTIVE', 'COMPLETED', 'REJECTED', 'CLOSED'].map((s) => <button key={s} className={s === status ? '' : 'outline'} onClick={() => setStatus(s)}>{s}</button>)}</div>
       {error && <div className="error-text">{error}</div>}
       {items.length === 0 ? <div className="card empty-state">Nothing here.</div> : items.map((c) => (
@@ -187,13 +191,85 @@ export function CampaignsPage() {
   );
 }
 
+/** The registered NGO that receives all money donations directly (super admins edit it). */
+function DonationPartnerCard() {
+  const [p, setP] = useState<any>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { api.get('/admin-ops/donation-partner').then((r) => setP(r.data)).catch((e) => setMsg(getErrorMessage(e))); }, []);
+  if (!p) return msg ? <div className="error-text">{msg}</div> : null;
+  const f = (k: string, label: string, ph = '') => <label className="field" key={k}>{label}<input value={p[k] || ''} placeholder={ph} onChange={(e) => setP({ ...p, [k]: e.target.value })} /></label>;
+  const save = async () => { setMsg('Saving…'); try { setP((await api.put('/admin-ops/donation-partner', p)).data); setMsg('Saved ✓'); } catch (e) { setMsg(getErrorMessage(e)); } };
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Donation partner (registered NGO)</h3>
+      <p className="page-subtitle">When switched on, every money donation goes straight into this NGO's account: by card through its Paystack/Flutterwave subaccount (create one for the NGO's bank account in your Paystack or Flutterwave dashboard), or by bank transfer, which you confirm below from the NGO's statement.</p>
+      <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={!!p.enabled} onChange={(e) => setP({ ...p, enabled: e.target.checked })} style={{ width: 'auto' }} /> Send all donations to this NGO</label>
+      <div className="mk-form">
+        {f('name', 'NGO name')}{f('regNumber', 'CAC registration (IT) number', 'IT-123456')}{f('email', 'Contact email')}{f('website', 'Website')}
+        {f('bankName', 'Bank')}{f('accountNumber', 'Account number')}{f('accountName', 'Account name')}
+        {f('paystackSubaccount', 'Paystack subaccount code', 'ACCT_xxxxxxxx')}{f('flutterwaveSubaccount', 'Flutterwave subaccount ID', 'RS_xxxxxxxx')}
+      </div>
+      <div className="row-actions"><button onClick={save}>Save</button> <span>{msg}</span></div>
+    </div>
+  );
+}
+
+/** Coins patients donated to the NGO: N-Health pays their value to the NGO each month from its own funds. */
+function CoinDonations() {
+  const [r, setR] = useState<any>(null);
+  useEffect(() => { api.get('/admin-ops/coin-donations').then((x) => setR(x.data)).catch(() => null); }, []);
+  if (!r?.months?.length) return null;
+  return (
+    <div className="card" style={{ padding: 0 }}>
+      <h3 style={{ margin: 12 }}>Coin donations to pay {r.ngo || 'the NGO'}</h3>
+      <table><thead><tr><th>Month</th><th>Donations</th><th>Coins</th><th>N-Health pays the NGO</th></tr></thead>
+        <tbody>{r.months.map((m: any) => <tr key={m.month}><td>{m.month}</td><td>{m.donations}</td><td>{Math.round(m.coins).toLocaleString()}</td><td>{naira(m.naira)}</td></tr>)}</tbody></table>
+    </div>
+  );
+}
+
+/** Health quests: coins per quest, the daily limit, on/off (super admins edit). */
+function QuestsCard() {
+  const [q, setQ] = useState<any>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { api.get('/admin-ops/quests').then((r) => setQ(r.data)).catch((e) => setMsg(getErrorMessage(e))); }, []);
+  if (!q) return msg ? <div className="error-text">{msg}</div> : null;
+  const save = async () => { setMsg('Saving…'); try { const r = await api.put('/admin-ops/quests', q); setQ({ ...q, ...r.data }); setMsg('Saved ✓'); } catch (e) { setMsg(getErrorMessage(e)); } };
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Health quests (how patients earn reward coins)</h3>
+      <p className="page-subtitle">Coins are never sold. Patients earn them for these actions (like Muslim Pro's Quests), then use them towards care or donate them to the NGO. Each coin used costs N-Health ₦{q.coinValue}. Set a quest to 0 to switch it off.</p>
+      <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={!!q.enabled} onChange={(e) => setQ({ ...q, enabled: e.target.checked })} style={{ width: 'auto' }} /> Quests switched on</label>
+      <label className="field">Most coins one person can earn from quests per day<input type="number" min={0} value={q.dailyCap} onChange={(e) => setQ({ ...q, dailyCap: e.target.value })} /></label>
+      <div className="mk-form">
+        {q.quests.map((d: any) => <label className="field" key={d.key}>{d.icon} {d.title} ({d.repeat === 'daily' ? 'daily' : d.repeat === 'each' ? 'each time' : 'once'})<input type="number" min={0} value={q.coins[d.key]} onChange={(e) => setQ({ ...q, coins: { ...q.coins, [d.key]: e.target.value } })} /></label>)}
+      </div>
+      <div className="row-actions"><button onClick={save}>Save</button> <span>{msg}</span></div>
+    </div>
+  );
+}
+
+/** Bank-transfer donations waiting to be matched against the receiver's statement. */
+function PendingDonations() {
+  const { items, reload } = useList<any>('/admin-ops/donations/pending');
+  const confirm = async (id: string) => { try { await api.post('/donations/' + id + '/received'); reload(); } catch (e) { alert(getErrorMessage(e)); } };
+  if (!items.length) return null;
+  return (
+    <div className="card" style={{ padding: 0 }}>
+      <h3 style={{ margin: 12 }}>Bank transfers to confirm</h3>
+      <table><thead><tr><th>Reference</th><th>Amount</th><th>Campaign</th><th>Donor</th><th>Date</th><th /></tr></thead>
+        <tbody>{items.map((d) => <tr key={d.id}><td>{d.reference}</td><td>{naira(d.amount)}</td><td>{d.campaign}</td><td>{d.patient?.user?.name}</td><td>{new Date(d.createdAt).toLocaleDateString()}</td><td><button onClick={() => confirm(d.id)}>Received</button></td></tr>)}</tbody></table>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 export function PayoutsPage() {
   const { items, error } = useList<any>('/admin-ops/payouts');
   return (
     <div>
       <h1 className="page-title">Provider payouts</h1>
-      <p className="page-subtitle">Coins paid to providers for services. Settle to their bank account on the weekly cycle (escrow payments settle automatically through PayScrow).</p>
+      <p className="page-subtitle">What N-Health owes providers for services patients paid with reward coins. Card payments settle straight to providers' banks; escrow payments settle through PayScrow.</p>
       {error && <div className="error-text">{error}</div>}
       <div className="card" style={{ padding: 0 }}>
         <table><thead><tr><th>Provider</th><th>Role</th><th>Payments</th><th>Amount</th><th>Bank account</th></tr></thead>

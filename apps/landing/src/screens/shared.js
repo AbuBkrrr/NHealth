@@ -1,4 +1,4 @@
-import { get, post, postLater, pendingWrites, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
+import { get, getFresh, post, postLater, pendingWrites, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
 import { esc, $, $$, appBar, card, cardHead, item, avatar, badge, empty, skeleton, toast, toastErr, formModal, modal, confirmBox, busy, dt, ago, relDay, dateOnly, timeOnly, money, coins, fileToDataUri, pickFile, field, readForm, tabs, closeModal, webOrigin } from '../lib/ui.js';
 import { on, emit } from '../lib/realtime.js';
@@ -154,7 +154,7 @@ export async function profileScreen(el) {
     ${card(`
       ${item({ icon: '🔔', title: 'Notifications', attrs: 'data-go="/notifications"' })}
       ${item({ icon: '💬', title: 'Messages', attrs: 'data-go="/messages"' })}
-      ${role === 'PATIENT' ? item({ icon: '💰', title: 'Coins & history', attrs: 'data-go="/patient/wallet"' }) : item({ icon: '💰', title: 'Earnings & payouts', attrs: 'data-go="/provider/earnings"' })}
+      ${role === 'PATIENT' ? item({ icon: '💰', title: 'My reward coins', attrs: 'data-go="/patient/wallet"' }) : item({ icon: '💰', title: 'Earnings & payouts', attrs: 'data-go="/provider/earnings"' })}
       ${item({ icon: '🏥', title: 'Affiliations & invitations', attrs: 'data-go="/affiliations"' })}
       ${item({ icon: '🎁', title: 'Invite friends', sub: me.referralCode ? 'Your code: ' + esc(me.referralCode) : '', attrs: 'id="ref"' })}
       ${item({ icon: '📚', title: 'Health tips', attrs: 'data-go="/articles"' })}
@@ -176,7 +176,7 @@ export async function profileScreen(el) {
     const text = `Join me on N-Health - doctors, pharmacies, labs and emergency help in one app. Use my code ${me.referralCode}: ${webOrigin()}`;
     if (navigator.share) navigator.share({ title: 'N-Health', text }).catch(() => null); else { await navigator.clipboard?.writeText(text); toast('📋 Invite copied'); }
   };
-  $('#ve', el)?.addEventListener('click', verifyEmail);
+  $('#ve', el)?.addEventListener('click', () => verifyEmail());
   $('#vp', el)?.addEventListener('click', verifyPhone);
   $$('[data-switch]', el).forEach((c) => (c.onclick = async () => {
     if (c.dataset.switch === role) return;
@@ -233,13 +233,13 @@ async function providerCard(host, role) {
     { onSubmit: async (v) => { await patch('/provider-profile', v); toast('✅ Saved'); providerCard(host, role); } });
 }
 
-async function verifyEmail() {
+export async function verifyEmail(after) {
   try { await post('/auth/verify-email/send'); } catch (e) { return toastErr(e); }
-  formModal('📧 Verify email', [{ name: 'code', label: 'Code sent to your email', inputmode: 'numeric', required: true }], { submit: 'Verify', onSubmit: async (v) => { await post('/auth/verify-email/confirm', v); toast('✅ Email verified'); go('/profile', { replace: true }); } });
+  formModal('📧 Verify email', [{ name: 'code', label: 'Code sent to your email', inputmode: 'numeric', required: true }], { submit: 'Verify', onSubmit: async (v) => { await post('/auth/verify-email/confirm', v); toast('✅ Email verified'); if (after) { await refreshMe().catch(() => null); return after(); } go('/profile', { replace: true }); } });
 }
 async function verifyPhone() {
   try { await post('/auth/verify-phone/send'); } catch (e) { return toastErr(e); }
-  formModal('📱 Verify phone', [{ name: 'code', label: 'Code sent by SMS', inputmode: 'numeric', required: true }], { submit: 'Verify', onSubmit: async (v) => { await post('/auth/verify-phone/confirm', v); toast('✅ Phone verified'); go('/profile', { replace: true }); } });
+  formModal('📱 Verify phone', [{ name: 'code', label: 'Code sent on WhatsApp (or to your email)', inputmode: 'numeric', required: true }], { submit: 'Verify', onSubmit: async (v) => { await post('/auth/verify-phone/confirm', v); toast('✅ Phone verified'); go('/profile', { replace: true }); } });
 }
 
 // ================= KYC (Didit) & provider documents =================
@@ -253,7 +253,7 @@ const DOC_LABEL = { IDENTITY: 'Government-issued ID', PROOF_OF_ADDRESS: 'Proof o
 const docOk = (docs, type) => docs.find((d) => d.type === type && d.status !== 'REJECTED' && (!d.expiresAt || new Date(d.expiresAt) > new Date()));
 const missingCount = (docs) => REQUIRED_DOCS.filter(([t]) => !docOk(docs, t)).length;
 export async function kycScreen(el) {
-  const s = await get('/kyc/status');
+  const s = await getFresh('/kyc/status'); // always the latest decision, never a saved copy
   const docs = isProvider() ? await get('/verification/documents') : [];
   const st = s.kycStatus;
   const box = {
@@ -350,7 +350,7 @@ export async function settingsScreen(el) {
     card(cardHead('🔔 Notifications') + `
       <label class="check"><input type="checkbox" data-pref="push" ${prefs.push !== false ? 'checked' : ''}> <span>Push notifications on this device</span></label>
       <label class="check"><input type="checkbox" data-pref="email" ${prefs.email !== false ? 'checked' : ''}> <span>Email (receipts, confirmations, results)</span></label>
-      <label class="check"><input type="checkbox" data-pref="sms" ${prefs.sms !== false ? 'checked' : ''}> <span>SMS (urgent alerts & reminders)</span></label>
+      <label class="check"><input type="checkbox" data-pref="whatsapp" ${prefs.whatsapp !== false && prefs.sms !== false ? 'checked' : ''}> <span>WhatsApp (urgent alerts & reminders)</span></label>
       <label class="check"><input type="checkbox" id="mkt" ${me.marketingOptIn ? 'checked' : ''}> <span>Health tips & product news</span></label>
       <button class="btn btn-outline btn-block btn-sm" id="push">Enable push on this device</button>`) +
     card(cardHead('🔐 Security') + `
@@ -387,9 +387,9 @@ export async function settingsScreen(el) {
 
 // ================= SUPPORT & ARTICLES =================
 const FAQ = [
-  ['How do coins work?', 'Coins are prepaid credits for healthcare on N-Health. Buy them by card, transfer or USSD (the price is shown before you pay), or earn them by inviting friends. Coins can only be spent on N-Health services and products. They cannot be withdrawn, transferred or exchanged for cash.'],
+  ['How do coins work?', 'Coins are a free reward from N-Health: you earn them by inviting friends and in promotions. Use them towards bookings, orders and tests when you pay. Coins can\'t be bought, sold, sent to others or exchanged for cash. You pay for care by card (straight to the provider) or in cash.'],
   ['Are providers verified?', 'Yes. Every provider passes Didit identity verification and an N-Health compliance review of their licence before patients can book them. Look for the ✓ Verified badge.'],
-  ['What if my appointment is cancelled?', 'If the provider declines or you cancel 12+ hours ahead, your coins are refunded automatically.'],
+  ['What if my appointment is cancelled?', 'If the provider declines or you cancel 12+ hours ahead, a card payment is refunded to your card or account, and any coins you used are returned to you.'],
   ['Is my medical data safe?', 'Your records are visible only to providers treating you. Every access is logged in Settings → Privacy, and you can download or delete your data at any time.'],
   ['What does the Emergency button do?', 'It alerts the nearest available ambulances and on-call doctors with your live location and notifies your emergency contact. Always also call 112 / 767 in life-threatening situations.'],
 ];
@@ -412,6 +412,9 @@ export async function articlesScreen(el) {
 }
 export async function articleScreen(el, { slug }) {
   const a = await get('/articles/' + slug);
+  // Reading for 20 seconds completes the daily "Read a health article" quest.
+  const readTimer = state.user?.role === 'PATIENT' ? setTimeout(() => { if (el.isConnected) post('/quests/read/claim').then((r) => toast(`📖 +${r.coins} 🪙 for reading today`)).catch(() => null); }, 20000) : null;
+  setTimeout(() => { const stop = () => clearTimeout(readTimer); window.addEventListener('hashchange', stop, { once: true }); });
   el.innerHTML = appBar({ title: '📖 ' + esc(a.category), back: '/articles' }) + card(`<h3 style="font-size:16px;margin-bottom:6px">${esc(a.title)}</h3><p class="muted mb8">${dateOnly(a.publishedAt)}</p>${esc(a.body).split('\n').map((p) => `<p style="font-size:13px;line-height:1.6;margin-bottom:8px">${p}</p>`).join('')}<div class="banner info">ℹ️ General information only - not a substitute for professional medical advice.</div>`);
 }
 
@@ -495,7 +498,8 @@ export async function earningsScreen(el, _p, q) {
     onSubmit: async (v) => { const r = await post('/earnings/settle', { amount: Number(v.amount), gateway: v.gateway, returnUrl: webOrigin() + '/' }); sessionStorage.setItem('nh_settle', r.internalRef); if (r.checkoutUrl) location.href = r.checkoutUrl; else throw new Error('Checkout unavailable'); },
   }));
   $('#how', el).onclick = () => modal(`<div class="modal-title">How earnings work</div><div class="muted" style="line-height:1.6">
-    <p><b>In-app payments</b> (coins): the patient pays N-Health. When you complete the job, your fee minus ${rate ?? ''}% commission is added to your balance and becomes available after ${pol.holdHours}h.</p>
+    <p><b>Card, transfer and USSD</b>: the payment partner settles your share straight into your bank account (add your bank account here first: until then patients can only pay you in cash). N-Health never holds your money.</p>
+    <p><b>Reward coins</b>: when a patient uses N-Health reward coins, N-Health pays you for that part. Your fee minus ${rate ?? ''}% commission is added to your balance and becomes available after ${pol.holdHours}h.</p>
     <p><b>Cash payments</b>: you collect the money. Tap <i>Received</i>, complete the job, and the commission is deducted from your balance. Above ${money(pol.cashDebtLimit)} owed, cash jobs pause until you pay.</p>
     <p><b>Escrow</b> payments go straight to your bank through PayScrow when the patient releases them.</p>
     <p><b>Payouts</b>: ${sched}, when your available balance is at least ${money(pol.minPayout)}. You can also cash out once a day.</p></div>`);

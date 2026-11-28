@@ -5,7 +5,7 @@ Do the steps in order. Each step ends with a **✔ check**. Do not move on until
 You need:
 - your server (102.68.85.97), set up with `docs/DOCKER_DEPLOY.md`
 - the Paystack, Flutterwave, Resend, Didit and PayScrow dashboards
-- Termii and Cloudinary accounts (sign-up is free)
+- A Meta Business account for WhatsApp, and a Cloudinary account (sign-up is free)
 - access to the DNS settings for `nhealth.com.ng`
 
 Throughout this guide, `API` means `https://api.nhealth.com.ng`.
@@ -49,7 +49,7 @@ The previous backend never sent email, so even if you had a `RESEND_API_KEY` bef
 
 ---
 
-## Step 2 — Paystack (coin top-ups, provider payouts, debt settlement) (30 min)
+## Step 2 — Paystack (card payments split to providers, payouts, debt settlement) (30 min)
 
 1. Paystack → **Settings → Business** → complete **Go Live** (business documents and settlement bank). Live keys only work after approval.
 2. **Settings → API Keys & Webhooks** → **Live** tab:
@@ -68,7 +68,7 @@ The previous backend never sent email, so even if you had a `RESEND_API_KEY` bef
 
 ---
 
-## Step 3 — Flutterwave (second top-up option, optional payout provider) (20 min)
+## Step 3 — Flutterwave (second card option, optional payout provider) (20 min)
 
 The previous backend only checked Flutterwave webhooks. It never created or verified payments on the server. The new backend needs the **secret key** too.
 
@@ -123,15 +123,16 @@ The backend is set up for **Didit API v3**:
 
 ---
 
-## Step 6 — Termii (SMS for OTPs, emergency alerts, reminders) (20 min + sender approval)
+## Step 6 — WhatsApp Business (codes, emergency alerts, reminders; N-Health sends no SMS) (30 min + template approval)
 
-1. Termii → **Sender ID** → request `N-Health`. Use case: transactional OTP and alerts. Approval can take 1–3 days.
-2. Top up your SMS balance.
+Follow [docs/WHATSAPP.md](WHATSAPP.md):
+1. Create the WhatsApp Business app and phone number in Meta, and a permanent access token.
+2. Get the three message templates approved (`nhealth_code`, `nhealth_update`, `nhealth_news`).
 3. On the server, in `/opt/nhealth/backend.env`:
-   - `TERMII_API_KEY=…`
-   - `TERMII_SENDER_ID=N-Health`
+   - `WHATSAPP_TOKEN=…`
+   - `WHATSAPP_PHONE_NUMBER_ID=…`
 
-**✔ check:** Integration status → Termii shows a positive balance. **Test SMS** arrives on your phone.
+**✔ check:** Integration status → WhatsApp Business shows your number. **Test WhatsApp** arrives on your phone.
 
 ---
 
@@ -238,7 +239,7 @@ Use your own patient account and a test provider account.
 5. **Payout:** provider adds their bank account (the name is verified with the bank) → **Cash out**. You receive the transfer, and the payout shows **PAID** in Admin → Fees & payouts. If it shows FAILED, the reason is listed and the money returns to the balance.
 6. **Escrow:** book a lab test → pay by escrow → complete the PayScrow checkout → the test shows *paid (escrow)*.
 7. **Emergency:** with ≥ ₦5,000 coins, press Emergency (test with an on-duty ambulance account) → accept → en route → arrived → complete. The ambulance fee is charged and the patient sees the live map.
-8. **Email and SMS:** password reset sends a code by email and SMS.
+8. **Email and WhatsApp:** password reset sends a code by email and on WhatsApp.
 
 ---
 

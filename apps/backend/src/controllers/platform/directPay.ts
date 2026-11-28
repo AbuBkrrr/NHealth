@@ -16,7 +16,7 @@ import { uid } from './util';
 export async function startCardPayment(req: Request, res: Response) {
   const payableType = String(req.body.payableType || '') as Payable;
   const payableId = String(req.body.payableId || '');
-  if (!['APPOINTMENT', 'PHARMACY_ORDER', 'LAB_TEST', 'NURSE_REQUEST'].includes(payableType) || !payableId) throw ApiError.badRequest('Choose what to pay for');
+  if (!['APPOINTMENT', 'PHARMACY_ORDER', 'LAB_TEST', 'NURSE_REQUEST', 'DONATION'].includes(payableType) || !payableId) throw ApiError.badRequest('Choose what to pay for');
   const live = enabledGateways().filter((g) => g === 'paystack' || g === 'flutterwave');
   const gateway = (live.includes(req.body.gateway) ? req.body.gateway : live[0]) as Gateway;
   if (!gateway) throw ApiError.badRequest('Card payments are not configured yet - pay with coins');
@@ -29,6 +29,12 @@ export async function startCardPayment(req: Request, res: Response) {
     if (p.amount <= 0) continue;
     if (gateway === 'paystack' && p.bank?.paystackSubaccount) { split.paystack.push({ subaccount: p.bank.paystackSubaccount, amount: p.amount }); settled[p.userId] = true; }
     if (gateway === 'flutterwave' && p.bank?.flutterwaveSubaccount) { split.flutterwave.push({ id: p.bank.flutterwaveSubaccount, amount: p.amount }); settled[p.userId] = true; }
+  }
+  // N-Health never holds a provider's or hospital's money: the gateway must settle every share to their own account.
+  if (plan.payees.some((p) => p.amount > 0 && !settled[p.userId])) {
+    throw ApiError.conflict(payableType === 'DONATION'
+      ? 'The hospital can\'t receive card payments yet. Pay by bank transfer to the hospital\'s account instead.'
+      : 'This provider can\'t receive card payments yet. Choose cash (pay at the service) instead.');
   }
   const user = await prisma.user.findUnique({ where: { id: uid(req) } });
   const internalRef = 'PY-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex').toUpperCase();

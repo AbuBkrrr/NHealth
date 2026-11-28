@@ -2,7 +2,7 @@ import webpush from 'web-push';
 import { prisma } from '../config/prisma';
 import { env } from '../config/env';
 import { sendEmail } from './email';
-import { sendSms } from './sms';
+import { sendWhatsApp } from './whatsapp';
 
 let io: any = null;
 export function bindIo(server: any) { io = server; }
@@ -14,11 +14,11 @@ if (env.raw.VAPID_PUBLIC_KEY && env.raw.VAPID_PRIVATE_KEY) {
   vapidReady = true;
 }
 
-export interface NotifyOpts { email?: boolean; sms?: boolean; push?: boolean; data?: any; }
+export interface NotifyOpts { email?: boolean; whatsapp?: boolean; push?: boolean; data?: any; }
 
 /**
  * Single entry point for user notifications: stores an in-app notification, emits it live over
- * Socket.io, and optionally fans out to web push, email and SMS according to the user's preferences.
+ * Socket.io, and optionally fans out to web push, email and WhatsApp according to the user's preferences.
  */
 export async function notify(userId: string, type: string, title: string, body: string, o: NotifyOpts = {}) {
   try {
@@ -34,7 +34,7 @@ export async function notify(userId: string, type: string, title: string, body: 
       })));
     }
     if (o.email && user?.email && prefs.email !== false) await sendEmail(user.email, title, title, escapeHtml(body));
-    if (o.sms && user?.phone && prefs.sms !== false) await sendSms(user.phone, `N-Health: ${body}`);
+    if (o.whatsapp && user?.phone && prefs.whatsapp !== false && prefs.sms !== false) await sendWhatsApp(user.phone, `${title}. ${body}`);
     return n;
   } catch (e) {
     console.error('[notify] failed', e);

@@ -174,7 +174,7 @@ function googleButton(host, role) {
     window.google.accounts.id.initialize({
       client_id: state.config.googleClientId,
       callback: async (resp) => {
-        try { const r = await post('/auth/google', { credential: resp.credential, role }); startSession(r.token, r.user); } catch (e) { toastErr(e); }
+        try { const r = await post('/auth/google', { credential: resp.credential, role, referralCode: (() => { try { return localStorage.getItem('nh_ref') || undefined; } catch { return undefined; } })() }); startSession(r.token, r.user); } catch (e) { toastErr(e); }
       },
     });
     window.google.accounts.id.renderButton(host, { theme: 'outline', size: 'large', width: 300, text: 'continue_with', shape: 'pill' });
@@ -188,7 +188,7 @@ function googleButton(host, role) {
 async function forgot() {
   let email = '';
   await formModal('🔑 Reset password', [{ name: 'email', label: 'Account email', type: 'email', required: true }], {
-    submit: 'Send code', intro: '<p class="muted mb8">We will email (and SMS, if your phone is on file) a 6-digit code.</p>',
+    submit: 'Send code', intro: '<p class="muted mb8">We will email a 6-digit code (and send it on WhatsApp if your phone is on file).</p>',
     onSubmit: async (v) => { email = v.email; await post('/auth/forgot-password', { email }); },
   }) && formModal('Enter code & new password', [
     { name: 'code', label: '6-digit code', inputmode: 'numeric', required: true },
@@ -200,20 +200,34 @@ async function forgot() {
 }
 
 export function legalHtml(kind) {
+  const co = state.config?.company || {};
+  const name = esc(co.name || 'N-Health');
+  const id = `${name}${co.rc ? ', RC ' + esc(co.rc) : ''}${co.address ? ', ' + esc(co.address) : ''}`;
+  const dpo = esc(co.dpoEmail || 'privacy@nhealth.com.ng');
+  const support = esc(co.supportEmail || 'support@nhealth.com.ng');
+  const ngo = state.config?.donationPartner;
   const terms = `<div class="modal-title">📜 Terms of Service</div><div class="muted" style="line-height:1.6">
-    <p><b>1. Service.</b> N-Health connects patients with independent, verified healthcare providers. N-Health does not itself practise medicine. In an emergency always call your local emergency number (112 / 767 in Nigeria).</p>
-    <p><b>2. Accounts.</b> You must give accurate information. Providers must hold valid licences and pass identity (KYC) and licence verification before serving patients.</p>
-    <p><b>3. Coins.</b> N-Health coins are a closed-loop prepaid credit for healthcare services on the platform. They are not money, cannot be transferred between users and cannot be withdrawn as cash. Top-ups are processed by licensed payment partners.</p>
-    <p><b>4. Escrow & refunds.</b> Some payments are held in escrow until you confirm the service. Appointments cancelled 12+ hours ahead, or declined by the provider, are refunded in coins.</p>
-    <p><b>5. Conduct.</b> No harassment, fraud, fake campaigns or misuse of medical information. Fundraising campaigns are reviewed before going live.</p>
-    <p><b>Marketing measurement.</b> When you open an N-Health link or QR code, we record the open with a random ID your browser keeps (no name or contact details), your device type and approximate city, to see which campaigns work. If you choose to allow location, we also record your precise position at that moment; you can refuse, and the page works the same. Ad cookies load only if you accept them. Your IP address is stored only as a one-way hash.</p>
-    <p><b>6. Liability.</b> Providers are responsible for the care they deliver. N-Health is liable only to the extent required by law.</p></div>`;
+    <p><b>Who we are.</b> N-Health is operated by ${id}. Contact: ${support}.</p>
+    <p><b>1. Service.</b> N-Health is a technology marketplace that connects patients with independent, licensed and verified healthcare providers (doctors, nurses, pharmacies, diagnostic centres, hospitals and ambulance operators). Each provider is responsible for the care, medicines and tests they provide and holds its own licences. N-Health does not practise medicine, sell medicines, run laboratories or operate ambulances. In an emergency always call 112 (or 767 in Lagos).</p>
+    <p><b>2. Accounts.</b> You must give accurate information. Providers must hold valid licences and pass identity and licence verification before serving patients.</p>
+    <p><b>3. Payments.</b> You pay providers directly: by card, transfer or USSD through our licensed payment partners (Paystack, Flutterwave), which settle the money into the provider's own account, through our licensed escrow partner, or in cash at the service. N-Health does not hold your money or the provider's money. N-Health's fee is shown before you pay.</p>
+    <p><b>4. Reward coins.</b> Coins are a free loyalty reward from N-Health (for example for inviting friends). They cannot be bought, sold, transferred to another person or exchanged for cash, and they have no cash value. You can use them towards services on N-Health, and N-Health pays the provider for that part. N-Health may change or end the reward programme with notice.</p>
+    <p><b>5. Refunds.</b> If a provider declines or you cancel 12+ hours ahead, card payments are refunded to your card or account by the payment partner, and coins used are returned to your coin balance.</p>
+    <p><b>6. Donations.</b> Money donations go straight into the account of ${ngo ? esc(ngo.name) + ' (a registered NGO' + (ngo.regNumber ? ', ' + esc(ngo.regNumber) : '') + ')' : 'the hospital treating the patient'}, never to N-Health or to individuals. N-Health takes no fee on donations. Campaigns are reviewed before going live. Blood and organs are never bought or sold: the organ register records your wishes only, and transplants are arranged by licensed hospitals.</p>
+    <p><b>7. Health insurance.</b> N-Health lists health plans and accredited HMOs and passes your enrolment request to the HMO. The HMO enrols you and you pay premiums to the HMO directly.</p>
+    <p><b>8. Health jobs.</b> Posting and applying for jobs is free. N-Health never charges job seekers and is not a recruitment agency: employers choose and hire.</p>
+    <p><b>9. Conduct.</b> No harassment, fraud, fake campaigns or misuse of medical information.</p>
+    <p><b>Marketing measurement.</b> When you open an N-Health link, flyer or QR code, we record the open with a random ID your browser keeps (no name or contact details), your device type and approximate city, to see which campaigns work. If you choose to allow location, we also record your precise position at that moment; you can refuse, and the page works the same. Ad cookies load only if you accept them. Your IP address is stored only as a one-way hash.</p>
+    <p><b>10. Liability.</b> Providers are responsible for the care they deliver. N-Health is liable only to the extent required by law. These terms are governed by the laws of the Federal Republic of Nigeria.</p></div>`;
   const privacy = `<div class="modal-title">🔒 Privacy Policy</div><div class="muted" style="line-height:1.6">
-    <p>We follow the Nigeria Data Protection Act (NDPA 2023) and GDPR principles.</p>
-    <p><b>What we collect:</b> account details, health profile, bookings, prescriptions, lab results, messages, location during emergencies, and identity verification results from our KYC partner Didit (we store the outcome and the last 4 digits of your ID, not your document images).</p>
-    <p><b>Why:</b> to deliver care you request, keep you safe, prevent fraud and meet legal duties. Providers see your records only when you book or are treated by them; every access is logged and visible to you in Settings → Privacy.</p>
-    <p><b>Your rights:</b> access and download your data, correct it, withdraw consent, or delete your account at any time from Settings. Contact: privacy@nhealth.com.ng.</p>
-    <p><b>We never sell your data.</b> Payment card details are handled only by our PCI-DSS certified payment partners.</p></div>`;
+    <p><b>Data controller.</b> ${id}. Data Protection Officer: ${dpo}. We comply with the Nigeria Data Protection Act 2023 (NDPA) and the NDPC's General Application and Implementation Directive.</p>
+    <p><b>What we collect:</b> account details (name, email, phone), health profile and records you add, bookings, prescriptions, test results, messages, your location during emergencies and when you search nearby, payment references (never your card number), and identity checks: the result from our verification partner Didit, or, if you use the in-app identity form, the details and ID, selfie and proof-of-address images you upload, kept in private storage that only authorised staff can open.</p>
+    <p><b>Why and on what basis:</b> to provide the care you ask for (contract), to keep you safe in emergencies (vital interest), to prevent fraud and meet legal duties (legal obligation), and, only with your consent, for health data sharing and marketing. You can withdraw consent at any time in Settings.</p>
+    <p><b>Who sees it:</b> providers see your records only when you book with or are treated by them, and every access is logged and visible to you in Settings → Privacy. Our processors: Paystack and Flutterwave (payments), PayScrow (escrow), Didit (identity), Resend (email), Meta WhatsApp Business (messages and codes), Cloudinary (file storage) and our hosting provider. Some of them process data outside Nigeria under the safeguards the NDPA requires.</p>
+    <p><b>Messages:</b> we contact you in the app, by email and on WhatsApp. We do not send SMS.</p>
+    <p><b>How long we keep it:</b> while your account is open. When you delete your account we erase your profile, documents and reminders; medical and payment records are kept without your identity for as long as the law requires.</p>
+    <p><b>Your rights:</b> access and download your data, correct it, object, restrict, withdraw consent, or delete your account at any time from Settings, or write to ${dpo}. You can also complain to the Nigeria Data Protection Commission (ndpc.gov.ng).</p>
+    <p><b>We never sell your data.</b> Card details are handled only by our PCI-DSS certified payment partners.</p></div>`;
   return kind === 'terms' ? terms : privacy;
 }
 export const legal = (kind) => modal(legalHtml(kind));

@@ -3,8 +3,10 @@ import { Request, Response } from 'express';
 import { prisma } from '../../config/prisma';
 import { ApiError } from '../../utils/ApiError';
 import { notify } from '../../services/notify';
-import { payWithCoins } from '../../services/checkout';
+import { settleDonation } from '../../services/checkout';
 import { distanceKm } from '../../utils/geo';
+import { donationReceiver } from '../../services/splits';
+import { getDonationPartner } from '../../services/settings';
 import { uid, str, num, date, patientOf } from './util';
 
 const TYPES = ['FUND', 'PATIENT_CASE', 'BLOOD', 'ORGAN'];
@@ -22,7 +24,7 @@ export async function listCampaigns(req: Request, res: Response) {
   res.json(items.map((c) => ({ ...c, distanceKm: lat !== undefined && lng !== undefined && c.lat != null && c.lng != null ? Math.round(distanceKm(lat, lng, c.lat, c.lng) * 10) / 10 : null })));
 }
 export async function getCampaign(req: Request, res: Response) {
-  const c = await prisma.donationCampaign.findUnique({ where: { id: req.params.id }, include: { institution: { select: { name: true, phone: true, address: true } }, organizer: { select: { name: true, phone: true, email: true } },
+  const c = await prisma.donationCampaign.findUnique({ where: { id: req.params.id }, include: { institution: { select: { name: true, phone: true, address: true, userId: true } }, organizer: { select: { name: true, phone: true, email: true } },
     donations: { where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, take: 20, select: { amount: true, anonymous: true, message: true, createdAt: true, patient: { select: { user: { select: { name: true } } } } } } } });
   if (!c) throw ApiError.notFound('Campaign not found');
   const donations = c.donations.map((d) => ({ amount: d.amount, message: d.message, createdAt: d.createdAt, donor: d.anonymous ? 'Anonymous' : d.patient.user.name }));
@@ -35,26 +37,64 @@ export async function createCampaign(req: Request, res: Response) {
   if (!TYPES.includes(type)) throw ApiError.badRequest('Type must be FUND, PATIENT_CASE, BLOOD or ORGAN');
   if (!str(b.title) || !str(b.description)) throw ApiError.badRequest('Title and description are required');
   if ((type === 'FUND' || type === 'PATIENT_CASE') && !(num(b.goalAmount)! > 0)) throw ApiError.badRequest('Set a goal amount');
-  const inst = await prisma.institutionProfile.findUnique({ where: { userId: uid(req) } });
+  const own = await prisma.institutionProfile.findUnique({ where: { userId: uid(req) } });
+  // Money raised goes straight to the treating hospital (never through N-Health), so money campaigns need one.
+  let inst = own;
+  if (!own && b.hospitalId) inst = await prisma.institutionProfile.findFirst({ where: { id: String(b.hospitalId), user: { verificationStatus: 'VERIFIED', isActive: true } } });
+  const ngo = await getDonationPartner();
+  if ((type === 'FUND' || type === 'PATIENT_CASE') && !inst && !ngo.enabled) throw ApiError.badRequest('Choose the hospital treating the patient: donations are paid straight to the hospital');
   const c = await prisma.donationCampaign.create({ data: {
     type, title: str(b.title, 160)!, description: str(b.description, 5000)!, beneficiaryName: str(b.beneficiaryName, 120), organizerId: uid(req), institutionId: inst?.id,
     goalAmount: num(b.goalAmount) || 0, currency: str(b.currency, 3)?.toUpperCase() || 'NGN', bloodType: str(b.bloodType, 5), organ: str(b.organ, 40), unitsNeeded: num(b.unitsNeeded),
     urgency: ['NORMAL', 'URGENT', 'CRITICAL'].includes(b.urgency) ? b.urgency : 'NORMAL', location: str(b.location, 300), lat: num(b.lat), lng: num(b.lng),
     contactName: str(b.contactName, 120), contactPhone: str(b.contactPhone, 30), contactEmail: str(b.contactEmail, 120), imageUrl: str(b.imageUrl, 2000), deadline: date(b.deadline),
-    status: inst ? 'ACTIVE' : 'PENDING_REVIEW',
+    status: own ? 'ACTIVE' : 'PENDING_REVIEW',
   } });
+  if (inst && !own) await notify(inst.userId, 'donation', 'Fundraising for one of your patients', `"${c.title}" was created for a patient at your hospital. Donations are paid straight to ${ngo.enabled ? ngo.name + ' (our registered NGO partner)' : 'your hospital\'s account'}. N-Health will review it before it goes live.`, { email: true, data: { campaignId: c.id } });
   res.status(201).json(c);
 }
-/** POST /api/donations/campaigns/:id/donate { amount, anonymous, message } - pays with coins and updates progress. */
+/**
+ * POST /api/donations/campaigns/:id/donate { amount, anonymous, message }
+ * Records the donation and returns how to pay the hospital directly: by card (the gateway settles 100% to the
+ * hospital's account) or by bank transfer to the hospital, which then confirms receipt. N-Health never holds the money.
+ */
 export async function donate(req: Request, res: Response) {
-  const amount = Number(req.body.amount);
-  if (!(amount >= 100)) throw ApiError.badRequest('Minimum donation is 10 coins');
-  const c = await prisma.donationCampaign.findUnique({ where: { id: req.params.id } });
+  const amount = Math.round(Number(req.body.amount));
+  if (!(amount >= 100)) throw ApiError.badRequest('Minimum donation is ₦100');
+  const c = await prisma.donationCampaign.findUnique({ where: { id: req.params.id }, include: { institution: true } });
   if (!c || c.status !== 'ACTIVE' || !['FUND', 'PATIENT_CASE'].includes(c.type)) throw ApiError.badRequest('This campaign is not accepting money');
+  const rcv = await donationReceiver(c);
+  if (!rcv) throw ApiError.badRequest('This campaign has no receiving hospital yet');
   const p = await patientOf(uid(req));
   const d = await prisma.donation.create({ data: { patientId: p.id, campaign: c.title, campaignId: c.id, amount, anonymous: !!req.body.anonymous, message: str(req.body.message, 300), currency: c.currency, reference: 'DN-' + crypto.randomBytes(6).toString('hex') } });
-  await payWithCoins(uid(req), 'DONATION', d.id);
-  res.status(201).json(await prisma.donationCampaign.findUnique({ where: { id: c.id } }));
+  res.status(201).json({
+    donationId: d.id, reference: d.reference, amount, receiver: { kind: rcv.kind, name: rcv.name, regNumber: rcv.regNumber || null }, hospital: c.institution?.name || null,
+    card: !!(rcv.paystackSubaccount || rcv.flutterwaveSubaccount),
+    bank: rcv.accountNumber ? { bankName: rcv.bankName, accountNumber: rcv.accountNumber, accountName: rcv.accountName } : null,
+  });
+}
+
+/** GET /api/donations/campaigns/:id/transfers - the receiving hospital sees bank-transfer donations to confirm. */
+export async function pendingTransfers(req: Request, res: Response) {
+  const c = await prisma.donationCampaign.findUnique({ where: { id: req.params.id }, include: { institution: true } });
+  if (!c || ((req as any).user?.role !== 'ADMIN' && c.institution?.userId !== uid(req) && c.organizerId !== uid(req))) throw ApiError.notFound('Campaign not found');
+  res.json(await prisma.donation.findMany({ where: { campaignId: c.id, status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 200,
+    select: { id: true, amount: true, reference: true, anonymous: true, createdAt: true, patient: { select: { user: { select: { name: true } } } } } }));
+}
+
+/** POST /api/donations/:donationId/received - the hospital confirms a bank transfer reached its account. */
+export async function confirmTransfer(req: Request, res: Response) {
+  const d = await prisma.donation.findUnique({ where: { id: req.params.donationId } });
+  const c = d?.campaignId ? await prisma.donationCampaign.findUnique({ where: { id: d.campaignId }, include: { institution: true } }) : null;
+  const admin = (req as any).user?.role === 'ADMIN';
+  if (!d || !c || (!admin && c.institution?.userId !== uid(req))) throw ApiError.notFound('Donation not found');
+  // With an NGO partner, transfers land in the NGO's account, so N-Health staff confirm them from the NGO's statement.
+  if (!admin && (await getDonationPartner()).enabled) throw ApiError.forbidden('Donations go to our NGO partner; N-Health confirms them');
+  if (d.status !== 'PENDING') throw ApiError.conflict('Already confirmed');
+  await settleDonation(d.id);
+  const donor = await prisma.patientProfile.findUnique({ where: { id: d.patientId } });
+  if (donor) await notify(donor.userId, 'donation', 'Thank you ❤️', `${(await donationReceiver(c))?.name || 'The receiver'} confirmed your donation of ₦${Number(d.amount).toLocaleString()} for "${c.title}".`);
+  res.json({ ok: true });
 }
 
 // ---------- Blood / organ pledges ----------
@@ -135,7 +175,39 @@ export async function listCenters(req: Request, res: Response) {
 export async function listInsurancePlans(_req: Request, res: Response) {
   res.json(await prisma.insurancePlan.findMany({ where: { isActive: true }, orderBy: { monthlyPremium: 'asc' } }));
 }
-/** POST /api/insurance/policies/:id/pay - pays the first premium with coins and activates it. */
-export async function payPremium(req: Request, res: Response) {
-  res.status(201).json(await payWithCoins(uid(req), 'INSURANCE_POLICY', req.params.id));
+/**
+ * POST /api/insurance/plans/:id/enrol { memberCount, note } - N-Health passes the request to the HMO, which enrols the
+ * patient and collects the premium itself (selling or administering health plans needs NHIA accreditation).
+ */
+export async function requestEnrolment(req: Request, res: Response) {
+  const plan = await prisma.insurancePlan.findFirst({ where: { id: req.params.id, isActive: true } });
+  if (!plan) throw ApiError.notFound('Plan not found');
+  const p = await patientOf(uid(req));
+  const members = Math.max(1, Math.min(20, Math.round(num(req.body.memberCount) || 1)));
+  const open = await prisma.insurancePolicy.findFirst({ where: { patientId: p.id, planId: plan.id, status: 'REQUESTED' } });
+  const policy = open || await prisma.insurancePolicy.create({ data: {
+    patientId: p.id, planId: plan.id, provider: plan.provider, memberCount: members, status: 'REQUESTED',
+    policyNumber: 'REQ-' + Date.now().toString(36).toUpperCase(), premiumAmount: Number(plan.monthlyPremium) * members, coverageDetails: str(req.body.note, 500),
+  } });
+  const u = await prisma.user.findUnique({ where: { id: uid(req) }, select: { name: true, phone: true, email: true } });
+  const admins = await prisma.user.findMany({ where: { role: 'ADMIN', isActive: true }, select: { id: true } });
+  await Promise.all(admins.map((a) => notify(a.id, 'insurance', 'Insurance enrolment request', `${u?.name} (${u?.phone || u?.email}) wants ${plan.name} by ${plan.provider} for ${members} ${members > 1 ? 'people' : 'person'}. Pass it to the HMO.`, { email: true, data: { policyId: policy.id } })));
+  await notify(uid(req), 'insurance', 'Request sent to ' + plan.provider, `${plan.provider} will contact you to complete enrolment. You pay the HMO directly; N-Health never collects premiums.`);
+  res.status(201).json(policy);
+}
+/** Premiums are paid to the HMO, not through N-Health. */
+export async function payPremium(_req: Request, _res: Response) {
+  throw ApiError.badRequest('Premiums are paid directly to the HMO. Use "Request enrolment" and the HMO will contact you.');
+}
+
+/** GET/PUT /api/admin-ops/donation-partner - the registered NGO that receives donations. */
+export async function getPartner(_req: Request, res: Response) { res.json(await getDonationPartner()); }
+export async function putPartner(req: Request, res: Response) {
+  const { saveDonationPartner } = await import('../../services/settings');
+  try { res.json(await saveDonationPartner(req.body || {}, uid(req))); } catch (e: any) { throw new ApiError(e.status || 400, e.message); }
+}
+/** GET /api/admin-ops/donations/pending - bank-transfer donations waiting to be confirmed against the receiver's statement. */
+export async function adminPendingDonations(_req: Request, res: Response) {
+  res.json(await prisma.donation.findMany({ where: { status: 'PENDING', campaignId: { not: null } }, orderBy: { createdAt: 'desc' }, take: 500,
+    select: { id: true, amount: true, reference: true, createdAt: true, campaign: true, campaignId: true, patient: { select: { user: { select: { name: true, email: true } } } } } }));
 }

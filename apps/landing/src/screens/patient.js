@@ -18,9 +18,10 @@ export async function homeScreen(el) {
   el.innerHTML = appBar({ title: brandTitle() }) + `
     <div class="welcome-text">${t('Hello')}, 👋 ${esc(u.name.split(' ')[0])}</div>
     <div class="welcome-sub">Your complete health companion</div>
-    <div class="balance-card"><div class="balance-label">Coins Balance</div><div class="balance-amount" id="bal">…</div>
+    <div class="balance-card"><div class="balance-label">Reward coins</div><div class="balance-amount" id="bal">…</div>
       <div style="font-size:11px;opacity:.85;margin-top:2px" id="ins"></div>
-      <div class="balance-actions"><button class="btn-primary" data-go="/patient/wallet">💰 Coins</button><button class="btn-outline" data-go="/patient/wallet?tab=history">📊 History</button></div></div>
+      <div class="balance-actions"><button class="btn-primary" id="checkin">📅 Check in +1 🪙</button><button class="btn-outline" data-go="/patient/wallet">🎯 Quests</button></div></div>
+    ${!u.emailVerified && !u.phoneVerified ? `<div class="banner info" id="vemail">📧 Confirm your email to secure your account. We sent a 6-digit code to ${esc(u.email || '')}. <button class="btn btn-sm btn-primary" id="vemailb">Confirm</button></div>` : ''}
     ${u.kycStatus === 'IN_REVIEW' ? '<div class="banner info" data-go="/kyc">⏳ Your identity documents are being checked. We will notify you when it is done.</div>' : u.kycStatus !== 'APPROVED' ? '<div class="banner info">🪪 Verify your identity to unlock emergency dispatch, insurance and donations.<button class="btn btn-sm btn-primary" data-go="/kyc">Verify</button></div>' : ''}
     <div class="quick-actions">
       <div class="quick-action emergency" data-go="/patient/emergency" tabindex="0"><span class="icon">🚨</span><span class="label">${t('Emergency')}</span></div>
@@ -40,6 +41,17 @@ export async function homeScreen(el) {
     <div id="fhp"></div>${inviteCard()}<div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
   loadInviteStats(el);
+  $('#vemailb', el)?.addEventListener('click', () => import('./shared.js').then((m) => m.verifyEmail(() => $('#vemail', el)?.remove())));
+  const ci = $('#checkin', el);
+  const doneCi = () => { ci.textContent = '✓ Checked in today'; ci.disabled = true; };
+  ci?.addEventListener('click', async () => {
+    let done = false;
+    await busy(ci, async () => {
+      try { const r = await post('/quests/checkin/claim'); done = true; toast(`📅 Checked in: +${r.coins} 🪙${r.streak > 1 ? ' • 🔥 ' + r.streak + '-day streak' : ''}`); loadBalance().then((b) => { const x = $('#bal', el); if (x) x.textContent = '🪙 ' + coins(b); }); }
+      catch (err) { if (err.status === 409) { done = true; toast('You already checked in today. See you tomorrow!'); } else throw err; }
+    });
+    if (done) doneCi();
+  });
   get('/patient/insurance').then((p) => { const a = p.find((x) => x.status === 'ACTIVE'); $('#ins', el) && ($('#ins', el).innerHTML = a ? `<span class="badge" style="background:rgba(255,255,255,.2);color:#fff">✓ ${esc(a.plan?.name || a.provider)} Active</span>` : ''); }).catch(() => null);
   get('/patient/appointments').then((list) => {
     const up = list.filter(upcoming).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)).slice(0, 3);
@@ -68,6 +80,7 @@ export async function homeScreen(el) {
 // ================= COINS (wallet) =================
 export async function walletScreen(el, _p, q) {
   const cfg = state.config || {};
+  if (!cfg.coinSales) return rewardsScreen(el);
   const gws = cfg.gateways || [];
   const pending = sessionStorage.getItem('nh_topup');
   el.innerHTML = appBar({ title: '💰 Coins', back: '/patient/home' }) + `
@@ -119,6 +132,46 @@ export async function walletScreen(el, _p, q) {
   }
 }
 
+/** The quest board: health actions that earn reward coins (claim when done). */
+async function drawQuests(box, refresh) {
+  if (!box) return;
+  const qb = await get('/quests').catch(() => null);
+  if (!qb?.enabled) { box.innerHTML = ''; return; }
+  box.innerHTML = card(cardHead('🎯 Health quests', `<span class="small muted">Today ${qb.earnedToday}/${qb.dailyCap} 🪙${qb.streak ? ' • 🔥 ' + qb.streak + '-day streak' : ''}</span>`) +
+    qb.quests.map((q) => item({ icon: q.icon, title: `${esc(q.title)} <span class="badge badge-provider">+${q.coins} 🪙</span>`, sub: esc(q.hint) + (q.repeat === 'daily' ? ' • every day' : q.repeat === 'each' ? ` • each time${q.doneCount ? ' (' + q.doneCount + ' so far)' : ''}` : ''),
+      trailing: q.done ? '<span style="color:var(--success)">✓ Done</span>' : q.claimable ? `<button class="btn btn-primary btn-sm" data-claim="${q.key}">Claim</button>` : (q.go ? `<button class="btn btn-outline btn-sm" data-go="${q.go}">Go</button>` : '') })).join(''));
+  box.onclick = async (e) => {
+    const b = e.target.closest('[data-claim]'); if (!b) return;
+    await busy(b, async () => { const r = await post('/quests/' + b.dataset.claim + '/claim'); toast(`🪙 +${r.coins} coin${r.coins === 1 ? '' : 's'}${r.streak > 1 ? ' • 🔥 ' + r.streak + '-day streak' : ''}`); loadBalance(); refresh?.(); });
+  };
+}
+
+/** Coins are free rewards (like loyalty points): earned by inviting friends and in promotions, never bought or cashed out. */
+async function rewardsScreen(el) {
+  const reward = state.config?.inviteRewardCoins || 1;
+  el.innerHTML = appBar({ title: '🪙 My coins', back: '/patient/home' }) + `
+    <div class="balance-card"><div class="balance-label">Reward coins</div><div class="balance-amount" id="bal">…</div><div class="small" style="opacity:.85">Use them towards care on N-Health</div></div>
+    <div id="quests">${skeleton(2)}</div>
+    ${card(cardHead('More ways to earn') + `
+      ${item({ icon: '👥', title: `Invite friends: ${reward} coin${reward > 1 ? 's' : ''} each`, sub: 'When a friend joins with your link and confirms their email or phone', attrs: 'data-go="/patient/home"' })}
+      ${item({ icon: '🎁', title: 'Promotions', sub: 'Watch your notifications for N-Health offers' })}`)}
+    ${state.config?.donationPartner ? card(cardHead('💚 Donate your coins') + `<p class="small muted">Give coins to ${esc(state.config.donationPartner.name)}, our registered NGO partner. N-Health turns them into a real donation from its own funds.</p><button class="btn btn-success btn-block btn-sm" id="givecoins">Donate coins</button>`) : ''}
+    ${card(cardHead('How coins work') + `<div class="small muted" style="line-height:1.6">
+      • When you pay for a booking, order or test, choose <b>Use my coins</b> if you have enough.<br>
+      • Coins are a free reward from N-Health. They can't be bought, sold, sent to someone else or exchanged for cash.<br>
+      • Using or donating coins is final. Coins don't expire, but N-Health may change the programme with notice.<br>
+      • You pay for care by card (the money goes straight to the provider) or in cash at the service.</div>`)}
+    <div id="history">${skeleton(3)}</div>`;
+  const b = await loadBalance(); $('#bal', el).textContent = '🪙 ' + coins(b);
+  drawQuests($('#quests', el), () => rewardsScreen(el));
+  $('#givecoins', el)?.addEventListener('click', () => formModal('💚 Donate coins', [{ name: 'coins', label: `Coins to give (you have ${coins(state.balance || 0)})`, type: 'number', min: 1, required: true }], { submit: 'Donate', intro: `<p class="muted mb8">To ${esc(state.config.donationPartner.name)}. This can't be undone.</p>`, onSubmit: async (v) => { await post('/coins/donate', { coins: Math.floor(Number(v.coins)) }); toast('💚 Thank you for giving!'); rewardsScreen(el); } }));
+  const tx = await get('/credits/transactions').catch(() => []);
+  $('#history', el).innerHTML = card(cardHead('📊 Coin history') + (tx.length ? tx.map((x) => item({
+    avatarHtml: `<div class="avatar" style="background:${Number(x.amount) >= 0 ? '#E6F4EA;color:var(--success)' : '#FCE8E6;color:var(--error)'}">${Number(x.amount) >= 0 ? '🎁' : '🪙'}</div>`,
+    title: esc(x.description), sub: dt(x.createdAt), trailing: `<span style="color:${Number(x.amount) >= 0 ? 'var(--success)' : 'var(--error)'};font-weight:600">${Number(x.amount) >= 0 ? '+' : ''}${coins(x.amount)}</span>`,
+  })).join('') : empty('🎁', 'No coins yet. Invite friends to earn your first coins.')));
+}
+
 // ================= EMERGENCY =================
 const NUM_LABEL = { 112: 'National Emergency', 767: 'Lagos State Emergency', 199: 'Police / Fire', 911: 'Emergency Services', 999: 'Emergency Services', 10177: 'Ambulance', 193: 'Ambulance' };
 export async function emergencyScreen(el) {
@@ -128,19 +181,19 @@ export async function emergencyScreen(el) {
     ${card(item({ icon: '🆘', title: 'My Emergency Medical ID', sub: 'QR card with blood group, allergies & contacts for first responders', attrs: 'data-go="/patient/records?tab=card"' }) + item({ icon: '🩹', title: 'First aid while help is on the way', attrs: 'data-go="/articles/first-aid-emergencies"' }))}`;
   let map = null, offs = [];
   const ambulanceForm = async (body) => {
-      const bal = await loadBalance();
-      const min = state.config?.emergencyMinBalance ?? 5000;
       body.innerHTML = card(`<div style="text-align:center;font-size:40px">🚨</div><h3 style="text-align:center;color:var(--emergency-red);font-size:16px">Emergency Service</h3>
-        <p class="center muted">Alerts the nearest ambulances & on-call doctors with your live location, and texts your emergency contact.</p>
-        <p class="center small ${bal < min ? '' : 'muted'}" style="${bal < min ? 'color:var(--error)' : ''}">Minimum balance of ${money(min)} required • You have 🪙 ${coins(bal)}</p>
+        <p class="center muted">Alerts the nearest ambulances & on-call doctors with your live location, and messages your emergency contact on WhatsApp.</p>
+        <p class="center small muted">No payment needed now. Pay the crew in cash or by card after the trip.</p>
         <div class="form-group mt8"><select id="etype"><option value="MEDICAL">🩺 Medical emergency</option><option value="ACCIDENT">🚗 Accident / injury</option><option value="MATERNITY">🤰 Labour / maternity</option><option value="CARDIAC">❤️ Chest pain / cardiac</option><option value="BREATHING">🫁 Breathing difficulty</option><option value="OTHER">Other</option></select></div>
         <div class="form-group"><input id="enotes" placeholder="What's happening? (optional)"></div>
         <button class="btn btn-danger btn-block pulse" id="req" style="font-size:14px;padding:14px">🚨 Request Emergency Help</button>
-        ${bal < min ? '<button class="btn btn-outline btn-block mt8" data-go="/patient/wallet">Top up coins</button>' : ''}`, 'style="border:2px solid var(--emergency-red);background:#FFF5F5"');
+`, 'style="border:2px solid var(--emergency-red);background:#FFF5F5"');
       $('#req', body).onclick = (e) => busy(e.target, async () => {
         toast('📍 Getting your location…');
         const p = await locate({ timeout: 12000 }).catch((err) => { throw new Error(err.message + '. Call ' + nums[0] + ' now.'); });
-        await post('/patient/emergency', { lat: p.lat, lng: p.lng, type: $('#etype', body).value, notes: $('#enotes', body).value || undefined, contactPhone: state.user.phone || undefined });
+        const er = await post('/patient/emergency', { lat: p.lat, lng: p.lng, type: $('#etype', body).value, notes: $('#enotes', body).value || undefined, contactPhone: state.user.phone || undefined });
+        // One tap to also message the emergency contact from the patient's own WhatsApp.
+        if (er?.contactLink) sessionStorage.setItem('nh_em_contact', er.contactLink);
         if (navigator.vibrate) navigator.vibrate(200);
         toast('🚑 Help requested - nearby ambulances alerted');
         draw();
@@ -175,6 +228,7 @@ export async function emergencyScreen(el) {
         <div class="progress-bar mt8"><div class="fill success" style="width:${((idx + 1) / steps.length) * 100}%"></div></div>
         <div class="row between small muted mt8">${['Sent', 'Accepted', 'En route', 'Arrived'].map((s, i) => `<span style="${i <= idx ? 'color:var(--success);font-weight:600' : ''}">${s}</span>`).join('')}</div>
         ${amb ? `<div class="live-eta" id="live" aria-live="polite"></div>` : ''}
+        ${(() => { const l = sessionStorage.getItem('nh_em_contact'); return l && /^https:\/\/wa\.me\//.test(l) ? `<a class="btn btn-outline btn-block mt8" target="_blank" rel="noopener" href="${esc(l)}">💬 Message my emergency contact on WhatsApp</a>` : ''; })()}
         <div class="map" id="emap"></div>
         ${amb ? `<div class="crew">
           <div class="avatar ambulance-avatar">🚑</div>
@@ -788,7 +842,7 @@ export async function donationsScreen(el, _p, q) {
     const ll = p ? `&lat=${p.lat}&lng=${p.lng}` : '';
     if (tab === 'blood') {
       const [reqs, centers] = await Promise.all([get('/donations/campaigns?type=BLOOD' + ll), get('/donations/centers?type=BLOOD' + ll)]);
-      tb.innerHTML = card(cardHead('✅ Check eligibility') + '<p class="muted mb8">Healthy adults 18-65 weighing 50kg+ can donate every 8 weeks.</p><button class="btn btn-danger btn-block btn-sm" id="elig">Am I eligible?</button><div id="er"></div>') +
+      tb.innerHTML = '<div class="banner info small">🩸 Blood is never bought or sold on N-Health. Donate free at a hospital or blood bank, and never pay or accept money for blood.</div>' + card(cardHead('✅ Check eligibility') + '<p class="muted mb8">Healthy adults 18-65 weighing 50kg+ can donate every 8 weeks.</p><button class="btn btn-danger btn-block btn-sm" id="elig">Am I eligible?</button><div id="er"></div>') +
         card(cardHead('🩸 Urgent blood requests') + (reqs.length ? reqs.map(campaignCard).join('') : empty('🩸', 'No open requests nearby'))) +
         card(cardHead('📍 Donation centers') + (centers.length ? centers.map((c) => `<div class="donation-location"><div class="name">${esc(c.name)}</div><div class="address">${esc(c.address)}${c.city ? ', ' + esc(c.city) : ''} • ${esc(c.hours || '')}</div><div class="row between"><span class="distance">${c.distanceKm != null ? c.distanceKm + ' km' : ''}</span><span><a class="link" href="tel:${esc(c.phone || '')}">📞</a> <button class="link" data-pledge-center="${c.id}" data-name="${esc(c.name)}">Book visit</button></span></div></div>`).join('') : empty('📍', 'No centers listed')));
       $('#elig', tb).onclick = () => formModal('🩸 Eligibility check', [
@@ -798,7 +852,7 @@ export async function donationsScreen(el, _p, q) {
       ], { submit: 'Check', onSubmit: async (v) => { const r = await post('/donations/eligibility', v); $('#er', tb).innerHTML = `<div class="eligibility-result ${r.eligible ? 'success' : ''} mt8"><div class="icon">${r.eligible ? '✅' : '⚠️'}</div><div class="title">${r.eligible ? 'You can donate!' : 'Not eligible right now'}</div><div class="details">${r.eligible ? 'Book a visit at a center below or answer an urgent request.' : r.reasons.map(esc).join('<br>')}</div></div>`; } });
     } else if (tab === 'organ') {
       const [reg, reqs] = await Promise.all([get('/donations/organ-registry'), get('/donations/campaigns?type=ORGAN' + ll)]);
-      tb.innerHTML = card(cardHead('🫀 Organ donor registry') + (reg && reg.status === 'ACTIVE' ? `<div class="eligibility-result success"><div class="icon">💚</div><div class="title">You are a registered donor</div><div class="details">Card no. <b>${esc(reg.donorCardNo)}</b> • ${esc((reg.organs || []).join(', '))}${reg.livingDonor ? ' • living donor' : ''}</div></div><div class="row mt8"><button class="btn btn-outline btn-sm grow" id="orgedit">Update</button><button class="btn btn-outline btn-sm grow" id="orgw" style="color:var(--error)">Withdraw</button></div>` : `<p class="muted mb8">One donor can save up to 8 lives. Registering records your wishes - tell your family too.</p><button class="btn btn-success btn-block" id="orgedit">Register as a donor</button>`)) +
+      tb.innerHTML = card(cardHead('🫀 Organ donor registry') + (reg && reg.status === 'ACTIVE' ? `<div class="eligibility-result success"><div class="icon">💚</div><div class="title">You are a registered donor</div><div class="details">Card no. <b>${esc(reg.donorCardNo)}</b> • ${esc((reg.organs || []).join(', '))}${reg.livingDonor ? ' • living donor' : ''}</div></div><div class="row mt8"><button class="btn btn-outline btn-sm grow" id="orgedit">Update</button><button class="btn btn-outline btn-sm grow" id="orgw" style="color:var(--error)">Withdraw</button></div>` : `<p class="muted mb8">One donor can save up to 8 lives. Registering records your wishes - tell your family too.</p><p class="small muted mb8">This is a pledge register only. N-Health never matches donors with recipients: transplants are arranged by licensed hospitals under the National Health Act, and organs are never paid for.</p><button class="btn btn-success btn-block" id="orgedit">Register as a donor</button>`)) +
         card(cardHead('🔎 Organ requests') + (reqs.length ? reqs.map(campaignCard).join('') : empty('🫀', 'No open organ requests')));
       $('#orgedit', tb).onclick = () => formModal('🫀 Organ donation', [
         ...ORGANS.map((o) => ({ name: 'o_' + o, label: o, type: 'checkbox', value: (reg?.organs || []).includes(o) })),
@@ -826,23 +880,53 @@ export async function donationsScreen(el, _p, q) {
   });
   draw();
 }
-function donateModal(id, title, after) {
-  formModal('❤️ Donate to ' + esc(title), [
-    { name: 'amount', label: 'Coins to donate', type: 'number', required: true, min: 10, placeholder: '100' },
+/** Who receives donations: the partner NGO when set, otherwise the campaign's hospital. */
+const receiverText = (c) => { const ngo = state.config?.donationPartner; return ngo ? `${esc(ngo.name)}${ngo.regNumber ? ' (registered NGO, ' + esc(ngo.regNumber) + ')' : ' (registered NGO)'}` : esc(c?.institution?.name || 'the hospital'); };
+function donateModal(c, after) {
+  formModal('❤️ Donate to ' + esc(c.title), [
+    { name: 'amount', label: 'Amount (₦)', type: 'number', required: true, min: 100, placeholder: '5000' },
     { name: 'message', label: 'Message of support (optional)' }, { name: 'anonymous', label: 'Donate anonymously', type: 'checkbox' },
-  ], { submit: 'Donate', intro: '<p class="muted mb8">Paid from your coins. 100% goes to the cause.</p>', onSubmit: async (v) => { await post('/donations/campaigns/' + id + '/donate', { ...v, amount: Math.floor(Number(v.amount)) * coinValue() }); toast('💚 Thank you for your donation!'); loadBalance(); after?.(); } });
+  ], { submit: 'Continue', intro: `<p class="muted mb8">Your donation goes straight to ${receiverText(c)}. N-Health never holds donated money and takes no fee.</p>`, onSubmit: async (v) => {
+    const r = await post('/donations/campaigns/' + c.id + '/donate', { ...v, amount: Math.floor(Number(v.amount)) });
+    setTimeout(() => payDonation(r, after), 50);
+  } });
 }
-function createCampaign(after) {
+/** Pay the receiver directly: card (settled 100% to their account) or bank transfer they confirm. */
+function payDonation(r, after) {
+  const who = `${esc(r.receiver.name)}${r.receiver.kind === 'NGO' ? ' (registered NGO' + (r.receiver.regNumber ? ', ' + esc(r.receiver.regNumber) : '') + ')' : ''}`;
+  modal(`<div class="modal-title">💚 Pay ${money(r.amount, { naira: true })} to ${who}</div>
+    ${r.card ? '<button class="btn btn-primary btn-block" id="dcard">💳 Pay by card, transfer or USSD</button><p class="small muted center mt8">Paid straight into their account by our licensed payment partner.</p>' : ''}
+    ${r.bank ? `<div class="card mt8" style="background:var(--surface)"><div class="card-title" style="font-size:13px">🏦 Or send a bank transfer</div>
+      <div class="kv"><span class="k">Bank</span><span class="v">${esc(r.bank.bankName)}</span></div>
+      <div class="kv"><span class="k">Account number</span><span class="v"><b>${esc(r.bank.accountNumber)}</b></span></div>
+      <div class="kv"><span class="k">Account name</span><span class="v">${esc(r.bank.accountName)}</span></div>
+      <div class="kv"><span class="k">Reference</span><span class="v"><b>${esc(r.reference)}</b></span></div>
+      <p class="small muted">Use the reference so your donation can be matched. It shows on the campaign once the receiver confirms it.</p>
+      <button class="btn btn-outline btn-block" id="dsent">I've sent it</button></div>` : ''}
+    ${!r.card && !r.bank ? '<div class="banner warn">The receiver hasn\'t added a bank account yet. Please try again later.</div>' : ''}`, (box, close) => {
+    $('#dcard', box)?.addEventListener('click', (e) => busy(e.target, async () => {
+      const p = await post('/payments/card', { payableType: 'DONATION', payableId: r.donationId, returnUrl: webOrigin() + '/' });
+      sessionStorage.setItem('nh_paid', p.internalRef);
+      if (p.checkoutUrl) location.href = p.checkoutUrl; else throw new Error('Checkout unavailable');
+    }));
+    $('#dsent', box)?.addEventListener('click', () => { close(); toast('💚 Thank you! It will show once the receiver confirms it.'); after?.(); });
+  });
+}
+async function createCampaign(after) {
+  // Money raised goes straight to the treating hospital (or the partner NGO), so patients pick the hospital.
+  const ngo = state.config?.donationPartner;
+  const hospitals = state.user.role === 'PATIENT' ? await get('/directory?type=INSTITUTION&q=&sort=rating').catch(() => []) : [];
   formModal('📣 Request donations', [
     { name: 'type', label: 'Type', type: 'select', options: [['BLOOD', '🩸 Blood request'], ['ORGAN', '🫀 Organ request'], ['PATIENT_CASE', '🧒 Patient medical bill'], ['FUND', '💰 Community fund']] },
     { name: 'title', label: 'Title', required: true, placeholder: 'e.g. O- blood needed for surgery at LUTH' },
     { name: 'description', label: 'Story / details', type: 'textarea', rows: 4, required: true },
     { name: 'beneficiaryName', label: 'Beneficiary' },
+    ...(state.user.role === 'PATIENT' ? [{ name: 'hospitalId', label: ngo ? 'Treating hospital (optional)' : 'Treating hospital - required for money campaigns', type: 'select', options: [['', '—'], ...hospitals.filter((h) => h.profileId).map((h) => [h.profileId, h.name + (h.city ? ' - ' + h.city : '')])] }] : []),
     { name: 'bloodType', label: 'Blood group needed', type: 'select', options: [['', '—'], ...BLOOD] }, { name: 'organ', label: 'Organ needed', type: 'select', options: [['', '—'], ...ORGANS] },
-    { name: 'unitsNeeded', label: 'Units / donors needed', type: 'number' }, { name: 'goalAmount', label: state.user.role === 'PATIENT' ? 'Goal in coins - for money campaigns' : 'Goal amount (₦) - for money campaigns', type: 'number' },
+    { name: 'unitsNeeded', label: 'Units / donors needed', type: 'number' }, { name: 'goalAmount', label: 'Goal amount (₦) - for money campaigns', type: 'number' },
     { name: 'urgency', label: 'Urgency', type: 'select', options: ['NORMAL', 'URGENT', 'CRITICAL'] }, { name: 'location', label: 'Hospital / location' },
     { name: 'contactName', label: 'Contact person' }, { name: 'contactPhone', label: 'Contact phone', type: 'tel' }, { name: 'deadline', label: 'Needed by', type: 'date' },
-  ], { submit: 'Submit for review', intro: '<div class="banner info">To protect donors, campaigns are reviewed by N-Health before going live (usually within 24h). Institutions go live instantly.</div>', onSubmit: async (v) => { if (state.user.role === 'PATIENT' && v.goalAmount) v.goalAmount = Number(v.goalAmount) * coinValue();
+  ], { submit: 'Submit for review', intro: `<div class="banner info">To protect donors, campaigns are reviewed by N-Health before going live (usually within 24h). Institutions go live instantly.<br>Money donations are paid straight to ${ngo ? esc(ngo.name) + ' (our registered NGO partner)' : 'the treating hospital'}, never to individuals or N-Health. Blood and organs are never bought or sold.</div>`, onSubmit: async (v) => {
     const b = { ...v }; Object.keys(b).forEach((k) => b[k] === '' && delete b[k]);
     if (b.deadline) b.deadline = new Date(b.deadline).toISOString();
     const p = await pos(); if (p) Object.assign(b, { lat: p.lat, lng: p.lng });
@@ -856,14 +940,22 @@ export async function campaignScreen(el, { id }) {
   const money_ = c.type === 'FUND' || c.type === 'PATIENT_CASE';
   el.innerHTML = appBar({ title: '❤️ ' + esc(c.type.replace('_', ' ').toLowerCase()), back: '/patient/donations' }) + card(`${c.imageUrl ? `<img src="${esc(c.imageUrl)}" style="width:100%;border-radius:12px;margin-bottom:8px" alt="">` : ''}<h3 style="font-size:16px">${esc(c.title)}</h3><div class="muted">${esc(c.beneficiaryName || '')} ${c.institution ? '• ' + esc(c.institution.name) : ''} ${badge(c.status)} ${c.urgency !== 'NORMAL' ? badge('FAILED', c.urgency) : ''}</div>
     <p style="font-size:13px;line-height:1.6;margin:8px 0">${esc(c.description)}</p>
+    ${money_ ? `<div class="banner info small">💚 Donations go straight to ${receiverText(c)}. N-Health takes no fee and never holds the money.</div>` : '<div class="banner info small">🩸 Donating blood or organs is always free: never pay or accept money for them.</div>'}
     ${money_ ? `<div class="progress-bar"><div class="fill primary" style="width:${pct}%"></div></div><div class="row between small mt8"><b>${money(c.raisedAmount)} raised</b><span class="muted">of ${money(c.goalAmount)} • ${c.donorCount} donors</span></div>` : `<div class="kv"><span class="k">Needed</span><span class="v">${esc(c.bloodType || c.organ || '')} • ${c.unitsPledged}/${c.unitsNeeded || '?'} pledged</span></div>`}
     ${c.location ? `<div class="kv"><span class="k">Location</span><span class="v">${esc(c.location)}</span></div>` : ''}${c.deadline ? `<div class="kv"><span class="k">Needed by</span><span class="v">${dateOnly(c.deadline)}</span></div>` : ''}
     <div class="kv"><span class="k">Contact</span><span class="v">${esc(c.contactName || c.organizer?.name || '')} ${c.contactPhone || c.organizer?.phone ? `• <a href="tel:${esc(c.contactPhone || c.organizer.phone)}">${esc(c.contactPhone || c.organizer.phone)}</a>` : ''}</span></div>
     <div class="row mt12">${c.status === 'ACTIVE' && !mine ? (money_ ? '<button class="btn btn-primary grow" id="give">❤️ Donate</button>' : '<button class="btn btn-danger grow" id="pledge">🩸 I can donate</button>') : ''}${!mine ? `<button class="btn btn-outline grow" data-go="/chat/${c.organizerId}">💬 Contact</button>` : ''}<button class="btn btn-outline" id="share">↗️</button></div>`) +
+    (money_ && c.institution?.userId === state.user.id && !state.config?.donationPartner ? '<div id="tr"></div>' : '') +
     (c.donations?.length ? card(cardHead('💚 Recent donations') + c.donations.map((d) => item({ icon: '💚', title: esc(d.donor) + ' • ' + money(d.amount), sub: esc(d.message || '') + ' ' + ago(d.createdAt) })).join('')) : '') + (mine ? '<div id="pl"></div>' : '');
-  $('#give', el)?.addEventListener('click', () => donateModal(c.id, c.title, () => campaignScreen(el, { id })));
+  $('#give', el)?.addEventListener('click', () => donateModal(c, () => campaignScreen(el, { id })));
   $('#pledge', el)?.addEventListener('click', () => formModal('🩸 Pledge to donate', [{ name: 'scheduledAt', label: 'When can you come?', type: 'datetime-local', required: true }], { submit: 'Pledge', onSubmit: async (v) => { const r = await post('/donations/pledges', { type: c.type, campaignId: c.id, scheduledAt: new Date(v.scheduledAt).toISOString() }); modal(`<div class="eligibility-result success"><div class="icon">💚</div><div class="title">Thank you!</div><div class="details">Contact <b>${esc(r.contact?.name || '')}</b>${r.contact?.phone ? ` on <a href="tel:${esc(r.contact.phone)}">${esc(r.contact.phone)}</a>` : ''} at ${esc(r.contact?.location || '')} to confirm.</div></div>`); } }));
   $('#share', el).onclick = () => { const text = `${c.title} - help via N-Health: ${webOrigin()}/#/donations/campaign/${c.id}`; navigator.share ? navigator.share({ text }).catch(() => null) : navigator.clipboard?.writeText(text).then(() => toast('📋 Link copied')); };
+  // The receiving hospital confirms bank transfers that reached its account.
+  if ($('#tr', el)) {
+    const tr = await get('/donations/campaigns/' + id + '/transfers').catch(() => []);
+    $('#tr', el).innerHTML = card(cardHead('🏦 Transfers to confirm') + (tr.length ? tr.map((x) => item({ icon: '🏦', title: money(x.amount, { naira: true }) + ' • ' + esc(x.reference), sub: (x.anonymous ? 'Anonymous' : esc(x.patient?.user?.name || '')) + ' • ' + ago(x.createdAt), trailing: `<button class="btn btn-success btn-sm" data-rcv="${x.id}">Received</button>` })).join('') : '<p class="muted small">No transfers waiting. Card donations confirm automatically.</p>'));
+    $('#tr', el).onclick = async (e) => { const b = e.target.closest('[data-rcv]'); if (b) await busy(b, async () => { await post('/donations/' + b.dataset.rcv + '/received'); toast('✅ Confirmed'); campaignScreen(el, { id }); }); };
+  }
   if (mine) {
     const pl = await get('/donations/campaigns/' + id + '/pledges');
     $('#pl', el).innerHTML = card(cardHead('🙋 Donors who pledged') + (pl.length ? pl.map((x) => `${item({ icon: '🙋', title: esc(x.donor.name), sub: (x.scheduledAt ? dt(x.scheduledAt) : '') + (x.donor.phone ? ' • ' + esc(x.donor.phone) : ''), trailing: badge(x.status) })}${x.status === 'SCHEDULED' ? `<div class="row mb8"><button class="btn btn-success btn-sm grow" data-done="${x.id}">✓ Donated</button><button class="btn btn-outline btn-sm grow" data-go="/chat/${x.donor.id}">💬</button></div>` : ''}`).join('') : empty('🙋', 'No pledges yet')));
@@ -877,16 +969,14 @@ export async function insuranceScreen(el) {
   const p = state.user.patientProfile || {};
   el.innerHTML = appBar({ title: '🛡️ Insurance', back: '/patient/home' }) +
     card(cardHead('🇳🇬 NHIS / NHIA status') + (p.nhisNumber ? `<div class="banner ok">✅ NHIA number on file: <b>${esc(p.nhisNumber)}</b></div>` : '<div class="banner warn">No NHIA number on file. Add it in Profile → Health information.</div>')) +
-    card(cardHead('📋 My policies', '<button class="link" id="addp">+ Add existing</button>') + (mine.length ? mine.map((x) => `${item({ icon: '🛡️', title: esc(x.plan?.name || x.provider), sub: esc(x.policyNumber) + (x.premiumAmount ? ' • ' + money(x.premiumAmount) + '/mo' : '') + (x.expiresAt ? ' • expires ' + dateOnly(x.expiresAt) : ''), trailing: badge(x.status) })}${x.status === 'PENDING' && x.premiumAmount ? `<button class="btn btn-primary btn-sm btn-block mb8" data-prem="${x.id}" data-amt="${x.premiumAmount}">Pay first premium ${money(x.premiumAmount)}</button>` : ''}`).join('') : empty('🛡️', 'No policies yet'))) +
+    card(cardHead('📋 My policies', '<button class="link" id="addp">+ Add existing</button>') + (mine.length ? mine.map((x) => `${item({ icon: '🛡️', title: esc(x.plan?.name || x.provider), sub: esc(x.policyNumber) + (x.premiumAmount ? ' • ' + money(x.premiumAmount) + '/mo' : '') + (x.expiresAt ? ' • expires ' + dateOnly(x.expiresAt) : ''), trailing: badge(x.status) })}${x.status === 'REQUESTED' ? `<p class="small muted mb8">Sent to ${esc(x.provider)}. They will contact you to complete enrolment; you pay the HMO directly.</p>` : ''}`).join('') : empty('🛡️', 'No policies yet'))) +
     card(cardHead('🛡️ Accredited HMOs in Nigeria', '<button class="link" id="hmos">See all</button>') + '<p class="small muted" style="margin:0">All health maintenance organisations accredited by NHIA, with their contacts. Source: NHIA.</p>') +
-        card(cardHead('🏥 Health schemes') + plans.map((pl) => `<div class="provider-detail-card"><div class="row between"><div><div class="provider-name">${esc(pl.name)}</div><div class="provider-specialty">${esc(pl.provider)} • ${esc(pl.type)}</div></div><div class="provider-fee">${Number(pl.monthlyPremium) ? money(pl.monthlyPremium) + '/mo' : 'Free'}</div></div><p class="muted small mt8">${esc(pl.description || '')}</p><div class="row wrap mt8">${(pl.coverage || []).map((c) => `<span class="chip">✓ ${esc(c)}</span>`).join('')}</div><button class="btn btn-primary btn-sm btn-block mt8" data-enrol="${pl.id}" data-name="${esc(pl.name)}" data-fam="${/family/i.test(pl.name) ? 1 : 0}">Enroll</button></div>`).join(''));
+        card(cardHead('🏥 Health schemes') + plans.map((pl) => `<div class="provider-detail-card"><div class="row between"><div><div class="provider-name">${esc(pl.name)}</div><div class="provider-specialty">${esc(pl.provider)} • ${esc(pl.type)}</div></div><div class="provider-fee">${Number(pl.monthlyPremium) ? money(pl.monthlyPremium) + '/mo' : 'Free'}</div></div><p class="muted small mt8">${esc(pl.description || '')}</p><div class="row wrap mt8">${(pl.coverage || []).map((c) => `<span class="chip">✓ ${esc(c)}</span>`).join('')}</div><button class="btn btn-primary btn-sm btn-block mt8" data-enrol="${pl.id}" data-name="${esc(pl.name)}" data-fam="${/family/i.test(pl.name) ? 1 : 0}">Request enrolment</button></div>`).join(''));
   el.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-enrol],[data-prem],#addp'); if (!b) return;
+    const b = e.target.closest('[data-enrol],#addp'); if (!b) return;
     if (b.id === 'addp') return formModal('Add an existing policy', [{ name: 'provider', label: 'Insurer / HMO', required: true }, { name: 'policyNumber', label: 'Policy / member number', required: true }, { name: 'coverageDetails', label: 'Coverage notes' }, { name: 'expiresAt', label: 'Expiry date', type: 'date' }], { onSubmit: async (v) => { await post('/patient/insurance', { ...v, expiresAt: v.expiresAt ? new Date(v.expiresAt).toISOString() : undefined }); insuranceScreen(el); } });
-    if (b.dataset.enrol) formModal('Enroll in ' + esc(b.dataset.name), [{ name: 'memberCount', label: 'Members covered', type: 'number', value: b.dataset.fam === '1' ? 4 : 1, min: 1 }, { name: 'share', label: 'Share my health profile with the insurer', type: 'checkbox', value: true }], { submit: 'Enroll', onSubmit: async (v) => { if (v.share) await patch('/auth/profile', { insuranceShareConsent: true }).catch(() => null); const pol = await post('/patient/insurance', { planId: b.dataset.enrol, memberCount: Number(v.memberCount) || 1 }); toast('✅ Enrollment started'); if (Number(pol.premiumAmount) > 0) setTimeout(() => premium(pol.id, pol.premiumAmount), 50); else insuranceScreen(el); } });
-    if (b.dataset.prem) premium(b.dataset.prem, b.dataset.amt);
+    if (b.dataset.enrol) formModal('Join ' + esc(b.dataset.name), [{ name: 'memberCount', label: 'People to cover', type: 'number', value: b.dataset.fam === '1' ? 4 : 1, min: 1 }, { name: 'note', label: 'Anything the HMO should know (optional)' }, { name: 'share', label: 'Share my health profile with the HMO', type: 'checkbox', value: true }], { submit: 'Send request', intro: '<p class="muted mb8">N-Health passes your request to the HMO. The HMO enrols you and you pay your premium to the HMO directly.</p>', onSubmit: async (v) => { if (v.share) await patch('/auth/profile', { insuranceShareConsent: true }).catch(() => null); await post('/insurance/plans/' + b.dataset.enrol + '/enrol', { memberCount: Number(v.memberCount) || 1, note: v.note || undefined }); toast('✅ Request sent - the HMO will contact you'); insuranceScreen(el); } });
   });
-  const premium = async (id, amt) => { if (await confirmBox(`Pay ${money(amt)} premium from your coins?`, { ok: 'Pay' })) { try { await post('/insurance/policies/' + id + '/pay'); toast('🛡️ Policy active'); insuranceScreen(el); } catch (err) { toastErr(err); } } };
   $('#hmos', el).onclick = async () => {
     const all = await get('/facilities/search?category=HMO&limit=100');
     modal(`<div class="modal-title">🛡️ NHIA-accredited HMOs (${all.length})</div><input id="hq" placeholder="🔍 Search HMO or state" class="mb8" style="width:100%"><div id="hl" style="max-height:60vh;overflow:auto"></div>`, (root) => {

@@ -93,7 +93,7 @@ export async function createArrival(req: Request, res: Response) {
   const payload = forHospital({ ...a, hosp: { lat: h.lat ?? lat, lng: h.lng ?? lng } });
   emit(h.userId, 'er:new', payload);
   const who = payload.patient.name + (a.forSomeoneElse ? ' (for someone else)' : '');
-  await notify(h.userId, 'emergency', '🚨 Emergency patient coming in', `${who} - ${type.toLowerCase()} - about ${a.etaMinutes ?? '?'} min away by ${transport.toLowerCase()}. Accept so they know you are ready.`, { sms: true, push: true, data: { erId: a.id } });
+  await notify(h.userId, 'emergency', '🚨 Emergency patient coming in', `${who} - ${type.toLowerCase()} - about ${a.etaMinutes ?? '?'} min away by ${transport.toLowerCase()}. Accept so they know you are ready.`, { whatsapp: true, push: true, data: { erId: a.id } });
   // Staff on the hospital's emergency roster also hear about it.
   const staff = await prisma.institutionStaff.findMany({ where: { institutionId: h.id, status: 'ACTIVE', staffRole: { in: ['DOCTOR', 'NURSE'] }, userId: { not: null } }, select: { userId: true } });
   await Promise.all(staff.map((s) => notify(s.userId!, 'emergency', `🚨 Incoming at ${h.name}`, `${type.toLowerCase()} emergency, about ${a.etaMinutes ?? '?'} min away.`, { data: { erId: a.id } }).catch(() => null)));
@@ -200,8 +200,8 @@ export async function respondArrival(req: Request, res: Response) {
       : { status: 'DECLINED', declineReason: str(req.body?.reason, 300) || 'The emergency unit is full right now', closedAt: new Date(), respondedBy: uid(req) },
   });
   emit(a.patient.userId, 'er:updated', { id: a.id, status: updated.status, readyNote: updated.readyNote, declineReason: updated.declineReason });
-  if (accept) await notify(a.patient.userId, 'emergency', `✅ ${i.name} is ready for you`, updated.readyNote || 'The emergency team knows you are coming. Drive safely.', { sms: true, push: true, data: { erId: a.id } });
-  else await notify(a.patient.userId, 'emergency', `${i.name} cannot take you now`, `${updated.declineReason}. Open N-Health to choose the next nearest hospital.`, { sms: true, push: true, data: { erId: a.id } });
+  if (accept) await notify(a.patient.userId, 'emergency', `✅ ${i.name} is ready for you`, updated.readyNote || 'The emergency team knows you are coming. Drive safely.', { whatsapp: true, push: true, data: { erId: a.id } });
+  else await notify(a.patient.userId, 'emergency', `${i.name} cannot take you now`, `${updated.declineReason}. Open N-Health to choose the next nearest hospital.`, { whatsapp: true, push: true, data: { erId: a.id } });
   res.json(updated);
 }
 

@@ -301,11 +301,7 @@ export async function requestEmergency(req: Request, res: Response) {
   const patient = await getPatientProfile(req.user!.userId);
   const open = await prisma.emergencyRequest.findFirst({ where: { patientId: patient.id, status: { in: ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'] } } });
   if (open) return res.status(200).json(open);
-  // Minimum coin balance guarantees ambulance operators get paid; life-threatening cases should still dial 112/767.
-  const bal = await getBalance(req.user!.userId);
-  if (bal < env.raw.EMERGENCY_MIN_BALANCE && !req.body.overrideBalance) {
-    throw ApiError.badRequest(`A minimum balance of ${coinsText(env.raw.EMERGENCY_MIN_BALANCE)} is required. Top up, or call 112 / 767 now.`);
-  }
+  // No balance is needed: the crew is paid in cash or by card (straight to the operator) after the trip.
   const request = await prisma.emergencyRequest.create({
     data: { patientId: patient.id, lat: data.lat, lng: data.lng, notes: data.notes, type: req.body.type ? String(req.body.type) : 'MEDICAL',
       contactPhone: req.body.contactPhone ? String(req.body.contactPhone) : undefined, address: req.body.address ? String(req.body.address) : undefined },
@@ -317,16 +313,20 @@ export async function requestEmergency(req: Request, res: Response) {
     .sort((a, b) => a.d - b.d).slice(0, 15);
   for (const a of ranked) {
     io?.to(`user:${a.userId}`).emit('emergency:new', { ...request, distanceKm: a.d === 9999 ? null : Math.round(a.d * 10) / 10 });
-    await notify(a.userId, 'emergency', '🚨 Emergency nearby', `Emergency request ${a.d < 9999 ? Math.round(a.d * 10) / 10 + ' km away' : ''}. Open the app to accept.`, { sms: true, data: { requestId: request.id } });
+    await notify(a.userId, 'emergency', '🚨 Emergency nearby', `Emergency request ${a.d < 9999 ? Math.round(a.d * 10) / 10 + ' km away' : ''}. Open the app to accept.`, { whatsapp: true, data: { requestId: request.id } });
   }
   io?.to('role:AMBULANCE').emit('emergency:new', request);
   io?.to('role:DOCTOR').emit('emergency:alert', { id: request.id, lat: data.lat, lng: data.lng, notes: data.notes });
+  // Tell the emergency contact on WhatsApp; the app also offers a one-tap WhatsApp message from the patient's own phone.
+  let contactLink: string | undefined;
   if (patient.emergencyPhone) {
     const u = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { name: true } });
-    const { sendSms } = await import('../services/sms');
-    await sendSms(patient.emergencyPhone, `N-Health alert: ${u?.name || 'Your contact'} requested emergency help at https://maps.google.com/?q=${data.lat},${data.lng}`);
+    const { sendWhatsApp, normalisePhone } = await import('../services/whatsapp');
+    const text = `${u?.name || 'Your contact'} requested emergency help on N-Health. Location: https://maps.google.com/?q=${data.lat},${data.lng}`;
+    await sendWhatsApp(patient.emergencyPhone, text);
+    contactLink = `https://wa.me/${normalisePhone(patient.emergencyPhone)}?text=${encodeURIComponent('🚨 I need help. ' + text)}`;
   }
-  res.status(201).json(request);
+  res.status(201).json({ ...request, contactLink });
 }
 
 export async function listEmergencyRequests(req: Request, res: Response) {
@@ -471,7 +471,7 @@ export async function addInsurance(req: Request, res: Response) {
       patientId: patient.id,
       planId: plan?.id,
       memberCount: data.memberCount ?? 1,
-      status: plan ? 'PENDING' : 'ACTIVE',
+      status: plan ? 'REQUESTED' : 'ACTIVE', // plans are joined through the HMO (see requestEnrolment)
       provider: plan?.provider ?? data.provider!,
       policyNumber: data.policyNumber ?? 'APP-' + Date.now().toString(36).toUpperCase(),
       coverageDetails: data.coverageDetails,

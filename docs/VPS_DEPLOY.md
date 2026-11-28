@@ -129,7 +129,7 @@ At the end it shows your web addresses.
 nano /etc/nhealth/backend.env
 ```
 
-Fill in the Paystack, Flutterwave, Resend, Didit, PayScrow, Termii and `PLATFORM_*` lines; see `docs/GO_LIVE.md` for where each key comes from. Save with **Ctrl+O, Enter, Ctrl+X**, then:
+Fill in the Paystack, Flutterwave, Resend, Didit, PayScrow, WhatsApp, `COMPANY_*` and `PLATFORM_*` lines; see `docs/GO_LIVE.md` for where each key comes from. Save with **Ctrl+O, Enter, Ctrl+X**, then:
 
 ```bash
 systemctl restart nhealth-api

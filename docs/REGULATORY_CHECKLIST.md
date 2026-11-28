@@ -1,5 +1,7 @@
 # Regulatory checklist (to review with a Nigerian lawyer)
 
+> **Update:** N-Health is now set up so the licences sit with providers and licensed partners. Coins are rewards only, payments settle straight to providers, donations go to the partner NGO, HMOs enrol and collect premiums, and there is no SMS. See [COMPLIANCE_MODEL.md](COMPLIANCE_MODEL.md), and [NDPC_AND_TAX.md](NDPC_AND_TAX.md) for what N-Health still registers itself.
+
 This is **not legal advice**. It lists the areas where N-Health's features touch Nigerian regulation, so you can confirm each one with a lawyer who practises health, fintech and data-protection law. Several of these generally **do** need registration, a licence or a partner that holds one.
 
 | Area | What N-Health does | Who regulates it | What to confirm |
@@ -14,7 +16,7 @@ This is **not legal advice**. It lists the areas where N-Health's features touch
 | Health insurance | Insurance plans, NHIA numbers, HMO listing | National Health Insurance Authority (NHIA); NAICOM | Selling or administering health plans in-app generally needs NHIA accreditation or doing it through accredited HMOs; listing HMOs is fine |
 | Donations and fundraising | Patient medical-bill campaigns, blood requests | Corporate Affairs Commission; SEC (crowdfunding rules); FCCPC | Whether donation campaigns fall under charity/crowdfunding rules; how funds are held and released |
 | Health jobs | Providers post jobs, workers apply | Federal Ministry of Labour and Employment | Whether running a job board/recruitment service needs a private employment agency licence (it may if N-Health places workers or charges fees) |
-| Marketing | SMS/email broadcasts, tracking links, ad pixels | NCC (unsolicited SMS rules); NDPC; FCCPC | Opt-in and opt-out (the app has both), sender ID registration for SMS |
+| Marketing | Email/WhatsApp broadcasts, tracking links, ad pixels | NDPC; FCCPC; Meta WhatsApp policy | Opt-in and opt-out (the app has both); no SMS is sent |
 | Consumer protection | Prices, refunds, reviews | FCCPC (FCCPA 2018) | Clear prices before payment (shown in naira when buying coins), refund policy, terms of service |
 | Tax | Commissions, fees | FIRS / state revenue | VAT on N-Health's fees and commissions; withholding on provider payouts |
 | The company | All | Corporate Affairs Commission | Registered company with objects covering these activities |

@@ -44,7 +44,7 @@ See `apps/backend/.env.example` for the full list.
 | Feature | Variables | Provider dashboard steps |
 |---|---|---|
 | Email | `RESEND_API_KEY`, `EMAIL_FROM` | Verify the `nhealth.com.ng` domain in Resend (SPF/DKIM DNS records) |
-| SMS / OTP | `TERMII_API_KEY`, `TERMII_SENDER_ID` | Register the "N-Health" sender ID with Termii (DND route for OTPs) |
+| WhatsApp (codes, alerts, news; no SMS) | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_*` | Meta WhatsApp Business; approve the three templates in docs/WHATSAPP.md |
 | Files | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | KYC, medical and invoice files are uploaded as *authenticated* (private) assets |
 | Paystack | `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` | Webhook URL: `https://<api>/api/webhooks/paystack` |
 | Flutterwave | `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_PUBLIC_KEY`, `FLUTTERWAVE_WEBHOOK_HASH` | Webhook URL: `https://<api>/api/webhooks/flutterwave`. Set the same secret hash in the dashboard |
@@ -75,7 +75,7 @@ The integration uses **Didit API v3**: `POST /v3/session/` to create a session a
 |---|---|
 | `SERVICE_FEE_PERCENT` | 5 (initial value; super admins change fees in Admin → Fees & payouts) |
 | `POS_TAX_PERCENT` | 5 |
-| `EMERGENCY_MIN_BALANCE` | 5000 |
+| `COIN_TOPUP_ENABLED` | false (coins are rewards only) |
 | `COIN_VALUE_NGN` | 10 (1 coin = ₦10) |
 | `INVITE_REWARD_COINS` | 1 (coins per friend who joins and confirms their email or phone) |
 | `REQUIRE_PROVIDER_VERIFICATION` | on in production |
@@ -93,7 +93,7 @@ The integration uses **Didit API v3**: `POST /v3/session/` to create a session a
 
    **Never run `prisma/seed.ts` in production.** It creates demo accounts with a shared password.
 4. Build the web app with `VITE_API_URL=https://<api>` and the admin console with `VITE_API_URL=https://<api>/api`. Point `www.nhealth.com.ng` at the web app and `admin.nhealth.com.ng` at the console. Both must use HTTPS: required for geolocation, push and service workers.
-5. Make a ₦100 top-up through each gateway and confirm that coins arrive once (webhook + confirm are idempotent).
+5. Pay ₦100 for a test booking by card through each gateway and confirm the provider's share settles to their bank (webhook + confirm are idempotent).
 6. Complete one Didit verification end-to-end.
 7. In the admin console, review catalogs (insurance plans, donation centres, articles; they are seeded on first boot) and set display exchange rates.
 8. Verify the first providers: Admin → Provider verification. Check their licences against the issuing council registers.

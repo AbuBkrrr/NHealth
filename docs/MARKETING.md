@@ -15,7 +15,7 @@ Admin console → **Marketing**. Only super admins see it.
 Each link gets:
 - **An address:** `https://www.nhealth.com.ng/go/<name>`
 - **QR codes:** a PNG to print, or an SVG for designers
-- **One-click share buttons:** WhatsApp, Facebook, X, LinkedIn, Telegram, email and SMS. Each comes with a ready-made message in English, French, Spanish, Portuguese, Arabic or Swahili.
+- **One-click share buttons:** WhatsApp, Facebook, X, LinkedIn, Telegram and email. Each comes with a ready-made message in English, French, Spanish, Portuguese, Arabic or Swahili.
 
 ## 2. Same device or shared?
 
@@ -57,9 +57,9 @@ The pitch page has a **Talk to our team** form. In the **Leads** tab, each lead 
 
 You can mark a lead NEW, CONTACTED, REGISTERED or LOST, or export all leads to CSV. When a lead signs up with the same email, they are marked REGISTERED automatically.
 
-## 4. Broadcast (email & SMS)
+## 4. Broadcast (email & WhatsApp)
 
-**Broadcast** sends a campaign by email (Resend) or SMS (Termii). It goes only to people who agreed:
+**Broadcast** sends a campaign by email (Resend) or WhatsApp (your approved `nhealth_news` template). It goes only to people who agreed:
 - users who ticked "health tips and product updates"
 - leads who ticked consent and haven't signed up yet
 

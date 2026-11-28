@@ -93,7 +93,7 @@ export async function respondToAppointment(req: Request, res: Response) {
   if (patient) {
     req.app.get('io')?.to(`user:${patient.userId}`).emit('appointment:updated', updated);
     const msg: Record<string, string> = { CONFIRMED: 'confirmed ✅', CANCELLED: 'declined', COMPLETED: 'marked completed', IN_PROGRESS: 'started' };
-    await notify(patient.userId, 'appointment', 'Appointment ' + (msg[updated.status] || updated.status.toLowerCase()), `Your appointment on ${appointment.scheduledAt.toISOString()} was ${msg[updated.status] || updated.status.toLowerCase()}.${data.notes ? ' Note: ' + data.notes : ''}`, { email: true, sms: updated.status === 'CONFIRMED', data: { appointmentId: appointment.id } });
+    await notify(patient.userId, 'appointment', 'Appointment ' + (msg[updated.status] || updated.status.toLowerCase()), `Your appointment on ${appointment.scheduledAt.toISOString()} was ${msg[updated.status] || updated.status.toLowerCase()}.${data.notes ? ' Note: ' + data.notes : ''}`, { email: true, whatsapp: updated.status === 'CONFIRMED', data: { appointmentId: appointment.id } });
   }
   if (updated.status === 'CANCELLED') await refundCoinPayment('APPOINTMENT', appointment.id, 'declined by doctor');
   if (updated.status === 'COMPLETED') await accrueForSource('APPOINTMENT', appointment.id);

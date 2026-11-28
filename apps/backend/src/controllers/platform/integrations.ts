@@ -4,7 +4,7 @@ import { env } from '../../config/env';
 import { ApiError } from '../../utils/ApiError';
 import { http } from '../../services/http';
 import { sendEmail } from '../../services/email';
-import { sendSms } from '../../services/sms';
+import { sendWhatsApp } from '../../services/whatsapp';
 import { getSupportedBanks } from '../../services/payscrowService';
 import { uid } from './util';
 
@@ -60,10 +60,9 @@ export async function integrationStatus(_req: Request, res: Response) {
       const hook = !!R.DIDIT_WEBHOOK_SECRET;
       return { ok: keyOk && r.status !== 401 && r.status !== 403 && hook, detail: `${r.status === 401 || r.status === 403 ? 'API key rejected' : 'API key accepted'} (HTTP ${r.status})${hook ? '' : ' • DIDIT_WEBHOOK_SECRET missing'} • workflow ${R.DIDIT_WORKFLOW_ID}` };
     }, { webhookUrl: `${base}/api/webhooks/didit`, lastWebhookAt: (await prisma.kycVerification.findFirst({ where: { NOT: { decision: { equals: null as any } } }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }).catch(() => null))?.updatedAt?.toISOString() ?? null }),
-    check('Termii (SMS)', !!R.TERMII_API_KEY, async () => {
-      const r = await http.get(`${R.TERMII_BASE_URL}/api/get-balance?api_key=${encodeURIComponent(R.TERMII_API_KEY!)}`, T);
-      const bal = Number(r.data?.balance || 0);
-      return { ok: bal > 0, detail: `Balance ${r.data?.currency || ''} ${bal}${bal > 0 ? '' : ' - top up Termii'} • sender "${R.TERMII_SENDER_ID}"` };
+    check('WhatsApp Business (messages & codes)', !!(R.WHATSAPP_TOKEN && R.WHATSAPP_PHONE_NUMBER_ID), async () => {
+      const r = await http.get(`https://graph.facebook.com/${R.WHATSAPP_API_VERSION}/${R.WHATSAPP_PHONE_NUMBER_ID}?fields=display_phone_number,verified_name,quality_rating`, { headers: { Authorization: `Bearer ${R.WHATSAPP_TOKEN}` }, ...T });
+      return { ok: true, detail: `${r.data?.verified_name || ''} ${r.data?.display_phone_number || ''} • quality ${r.data?.quality_rating || 'n/a'} • templates ${R.WHATSAPP_TEMPLATE_OTP}, ${R.WHATSAPP_TEMPLATE_UPDATE}, ${R.WHATSAPP_TEMPLATE_NEWS}` };
     }),
     check('Cloudinary (files)', !!(R.CLOUDINARY_CLOUD_NAME && R.CLOUDINARY_API_KEY && R.CLOUDINARY_API_SECRET), async () => {
       const r = await http.get(`https://api.cloudinary.com/v1_1/${R.CLOUDINARY_CLOUD_NAME}/usage`, { auth: { username: R.CLOUDINARY_API_KEY!, password: R.CLOUDINARY_API_SECRET! }, ...T });
@@ -79,7 +78,7 @@ export async function integrationStatus(_req: Request, res: Response) {
         prisma.bankAccount.count({ where: { isPrimary: true } }),
         prisma.bankAccount.count({ where: { isPrimary: true, OR: [{ paystackSubaccount: { not: null } }, { flutterwaveSubaccount: { not: null } }] } }),
       ]);
-      return { ok: total === 0 || direct === total, detail: `${direct}/${total} provider & institution bank accounts can receive card payments directly${direct < total ? ' - the rest are paid on the payout schedule' : ''}` };
+      return { ok: total === 0 || direct === total, detail: `${direct}/${total} provider & institution bank accounts can receive card payments directly${direct < total ? ' - the rest take cash (or coins) until their subaccount is created' : ''}` };
     }),
     check('Web push (VAPID)', true, async () => ({ ok: !!(R.VAPID_PUBLIC_KEY && R.VAPID_PRIVATE_KEY), detail: R.VAPID_PUBLIC_KEY ? 'Keys set' : 'Generate with: npx web-push generate-vapid-keys' })),
     check('Google sign-in', true, async () => ({ ok: !!process.env.GOOGLE_CLIENT_ID, detail: process.env.GOOGLE_CLIENT_ID ? 'Client ID set' : 'Optional - set GOOGLE_CLIENT_ID to show "Continue with Google"' })),
@@ -96,11 +95,11 @@ export async function testEmail(req: Request, res: Response) {
   if (!ok) throw ApiError.badRequest('Resend did not accept the email - check RESEND_API_KEY and that the sender domain is verified');
   res.json({ ok: true, to });
 }
-/** POST /api/admin-ops/integrations/test-sms { to } */
-export async function testSms(req: Request, res: Response) {
+/** POST /api/admin-ops/integrations/test-whatsapp { to } */
+export async function testWhatsApp(req: Request, res: Response) {
   const to = String(req.body?.to || '');
   if (!/^\+?\d{10,15}$/.test(to.replace(/\s/g, ''))) throw ApiError.badRequest('Enter a phone number');
-  const ok = await sendSms(to, 'N-Health test SMS - SMS is working.');
-  if (!ok) throw ApiError.badRequest('Termii did not accept the SMS - check TERMII_API_KEY, sender ID approval and balance');
+  const ok = await sendWhatsApp(to, 'This is a test message from the N-Health admin console. WhatsApp is working.');
+  if (!ok) throw ApiError.badRequest('WhatsApp did not accept the message - check WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID and that the "nhealth_update" template is approved');
   res.json({ ok: true, to });
 }

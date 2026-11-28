@@ -49,6 +49,8 @@ export async function markPaidCash(type: Payable, id: string, state: 'CASH_DUE' 
 
 /** Pays for a patient-owned record with coins. The amount always comes from the database. */
 export async function payWithCoins(userId: string, payableType: Payable, payableId: string) {
+  // Reward coins pay for care only: donations go straight to hospitals and premiums straight to HMOs.
+  if (payableType === 'DONATION' || payableType === 'INSURANCE_POLICY') throw ApiError.badRequest('Coins can\'t be used for this. Pay the hospital or HMO directly.');
   const patient = await prisma.patientProfile.findUnique({ where: { userId } });
   if (!patient) throw ApiError.notFound('Patient profile not found');
   const already = await prisma.payment.findFirst({ where: { payableType: payableType as any, payableId, status: 'CONFIRMED' } });

@@ -153,14 +153,15 @@ const mail = (r) => `${r}.${S}@test.io`;
 
   // ---------------- 6. Patient journey ----------------
   await must('patient health profile', j('/auth/profile', { bloodType: 'O+', genotype: 'AA', allergies: 'Penicillin', emergencyContact: 'Chidi', emergencyPhone: '08030000000', address: '5 Allen Ave, Ikeja' }, patient.token, 'PATCH'));
-  // Coins: gateways aren't configured in this environment, so credit coins as a verified top-up would.
+  // Reward coins (never sold): grant some as an admin promotion would, so the coin payment path is exercised.
+  await must('coins cannot be bought', j('/credits/purchase/initiate', { amount: 5000, gateway: 'paystack' }, patient.token), (r) => r.status === 403);
   const cfg = (await j('/config')).data;
   pass('payment gateways configured here: ' + JSON.stringify(cfg.gateways) + ' (keys not set in this test environment)');
   sql(`insert into "CreditLedger"(id,"userId",balance,"updatedAt") values (gen_random_uuid(),'${patient.user.id}',0,now()) on conflict ("userId") do nothing`);
   const ledger = sql(`select id from "CreditLedger" where "userId"='${patient.user.id}'`);
   sql(`update "CreditLedger" set balance=200000 where id='${ledger}'`);
-  sql(`insert into "CreditTransaction"(id,"ledgerId","userId",type,amount,"balanceAfter",description,reference,status) values (gen_random_uuid(),'${ledger}','${patient.user.id}','purchase',200000,200000,'Test top-up','TEST-${S}','completed')`);
-  pass('patient coins credited (simulated verified top-up)');
+  sql(`insert into "CreditTransaction"(id,"ledgerId","userId",type,amount,"balanceAfter",description,reference,status) values (gen_random_uuid(),'${ledger}','${patient.user.id}','reward',200000,200000,'Test promotion','TEST-${S}','completed')`);
+  pass('patient reward coins granted (promotion)');
 
   const dir = await must('directory lists verified doctor', j('/directory?type=DOCTOR&verified=1', null, patient.token), (r) => r.status === 200 && r.data.some((d) => d.userId === doctor.user.id));
   const d = dir.find((x) => x.userId === doctor.user.id);
@@ -175,9 +176,9 @@ const mail = (r) => `${r}.${S}@test.io`;
     await pb.fill('#reason', 'Chest pain on exertion'); await pb.click('#confirm'); await pb.waitForTimeout(2000);
     await pb.screenshot({ path: OUT + 'patient_book_paymodal.png' });
     const modal = await pb.textContent('#modal');
-    /N-Health Coins/.test(modal) && /Cash/.test(modal) ? pass('booking via UI → payment chooser (coins, cash)') : fail('booking pay chooser', modal.slice(0, 200));
-    await pb.click('#paynow'); await pb.waitForTimeout(2000);
-    pass('paid appointment with coins via UI');
+    /Use my reward coins/.test(modal) && /Cash/.test(modal) && /₦/.test(modal) ? pass('booking via UI → payment chooser in naira (cash, reward coins)') : fail('booking pay chooser', modal.slice(0, 200));
+    await pb.click('[data-m="coins"]'); await pb.click('#paynow'); await pb.waitForTimeout(2000);
+    pass('paid appointment with reward coins via UI');
   } else fail('calendar shows days with slots');
   const appts = (await j('/patient/appointments', null, patient.token)).data;
   const appt = appts[0];
@@ -242,13 +243,15 @@ const mail = (r) => `${r}.${S}@test.io`;
   const camp = await must('institution creates blood request (live instantly)', j('/donations/campaigns', { type: 'BLOOD', title: 'O+ needed for surgery', description: 'Urgent', bloodType: 'O+', unitsNeeded: 3, urgency: 'URGENT', location: 'Lagos City Hospital', contactPhone: '08034445555' }, inst.token), (r) => r.data.status === 'ACTIVE');
   await must('patient eligibility check', j('/donations/eligibility', { age: 30, weight: 70, gender: 'female' }, patient.token), (r) => r.data.eligible === true);
   await must('patient pledges blood & sees contact', j('/donations/pledges', { type: 'BLOOD', campaignId: camp.id, scheduledAt: new Date(Date.now() + 864e5).toISOString() }, patient.token), (r) => r.data.contact?.phone === '08034445555');
-  const fund = await must('patient creates fund campaign (needs review)', j('/donations/campaigns', { type: 'PATIENT_CASE', title: 'Help baby Ada', description: 'Heart surgery', goalAmount: 1000000 }, patient.token), (r) => r.data.status === 'PENDING_REVIEW');
+  const fund = await must('patient creates fund campaign (needs review)', j('/donations/campaigns', { type: 'PATIENT_CASE', title: 'Help baby Ada', description: 'Heart surgery', goalAmount: 1000000, hospitalId: sql(`select id from "InstitutionProfile" where "userId"='${inst.user.id}'`) }, patient.token), (r) => r.data.status === 'PENDING_REVIEW');
   await must('admin approves campaign', j('/admin-ops/campaigns/' + fund.id, { status: 'ACTIVE' }, admin.token));
-  await must('donate to campaign with coins', j(`/donations/campaigns/${fund.id}/donate`, { amount: 5000, message: 'Get well' }, patient.token), (r) => Number(r.data.raisedAmount) === 5000);
+  const gift = await must('donation goes straight to the hospital (not N-Health)', j(`/donations/campaigns/${fund.id}/donate`, { amount: 5000, message: 'Get well' }, patient.token), (r) => r.status === 201 && r.data.receiver?.kind === 'HOSPITAL');
+  await must('hospital confirms the bank transfer', j(`/donations/${gift.donationId}/received`, {}, inst.token), (r) => r.status === 200);
+  await must('campaign shows the donation', j(`/donations/campaigns/${fund.id}`, null, patient.token), (r) => Number(r.data.raisedAmount) === 5000);
   await must('organ donor registration', j('/donations/organ-registry', { organs: ['Kidney', 'Corneas'], consent: true }, patient.token), (r) => r.status === 201);
   const plans = (await j('/insurance/plans', null, patient.token)).data;
-  const pol = await must('enroll in insurance plan', j('/patient/insurance', { planId: plans[1].id }, patient.token), (r) => r.status === 201);
-  await must('pay first premium with coins', j(`/insurance/policies/${pol.id}/pay`, {}, patient.token), (r) => r.status === 201);
+  const pol = await must('insurance enrolment request goes to the HMO', j(`/insurance/plans/${plans[1].id}/enrol`, { memberCount: 2 }, patient.token), (r) => r.status === 201 && r.data.status === 'REQUESTED');
+  await must('premiums are not collected by N-Health', j(`/insurance/policies/${pol.id}/pay`, {}, patient.token), (r) => r.status === 400);
   await must('medication reminder', j('/health/reminders', { medication: 'Amoxicillin', dosage: '500mg', times: ['08:00', '14:00', '20:00'] }, patient.token), (r) => r.status === 201);
   await must('family member', j('/health/family', { name: 'Ada Obi', relationship: 'Child', bloodType: 'O+' }, patient.token), (r) => r.status === 201);
   await must('vaccination record', j('/health/vaccinations', { vaccine: 'Yellow fever', givenAt: '2024-01-10' }, patient.token), (r) => r.status === 201);

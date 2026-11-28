@@ -224,6 +224,6 @@ export async function applicantsScreen(el, { id }) {
     const ask = { INTERVIEW: 'When and where is the interview?', OFFERED: 'Offer details (pay, start date)', SHORTLISTED: 'Message to the applicant (optional)' }[s];
     const send = async (note) => { await patch('/gigs/applications/' + b.dataset.id, { status: s, employerNote: note || undefined }); toast('✅ Applicant told'); applicantsScreen(el, { id }); };
     if (ask) return formModal(b.textContent, [{ name: 'note', label: ask, type: 'textarea', rows: 3, required: s !== 'SHORTLISTED' }], { submit: 'Send', onSubmit: (v) => send(v.note) });
-    if (await confirmBox(s === 'HIRED' ? 'Mark as hired? The applicant gets an SMS.' : 'Tell the applicant they were not selected?')) await busy(b, () => send());
+    if (await confirmBox(s === 'HIRED' ? 'Mark as hired? The applicant is told in the app and on WhatsApp.' : 'Tell the applicant they were not selected?')) await busy(b, () => send());
   };
 }

@@ -14,7 +14,7 @@ The original mockup and the previous patched web app are kept in `apps/landing/l
 
 ## Features
 
-**Patients**: email/Google sign-up, Didit identity verification, coins top-up (Paystack/Flutterwave), escrow checkout (PayScrow), appointments with live doctor calendars and a 5% service fee, reschedule/cancel with automatic refunds, pharmacy store (OTC and prescription-gated), lab test catalog with home collection and results/PDFs, nurse home-care requests, one-tap emergency (nearest ambulances and on-call doctors alerted, live ambulance map with ETA, SMS to the emergency contact), provider and facility directory (distance/rating/fee), reviews, chat with photos and short videos, blood/organ donation (eligibility check, requests, pledges with contact details, centres, organ donor registry and card), fundraising and patient-case campaigns with live progress, insurance plans/NHIA, health records (timeline, medication reminders, family members, vaccinations, documents), emergency medical ID QR, notifications (in-app/push/email/SMS), multi-currency/language/time zone, data export, account deletion, access log, referral rewards, health tips.
+**Patients**: email/Google sign-up, Didit identity verification, card payments split straight to providers (Paystack/Flutterwave), escrow checkout (PayScrow), reward coins, appointments with live doctor calendars and a 5% service fee, reschedule/cancel with automatic refunds, pharmacy store (OTC and prescription-gated), lab test catalog with home collection and results/PDFs, nurse home-care requests, one-tap emergency (nearest ambulances and on-call doctors alerted, live ambulance map with ETA, SMS to the emergency contact), provider and facility directory (distance/rating/fee), reviews, chat with photos and short videos, blood/organ donation (eligibility check, requests, pledges with contact details, centres, organ donor registry and card), fundraising and patient-case campaigns with live progress, insurance plans/NHIA, health records (timeline, medication reminders, family members, vaccinations, documents), emergency medical ID QR, notifications (in-app/push/email/SMS), multi-currency/language/time zone, data export, account deletion, access log, referral rewards, health tips.
 
 **Doctors**: requests (accept/refer/decline), confirmed and past visits, patient records (access is logged), e-prescriptions (optionally routed to a pharmacy), lab orders whose results come back to them, weekly availability and time off, referrals, emergency alerts, earnings and payout bank account.
 
@@ -37,7 +37,7 @@ The original mockup and the previous patched web app are kept in `apps/landing/l
 - Super admins set commission per service, booking fee, POS tax, cash policy and payout schedule in the admin console. Admins also see revenue, balances, payouts and live integration checks.
 
 **Trust & safety**:
-- Gateway-verified top-ups and signed webhooks (Paystack, Flutterwave, Fincra, Monnify, PayScrow, Didit).
+- Gateway-verified payments and signed webhooks (Paystack, Flutterwave, Fincra, Monnify, PayScrow, Didit).
 - Server-side prices everywhere.
 - Rate limiting and account lockout.
 - Hashed one-time codes with attempt limits.
@@ -74,7 +74,7 @@ VITE_API_URL=http://localhost:4000 pnpm --filter @nhealth/landing dev
 VITE_API_URL=http://localhost:4000/api pnpm --filter @nhealth/admin-web dev
 ```
 
-Without integration keys, emails and SMS are printed to the API console, and uploads are saved to local disk.
+Without integration keys, emails and WhatsApp messages are printed to the API console, and uploads are saved to local disk.
 
 ### Tests
 
@@ -100,6 +100,6 @@ Emergencies (ambulance tracking, and going to a hospital yourself with the hospi
 
 Nigerian facility directory (72,000+ facilities listed before they join; sources, licences, coverage and gaps): [docs/FACILITY_DIRECTORY.md](docs/FACILITY_DIRECTORY.md).
 
-Coins (1 coin = ₦10, shown as coins) and invite rewards: [docs/COINS_AND_INVITES.md](docs/COINS_AND_INVITES.md). Health jobs for providers and health workers: [docs/HEALTH_JOBS.md](docs/HEALTH_JOBS.md). Licences and registrations to confirm with a lawyer: [docs/REGULATORY_CHECKLIST.md](docs/REGULATORY_CHECKLIST.md). Provider flyers with QR codes: [docs/PROVIDER_FLYERS.md](docs/PROVIDER_FLYERS.md). Install prompt, App Store and Google Play: [docs/APP_STORES.md](docs/APP_STORES.md).
+Coins (1 coin = ₦10, shown as coins) and invite rewards: [docs/COINS_AND_INVITES.md](docs/COINS_AND_INVITES.md). Health jobs for providers and health workers: [docs/HEALTH_JOBS.md](docs/HEALTH_JOBS.md). Licences and registrations to confirm with a lawyer: [docs/REGULATORY_CHECKLIST.md](docs/REGULATORY_CHECKLIST.md). Provider flyers with QR codes: [docs/PROVIDER_FLYERS.md](docs/PROVIDER_FLYERS.md). Install prompt, App Store and Google Play: [docs/APP_STORES.md](docs/APP_STORES.md). Running without extra licences (rewards-only coins, direct payments, NGO donations, HMO enrolment): [docs/COMPLIANCE_MODEL.md](docs/COMPLIANCE_MODEL.md). NDPC registration and tax: [docs/NDPC_AND_TAX.md](docs/NDPC_AND_TAX.md). WhatsApp set-up: [docs/WHATSAPP.md](docs/WHATSAPP.md).
 
 Own server: [docs/DOCKER_DEPLOY.md](docs/DOCKER_DEPLOY.md) for a server that already runs Docker apps (N-Health runs in its own containers, built by GitHub), or [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md) for a plain Debian server.

@@ -5,10 +5,10 @@ import { api, getErrorMessage } from '../api/client';
 /**
  * Super admin → Marketing.
  * Tracking links & QR codes, "same device or shared?" per link, every open with device/location,
- * leads, signups per link, share kit in several languages, email/SMS broadcasts and ad pixels.
+ * leads, signups per link, share kit in several languages, email/WhatsApp broadcasts and ad pixels.
  */
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString() : '—');
-const CHANNELS = ['qr', 'whatsapp', 'instagram', 'facebook', 'tiktok', 'x', 'linkedin', 'youtube', 'email', 'sms', 'flyer', 'radio', 'tv', 'partner', 'event', 'other'];
+const CHANNELS = ['qr', 'whatsapp', 'instagram', 'facebook', 'tiktok', 'x', 'linkedin', 'youtube', 'email', 'flyer', 'radio', 'tv', 'partner', 'event', 'other'];
 const ROLES = ['PATIENT', 'DOCTOR', 'NURSE', 'PHARMACY', 'LAB', 'AMBULANCE', 'INSTITUTION'];
 const INTERESTS = [...ROLES, 'PARTNER', 'INVESTOR'];
 const TEMPLATES: Record<string, { lang: string; patient: string; provider: string }> = {
@@ -206,7 +206,6 @@ function Links({ links }: { links: { data: any[]; reload: () => void } }) {
                 <a className="mk-btn" target="_blank" rel="noreferrer" href={`https://www.linkedin.com/sharing/share-offsite/?url=${enc(share('linkedin'))}`}>LinkedIn</a>
                 <a className="mk-btn" target="_blank" rel="noreferrer" href={`https://t.me/share/url?url=${enc(share('telegram'))}&text=${enc(msgText('telegram'))}`}>Telegram</a>
                 <a className="mk-btn" href={`mailto:?subject=${enc('N-Health')}&body=${enc(msgText('email'))}`}>Email</a>
-                <a className="mk-btn" href={`sms:?&body=${enc(msgText('sms'))}`}>SMS</a>
                 <button className="outline" onClick={() => copy(msgText('copy'))}>Copy message</button>
                 <button className="outline" onClick={() => toggle(l)}>{l.active ? 'Pause' : 'Resume'}</button>
               </div>
@@ -256,9 +255,9 @@ function Broadcast({ links }: { links: any[] }) {
     <>
       <div className="card">
         <h3>Send a campaign</h3>
-        <p className="page-subtitle">Goes only to users who ticked "marketing messages" and to leads who gave consent. Every email has an unsubscribe link; SMS includes "Reply STOP". Use {'{{name}}'} and {'{{link}}'} (the tracking link you pick, so you see who opened it).</p>
+        <p className="page-subtitle">Goes only to users who ticked "marketing messages" and to leads who gave consent. Every email has an unsubscribe link; WhatsApp messages use your approved "nhealth_news" template, which has a "Stop promotions" button. Use {'{{name}}'} and {'{{link}}'} (the tracking link you pick, so you see who opened it).</p>
         <div className="mk-form">
-          <label className="field">Channel<select value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })}><option value="email">Email (Resend)</option><option value="sms">SMS (Termii)</option></select></label>
+          <label className="field">Channel<select value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })}><option value="email">Email (Resend)</option><option value="whatsapp">WhatsApp</option></select></label>
           {f.channel === 'email' && <label className="field">Subject<input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} /></label>}
           <label className="field">Tracking link for {'{{link}}'}<select value={f.linkId} onChange={(e) => setF({ ...f, linkId: e.target.value })}><option value="">Home page (untracked)</option>{links.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}</select></label>
           <label className="field">Countries (codes, comma-separated, empty = all)<input value={f.countries} placeholder="NG, GH, KE" onChange={(e) => setF({ ...f, countries: e.target.value })} /></label>

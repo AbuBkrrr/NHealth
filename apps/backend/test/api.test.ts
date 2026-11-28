@@ -662,3 +662,124 @@ describe('provider flyers and public pages', () => {
     expect((await request(app).get('/api/flyer/me').set(auth(pat.token))).status).toBe(403);
   });
 });
+
+describe('no licence needed: rewards-only coins, direct payments, NGO donations, HMO enrolment, no SMS', () => {
+  it('never sells coins, needs no balance for an emergency, and takes card payments only when the money goes straight to the provider', async () => {
+    const pat = await register('PATIENT');
+    const buy = await request(app).post('/api/credits/purchase/initiate').set(auth(pat.token)).send({ amount: 5000, gateway: 'paystack' });
+    expect(buy.status).toBe(403);
+    const cfg = await request(app).get('/api/config');
+    expect(cfg.body.coinSales).toBe(false);
+    expect(cfg.body.company).toMatchObject({ dpoEmail: expect.any(String) });
+    const em = await request(app).post('/api/patient/emergency').set(auth(pat.token)).send({ lat: 6.5 + Math.random() / 100, lng: 3.3, notes: 'chest pain' });
+    expect(em.status).toBe(201);
+    await request(app).post(`/api/patient/emergency/${em.body.id}/cancel`).set(auth(pat.token)).send({});
+    // A doctor with no bank subaccount: card is refused (N-Health would otherwise hold their money), cash still works.
+    const doc = await register('DOCTOR', { specialty: 'GP', licenseNumber: 'MDCN-D' + uniq(), consultationFee: 8000 });
+    await prisma.user.update({ where: { id: doc.user.id }, data: { verificationStatus: 'VERIFIED' } });
+    await request(app).put('/api/availability/me').set(auth(doc.token)).send({ timezone: 'Africa/Lagos', rules: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, startTime: '08:00', endTime: '18:00', slotMinutes: 30 })) });
+    const dprof = await prisma.doctorProfile.findUnique({ where: { userId: doc.user.id } });
+    const day = new Date(Date.now() + 6 * 864e5).toISOString().slice(0, 10);
+    const slots = await request(app).get(`/api/availability/${doc.user.id}/slots?date=${day}`).set(auth(pat.token));
+    const appt = (await request(app).post('/api/patient/appointments').set(auth(pat.token)).send({ doctorId: dprof!.id, scheduledAt: slots.body.slots[0].start })).body;
+    const card = await request(app).post('/api/payments/card').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id });
+    expect(card.status).toBe(409);
+    expect(card.body.error).toMatch(/cash/i);
+    const cash = await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, method: 'CASH' });
+    expect(cash.status).toBe(201);
+  });
+
+  it('pays donations straight to the hospital or the partner NGO, never through N-Health', async () => {
+    const admin = await prisma.user.create({ data: { email: `adm-${uniq()}@test.io`, name: 'Admin', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const adminTok = (await import('../src/utils/jwt')).signToken({ userId: admin.id, role: 'ADMIN' as any, isSuperAdmin: true, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    const hosp = await register('INSTITUTION', { name: 'Hope Hospital ' + uniq(), type: 'HOSPITAL', licenseNumber: 'H-' + uniq() });
+    await prisma.user.update({ where: { id: hosp.user.id }, data: { verificationStatus: 'VERIFIED' } });
+    const ip = await prisma.institutionProfile.findUnique({ where: { userId: hosp.user.id } });
+    await prisma.bankAccount.create({ data: { userId: hosp.user.id, bankCode: '058', bankName: 'GTBank', accountNumber: '0123456789', accountName: 'Hope Hospital', isPrimary: true, isVerified: true, paystackSubaccount: 'ACCT_hope' } });
+    const org = await register('PATIENT');
+    const donor = await register('PATIENT');
+    // A patient's fundraiser must name the treating hospital (no NGO partner yet).
+    expect((await request(app).post('/api/donations/campaigns').set(auth(org.token)).send({ type: 'PATIENT_CASE', title: 'Surgery for Ada', description: 'Heart surgery', goalAmount: 500000 })).status).toBe(400);
+    const c = (await request(app).post('/api/donations/campaigns').set(auth(org.token)).send({ type: 'PATIENT_CASE', title: 'Surgery for Ada', description: 'Heart surgery', goalAmount: 500000, hospitalId: ip!.id })).body;
+    expect(c.status).toBe('PENDING_REVIEW');
+    await prisma.donationCampaign.update({ where: { id: c.id }, data: { status: 'ACTIVE' } });
+    const d1 = await request(app).post(`/api/donations/campaigns/${c.id}/donate`).set(auth(donor.token)).send({ amount: 5000 });
+    expect(d1.status).toBe(201);
+    expect(d1.body).toMatchObject({ receiver: { kind: 'HOSPITAL' }, card: true, bank: { accountNumber: '0123456789' } });
+    const plan = await planFor('DONATION', d1.body.donationId, donor.user.id);
+    expect(plan).toMatchObject({ total: 5000, commission: 0, platformAmount: 0 });
+    expect(plan.payees).toEqual([expect.objectContaining({ userId: hosp.user.id, amount: 5000 })]);
+    // Coins can't be given away as donations.
+    expect((await request(app).post('/api/payments').set(auth(donor.token)).send({ payableType: 'DONATION', payableId: d1.body.donationId, method: 'WALLET' })).status).toBe(400);
+    // Bank transfer: the hospital confirms it reached its account.
+    expect((await request(app).post(`/api/donations/${d1.body.donationId}/received`).set(auth(hosp.token))).status).toBe(200);
+    expect(Number((await prisma.donationCampaign.findUnique({ where: { id: c.id } }))!.raisedAmount)).toBe(5000);
+
+    // With the partner NGO switched on, donations go into the NGO's account and N-Health staff confirm transfers.
+    const { saveDonationPartner } = await import('../src/services/settings');
+    await saveDonationPartner({ enabled: true, name: 'Care Foundation', regNumber: 'IT-12345', bankName: 'Access Bank', accountNumber: '0099887766', accountName: 'Care Foundation', paystackSubaccount: 'ACCT_ngo' }, admin.id);
+    try {
+      const d2 = await request(app).post(`/api/donations/campaigns/${c.id}/donate`).set(auth(donor.token)).send({ amount: 2000 });
+      expect(d2.body).toMatchObject({ receiver: { kind: 'NGO', name: 'Care Foundation', regNumber: 'IT-12345' }, card: true, bank: { accountNumber: '0099887766' } });
+      const plan2 = await planFor('DONATION', d2.body.donationId, donor.user.id);
+      expect(plan2.payees[0]).toMatchObject({ userId: '', amount: 2000, bank: expect.objectContaining({ paystackSubaccount: 'ACCT_ngo' }) });
+      expect((await request(app).post(`/api/donations/${d2.body.donationId}/received`).set(auth(hosp.token))).status).toBe(403);
+      expect((await request(app).post(`/api/donations/${d2.body.donationId}/received`).set(auth(adminTok))).status).toBe(200);
+      // Fundraisers no longer need a hospital: the NGO receives the money.
+      expect((await request(app).post('/api/donations/campaigns').set(auth(org.token)).send({ type: 'FUND', title: 'Dialysis fund', description: 'For patients', goalAmount: 100000 })).status).toBe(201);
+    } finally {
+      await saveDonationPartner({ enabled: false }, admin.id);
+    }
+  });
+
+  it('passes insurance enrolment to the HMO, and sends codes on WhatsApp or email (never SMS)', async () => {
+    const pat = await register('PATIENT');
+    const plan = await prisma.insurancePlan.create({ data: { name: 'Family Basic ' + uniq(), provider: 'Test HMO', type: 'HMO', monthlyPremium: 3500, coverage: ['Outpatient'] } });
+    const r = await request(app).post(`/api/insurance/plans/${plan.id}/enrol`).set(auth(pat.token)).send({ memberCount: 3 });
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ status: 'REQUESTED', provider: 'Test HMO', memberCount: 3 });
+    expect((await request(app).post(`/api/insurance/policies/${r.body.id}/pay`).set(auth(pat.token))).status).toBe(400);
+    await prisma.user.update({ where: { id: pat.user.id }, data: { phone: '+23480' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0') } });
+    const v = await request(app).post('/api/auth/verify-phone/send').set(auth(pat.token));
+    expect(v.status).toBe(200);
+    expect(v.body.channel).toBe('email'); // WhatsApp isn't configured in tests
+  });
+});
+
+describe('health quests and coin donations (Muslim Pro-style rewards)', () => {
+  it('earns coins for real health actions once per period, within a daily cap, and donates coins to the NGO', async () => {
+    const pat = await register('PATIENT');
+    const claim = (k: string) => request(app).post(`/api/quests/${k}/claim`).set(auth(pat.token));
+    const board = await request(app).get('/api/quests').set(auth(pat.token));
+    expect(board.body.quests.find((q: any) => q.key === 'checkin')).toMatchObject({ claimable: true, coins: 1 });
+    expect((await claim('checkin')).body).toMatchObject({ coins: 1, streak: 1 });
+    expect((await claim('checkin')).status).toBe(409); // once a day
+    expect((await claim('profile')).status).toBe(400); // not done yet
+    await request(app).patch('/api/auth/profile').set(auth(pat.token)).send({ bloodType: 'O+', genotype: 'AA', emergencyPhone: '08030000000' });
+    expect((await claim('profile')).body.coins).toBe(5);
+    expect((await claim('nonsense')).status).toBe(404);
+    const after = await request(app).get('/api/quests').set(auth(pat.token));
+    expect(after.body).toMatchObject({ earnedToday: 6, streak: 1 });
+    expect(after.body.quests.find((q: any) => q.key === 'profile')).toMatchObject({ done: true, claimable: false });
+    // Daily cap
+    const admin = await prisma.user.create({ data: { email: `adq-${uniq()}@test.io`, name: 'Admin', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const { saveQuestSettings } = await import('../src/services/quests');
+    await saveQuestSettings({ dailyCap: 7 }, admin.id);
+    try {
+      await prisma.medicationReminder.create({ data: { userId: pat.user.id, medication: 'Vitamin C', times: ['08:00'] } });
+      expect((await claim('reminder')).body.coins).toBe(1); // only 1 left under the cap of 7
+      await prisma.vaccination.create({ data: { userId: pat.user.id, vaccine: 'Hepatitis B', givenAt: new Date() } });
+      expect((await claim('vaccine')).status).toBe(429);
+    } finally { await saveQuestSettings({ dailyCap: 20 }, admin.id); }
+    // Donating coins needs the partner NGO; N-Health owes the NGO their value
+    expect((await request(app).post('/api/coins/donate').set(auth(pat.token)).send({ coins: 3 })).status).toBe(400);
+    const { saveDonationPartner } = await import('../src/services/settings');
+    await saveDonationPartner({ enabled: true, name: 'Care Foundation', accountNumber: '0099887766' }, admin.id);
+    try {
+      expect((await request(app).post('/api/coins/donate').set(auth(pat.token)).send({ coins: 3 })).status).toBe(201);
+      expect((await request(app).post('/api/coins/donate').set(auth(pat.token)).send({ coins: 500 })).status).toBe(400);
+      const bal = await request(app).get('/api/credits/balance').set(auth(pat.token));
+      expect(Number(bal.body.balance)).toBe((7 - 3) * 10);
+    } finally { await saveDonationPartner({ enabled: false }, admin.id); }
+  });
+});
