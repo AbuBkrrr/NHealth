@@ -67,7 +67,7 @@ export async function listAppointments(req: Request, res: Response) {
     include: { doctor: { include: { user: { select: { name: true, avatarUrl: true } } } } },
     orderBy: { scheduledAt: 'desc' },
   });
-  res.json(appointments);
+  res.json(await withCoinParts('APPOINTMENT', appointments));
 }
 
 export async function createAppointment(req: Request, res: Response) {
@@ -139,7 +139,7 @@ export async function listOrders(req: Request, res: Response) {
     include: { pharmacy: { include: { user: { select: { name: true } } } } },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(orders);
+  res.json(await withCoinParts('PHARMACY_ORDER', orders));
 }
 
 export async function createOrder(req: Request, res: Response) {
@@ -266,7 +266,7 @@ export async function listLabTests(req: Request, res: Response) {
     include: { lab: { include: { user: { select: { name: true } } } }, result: true },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(tests);
+  res.json(await withCoinParts('LAB_TEST', tests));
 }
 
 export async function createLabTest(req: Request, res: Response) {
@@ -480,4 +480,11 @@ export async function addInsurance(req: Request, res: Response) {
     },
   });
   res.status(201).json(policy);
+}
+
+/** Adds the reward coins applied to part of each bill, so the app shows what is really left to pay. */
+async function withCoinParts<T extends { id: string }>(payableType: string, list: T[]) {
+  const parts = await prisma.coinRedemption.findMany({ where: { payableType, payableId: { in: list.map((x) => x.id) }, status: 'ACTIVE' }, select: { payableId: true, coins: true, amount: true } });
+  const by = new Map(parts.map((x) => [x.payableId, x]));
+  return list.map((x) => { const c = by.get(x.id); return c ? { ...x, coinsApplied: c.coins, coinsValue: Number(c.amount) } : x; });
 }

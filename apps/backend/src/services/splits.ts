@@ -19,7 +19,7 @@ export interface Payee {
   amount: number;
   bank?: { bankCode: string; bankName: string; accountNumber: string; accountName: string; paystackSubaccount: string | null; flutterwaveSubaccount: string | null } | null;
 }
-export interface SplitPlan { total: number; gross: number; commissionRate: number; commission: number; patientFee: number; platformAmount: number; payees: Payee[]; providerUserId: string }
+export interface SplitPlan { total: number; gross: number; commissionRate: number; commission: number; patientFee: number; platformAmount: number; payees: Payee[]; providerUserId: string; coinCredit?: number }
 
 /** Institution an active staff provider belongs to (first ACTIVE affiliation). */
 export async function institutionFor(providerUserId: string) {
@@ -82,13 +82,23 @@ export async function planFor(type: Payable, id: string, patientUserId: string):
   const commissionRate = fin.commission[type] ?? 0;
   const commission = r2((gross * commissionRate) / 100);
   const patientFee = r2(Math.max(0, total - gross));
-  const shares = await payeesFor(providerUserId, r2(gross - commission));
+  const net = r2(gross - commission);
+  let shares = await payeesFor(providerUserId, net);
+  // Reward coins applied to part of the bill: the patient pays less, the provider's card share shrinks by the coin
+  // part, and N-Health credits that part to the provider's balance (fullAmount - amount) when the payment clears.
+  const { coinCredit } = await import('./coinParts');
+  const credit = await coinCredit(type, id);
+  if (credit > 0) {
+    total = r2(total - credit);
+    const factor = net > 0 ? Math.max(0, net - credit) / net : 0;
+    shares = shares.map((s) => ({ ...s, fullAmount: s.amount, amount: r2(s.amount * factor) }));
+  }
   const banks = await prisma.bankAccount.findMany({ where: { userId: { in: shares.map((s) => s.userId) }, isPrimary: true } });
   const payees: Payee[] = shares.map((s) => {
     const b = banks.find((x) => x.userId === s.userId);
     return { ...s, bank: b ? { bankCode: b.bankCode, bankName: b.bankName, accountNumber: b.accountNumber, accountName: b.verifiedName || b.accountName, paystackSubaccount: b.paystackSubaccount, flutterwaveSubaccount: b.flutterwaveSubaccount } : null };
   });
-  return { total: r2(total), gross: r2(gross), commissionRate, commission, patientFee, platformAmount: r2(total - payees.reduce((a, b) => a + b.amount, 0)), payees, providerUserId };
+  return { total: r2(total), gross: r2(gross), commissionRate, commission, patientFee, platformAmount: r2(total - payees.reduce((a, b) => a + b.amount, 0)), payees, providerUserId, coinCredit: credit || undefined };
 }
 
 /** Creates the Paystack / Flutterwave split subaccounts for a saved bank account (idempotent, best-effort). */

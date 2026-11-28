@@ -1,5 +1,5 @@
 // Reusable flows shared by several screens: payment, reviews, emergency numbers.
-import { get, post } from '../lib/api.js';
+import { get, getFresh, post, del } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
 import { esc, $, $$, modal, toast, money, coins, busy, webOrigin } from '../lib/ui.js';
 import { go } from '../lib/router.js';
@@ -13,35 +13,63 @@ const PURPOSE = { APPOINTMENT: 'appointment', PHARMACY_ORDER: 'pharmacy', LAB_TE
 /**
  * Payment chooser. Money always goes straight to the provider: card/transfer/USSD through a licensed gateway that
  * settles to the provider's own account, PayScrow escrow (a licensed escrow partner), or cash at the service.
- * Reward coins (free, never sold) can be used instead when the patient has enough.
+ * Reward coins (free, never sold) can pay the whole bill, or part of it with the rest paid by card or cash.
  * Resolves true when paid (or checkout opened).
  */
 export function payModal({ payableType, payableId, amount, title = 'Complete payment' }) {
   return new Promise((resolve) => {
-    loadBalance().then((bal) => {
-      const enough = bal > 0 && bal >= amount;
-      const escrow = state.config?.escrow && PURPOSE[payableType];
-      const cash = state.config?.cashEnabled && PURPOSE[payableType];
-      const card = PURPOSE[payableType] && (state.config?.gateways || []).some((g) => g === 'paystack' || g === 'flutterwave');
-      const price = money(amount, { naira: true, convert: false });
-      const opts = [
-        card && ['card', '💳', 'Card / Transfer / USSD', 'Paid straight to the provider\'s account'],
-        cash && ['cash', '💵', 'Cash', 'Pay the provider at the service'],
-        escrow && ['escrow', '🔒', 'Escrow', 'Held by our licensed escrow partner until the service is done'],
-        enough && ['coins', '🪙', 'Use my reward coins', `You have ${coins(bal)} coins`],
-      ].filter(Boolean);
+    const coinable = !!PURPOSE[payableType];
+    Promise.all([loadBalance(), coinable ? getFresh('/coins/bill?payableType=' + payableType + '&payableId=' + payableId).catch(() => null) : null]).then(([bal, bill]) => {
+      const cv = bill?.coinValue || state.config?.coinValue || 10;
+      const total = bill?.total ?? amount;
+      const applied = bill?.applied || 0;
+      const owed = Math.max(0, total - applied); // left after coins already applied
+      const myCoins = Math.floor((bal || 0) / cv);
+      const cash = state.config?.cashEnabled && coinable;
+      const card = coinable && (state.config?.gateways || []).some((g) => g === 'paystack' || g === 'flutterwave');
+      // Coins for part of the bill: at most what they have, leaving at least ₦1 to pay by card or cash.
+      const maxPart = Math.min(myCoins, Math.ceil(owed / cv) - 1);
+      const canPart = coinable && !applied && maxPart >= 1 && (card || cash);
+      const canAll = myCoins * cv >= owed && owed > 0;
+      const naira = (n) => money(n, { naira: true, convert: false });
       modal(`<div class="modal-title">💳 ${esc(title)}</div>
-        <div class="booking-summary"><div class="total">Amount: ${price}</div></div>
-        <div class="payment-methods mt12">${opts.map(([k, i, n, d]) => `<div class="payment-method" data-m="${k}"><div class="icon">${i}</div><div class="name">${n}</div><div class="desc">${d}</div></div>`).join('')}</div>
-        ${opts.length ? '' : '<div class="banner warn">Payment isn\'t available for this provider yet. Please contact them.</div>'}
-        <button class="btn btn-primary btn-block mt12" id="paynow" ${opts.length ? '' : 'disabled'}>Continue</button>
+        <div class="booking-summary"><div class="total">Bill: ${naira(total)}</div>
+          ${applied ? `<div class="small mt8">🪙 ${bill.appliedCoins} coins applied (−${naira(applied)}) <button class="link" id="unapply">Remove</button></div>` : ''}
+          <div class="small" id="topay" style="font-weight:600;margin-top:4px">${applied ? 'Left to pay: ' + naira(owed) : ''}</div></div>
+        ${canPart ? `<label class="check mt12"><input type="checkbox" id="usepart"> <span>Use some of my coins (you have ${myCoins}) and pay the rest</span></label>
+          <div class="row mt8 hidden" id="partbox"><input type="number" id="partn" min="1" max="${maxPart}" value="${maxPart}" inputmode="numeric" style="max-width:110px"> <span class="small muted">coins (up to ${maxPart})</span></div>` : ''}
+        <div class="payment-methods mt12" id="pm"></div>
+        <button class="btn btn-primary btn-block mt12" id="paynow">Continue</button>
         <button class="btn btn-outline btn-block mt8" data-later>Pay later</button>`, (box, close) => {
-        let m = opts[0]?.[0];
-        const sel = () => $$('[data-m]', box).forEach((x) => x.classList.toggle('selected', x.dataset.m === m));
-        sel();
-        $$('[data-m]', box).forEach((x) => (x.onclick = () => { m = x.dataset.m; sel(); }));
+        let m = null;
+        const part = () => ($('#usepart', box)?.checked ? Math.max(1, Math.min(maxPart, Math.floor(Number($('#partn', box).value) || 0))) : 0);
+        const draw = () => {
+          const k = part();
+          const left = owed - k * cv;
+          const opts = [
+            card && ['card', '💳', 'Card / Transfer / USSD', 'Paid straight to the provider\'s account'],
+            cash && ['cash', '💵', 'Cash', 'Pay the provider at the service'],
+            state.config?.escrow && coinable && !applied && !k && ['escrow', '🔒', 'Escrow', 'Held by our licensed escrow partner until the service is done'],
+            canAll && !k && ['coins', '🪙', applied ? 'Pay the rest with coins' : 'Pay it all with my coins', `You have ${myCoins} coins`],
+          ].filter(Boolean);
+          if (!opts.some((o) => o[0] === m)) m = opts[0]?.[0];
+          $('#pm', box).innerHTML = opts.map(([key, i, n, d]) => `<div class="payment-method ${key === m ? 'selected' : ''}" data-m="${key}"><div class="icon">${i}</div><div class="name">${n}</div><div class="desc">${d}</div></div>`).join('')
+            || '<div class="banner warn">Payment isn\'t available for this provider yet. Please contact them.</div>';
+          $('#paynow', box).disabled = !opts.length;
+          if (k) $('#topay', box).textContent = `${k} coins (−${naira(k * cv)}) • you pay ${naira(left)} by ${m === 'cash' ? 'cash' : 'card'}`;
+          else if (!applied) $('#topay', box).textContent = '';
+          $$('[data-m]', box).forEach((x) => (x.onclick = () => { m = x.dataset.m; draw(); }));
+        };
+        draw();
+        $('#usepart', box)?.addEventListener('change', (e) => { $('#partbox', box).classList.toggle('hidden', !e.target.checked); draw(); });
+        $('#partn', box)?.addEventListener('input', draw);
+        $('#unapply', box)?.addEventListener('click', (e) => busy(e.target, async () => {
+          await del('/coins/bill', { payableType, payableId }); await loadBalance(); toast('🪙 Coins returned'); close(); payModal({ payableType, payableId, amount, title }).then(resolve);
+        }));
         box.querySelector('[data-later]').onclick = () => { close(); resolve(false); };
         $('#paynow', box).onclick = (e) => busy(e.target, async () => {
+          const k = part();
+          if (k && m !== 'coins') { await post('/coins/bill', { payableType, payableId, coins: k }); loadBalance(); }
           if (m === 'card') {
             const r = await post('/payments/card', { payableType, payableId, returnUrl: webOrigin() + '/' });
             sessionStorage.setItem('nh_paid', r.internalRef);
@@ -51,7 +79,7 @@ export function payModal({ payableType, payableId, amount, title = 'Complete pay
           }
           if (m === 'cash') {
             await post('/payments', { payableType, payableId, method: 'CASH' });
-            toast('💵 Pay the provider in cash - they will confirm receipt in the app');
+            toast(`💵 Pay the provider ${naira(owed - k * cv)} in cash - they will confirm receipt in the app`);
             close(); resolve(true); return;
           }
           if (m === 'coins') {

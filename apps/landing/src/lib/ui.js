@@ -23,7 +23,7 @@ export function money(amountNgn, { currency, convert = true, naira = false } = {
   const cur = currency || state.user?.currency || 'NGN';
   const rate = convert && cur !== 'NGN' ? state.config?.rates?.[cur] : 1;
   const v = Number(amountNgn || 0) * (rate || 1);
-  try { return new Intl.NumberFormat(state.user?.locale || 'en-NG', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: rate ? cur : 'NGN', maximumFractionDigits: v >= 1000 ? 0 : 2 }).format(v); }
+  try { return new Intl.NumberFormat(state.user?.locale || 'en-NG', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: rate ? cur : 'NGN', minimumFractionDigits: Number.isInteger(v) || v >= 1000 ? 0 : 2, maximumFractionDigits: v >= 1000 ? 0 : 2 }).format(v); }
   catch { return (SYMBOL[cur] || cur + ' ') + v.toLocaleString(); }
 }
 /** A coin balance (stored in naira inside the app) as a number of coins. */

@@ -221,6 +221,9 @@ r.post('/doctor-ops/lab-requests', auth, requireRole('DOCTOR'), requireVerifiedP
 
 // Direct card payment with split settlement (provider/institution paid straight to their bank)
 r.post('/payments/card', auth, requireRole('PATIENT'), sensitiveLimiter, h(direct.startCardPayment));
+r.get('/coins/bill', auth, requireRole('PATIENT'), h(direct.coinPartStatus));
+r.post('/coins/bill', auth, requireRole('PATIENT'), sensitiveLimiter, h(direct.applyCoinPart));
+r.delete('/coins/bill', auth, requireRole('PATIENT'), sensitiveLimiter, h(direct.removeCoinPart));
 
 // Provider earnings & payouts (Bolt-style)
 r.get('/earnings', auth, requireRole(...PROVIDERS), h(fin.myEarnings));

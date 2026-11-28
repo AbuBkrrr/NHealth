@@ -7,6 +7,7 @@ import { notify } from './notify';
 import { refund } from './gateways';
 import { clawbackDirect } from './earnings';
 import { coinsText } from './coins';
+import { coinCredit, returnCoins } from './coinParts';
 
 type Payable = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'DONATION' | 'INSURANCE_POLICY' | 'EMERGENCY';
 
@@ -55,7 +56,10 @@ export async function payWithCoins(userId: string, payableType: Payable, payable
   if (!patient) throw ApiError.notFound('Patient profile not found');
   const already = await prisma.payment.findFirst({ where: { payableType: payableType as any, payableId, status: 'CONFIRMED' } });
   if (already) throw ApiError.conflict('This item is already paid');
-  const { amount, providerUserId } = await resolvePayable(payableType, payableId, patient.id);
+  const r = await resolvePayable(payableType, payableId, patient.id);
+  const providerUserId = r.providerUserId;
+  // Coins already applied to part of this bill count towards it.
+  const amount = Math.round((r.amount - (await coinCredit(payableType, payableId))) * 100) / 100;
   if (amount <= 0) throw ApiError.badRequest('Nothing to pay for this item');
   await getOrCreateLedger(userId);
   const reference = ref();
@@ -74,6 +78,13 @@ export async function payWithCoins(userId: string, payableType: Payable, payable
 
 /** Refunds a coin payment (e.g. cancellation before service). Idempotent per payment. */
 export async function refundCoinPayment(payableType: Payable, payableId: string, reason: string) {
+  // Coins applied to part of the bill go back to the patient (and any credit already given to the provider is reversed).
+  const part = await returnCoins(payableType, payableId, reason);
+  if (part) {
+    const { reverseCoinCredit } = await import('./earnings');
+    await reverseCoinCredit(payableType, payableId, reason);
+    await notify(part.userId, 'payment', 'Coins returned', `${part.coins} coin${part.coins === 1 ? '' : 's'} you used on this bill were returned to you (${reason}).`);
+  }
   const card = await prisma.payment.findFirst({ where: { payableType: payableType as any, payableId, status: 'CONFIRMED', method: 'CARD' } });
   if (card) return refundCardPayment(card, reason);
   const p = await prisma.payment.findFirst({ where: { payableType: payableType as any, payableId, status: 'CONFIRMED', method: 'WALLET' } });

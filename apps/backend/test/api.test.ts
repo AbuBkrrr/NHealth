@@ -783,3 +783,86 @@ describe('health quests and coin donations (Muslim Pro-style rewards)', () => {
     } finally { await saveDonationPartner({ enabled: false }, admin.id); }
   });
 });
+
+describe('reward coins on part of a bill', () => {
+  async function booking(fee = 10000) {
+    const doc = await register('DOCTOR', { specialty: 'GP', licenseNumber: 'MDCN-P' + uniq(), consultationFee: fee });
+    const pat = await register('PATIENT');
+    await request(app).put('/api/availability/me').set(auth(doc.token)).send({ timezone: 'Africa/Lagos', rules: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, startTime: '08:00', endTime: '18:00', slotMinutes: 30 })) });
+    const dprof = await prisma.doctorProfile.findUnique({ where: { userId: doc.user.id } });
+    const day = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    const slots = await request(app).get(`/api/availability/${doc.user.id}/slots?date=${day}`).set(auth(pat.token));
+    const appt = (await request(app).post('/api/patient/appointments').set(auth(pat.token)).send({ doctorId: dprof!.id, scheduledAt: slots.body.slots[0].start })).body;
+    const { grantRewardCoins } = await import('../src/services/coins');
+    await grantRewardCoins(pat.user.id, 300, 'TEST-PART-' + uniq(), 'test coins');
+    const coins = async () => Number((await request(app).get('/api/credits/balance').set(auth(pat.token))).body.balance) / 10;
+    return { doc, pat, appt, coins };
+  }
+  const getFinance = async () => (await import('../src/services/settings')).getFinance();
+
+  it('cash: coins cover part, the provider collects the rest and N-Health pays the coin part', async () => {
+    const { doc, pat, appt, coins } = await booking();
+    const total = Number(appt.fee) + Number(appt.serviceFee);
+    const body = { payableType: 'APPOINTMENT', payableId: appt.id };
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: total / 10 })).status).toBe(400); // whole bill: use "pay with coins"
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 900 })).status).toBe(400); // more than they have
+    const ap = await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 300 });
+    expect(ap.body).toMatchObject({ coins: 300, amount: 3000, remaining: total - 3000 });
+    expect(await coins()).toBe(0);
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 1 })).status).toBe(409);
+    const st = await request(app).get(`/api/coins/bill?payableType=APPOINTMENT&payableId=${appt.id}`).set(auth(pat.token));
+    expect(st.body).toMatchObject({ total, applied: 3000, appliedCoins: 300, remaining: total - 3000 });
+    // Taking the coins back, then applying again
+    expect((await request(app).delete('/api/coins/bill').set(auth(pat.token)).send(body)).status).toBe(200);
+    expect(await coins()).toBe(300);
+    await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 300 });
+    const cash = await request(app).post('/api/payments').set(auth(pat.token)).send({ ...body, method: 'CASH' });
+    expect(cash.status).toBe(201);
+    expect(Number(cash.body.amount)).toBe(total - 3000);
+    expect((await request(app).delete('/api/coins/bill').set(auth(pat.token)).send(body)).status).toBe(409); // already being paid
+    await request(app).post(`/api/payments/${cash.body.id}/confirm`).set(auth(doc.token));
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'CONFIRM' });
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'COMPLETE' });
+    const rate = (await getFinance()).commission.APPOINTMENT;
+    const commission = (Number(appt.fee) * rate) / 100;
+    // Provider holds the cash; their balance gets +coin part - commission - booking fee. Total = fee - commission.
+    const b = (await balanceOf(doc.user.id)).balance;
+    expect(b).toBeCloseTo(3000 - commission - (total - Number(appt.fee)), 2);
+    expect(total - 3000 + b).toBeCloseTo(Number(appt.fee) - commission, 2);
+  });
+
+  it('card: the gateway charges only the rest, the provider share shrinks by the coin part and N-Health credits it; a cancellation returns the coins', async () => {
+    const { doc, pat, appt, coins } = await booking();
+    await prisma.bankAccount.create({ data: { userId: doc.user.id, bankCode: '058', bankName: 'GTBank', accountNumber: '01' + String(Date.now()).slice(-8), accountName: 'Dr P', isPrimary: true, isVerified: true, paystackSubaccount: 'ACCT_p' + uniq() } });
+    const full = await planFor('APPOINTMENT', appt.id, pat.user.id);
+    await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, coins: 200 });
+    const plan = await planFor('APPOINTMENT', appt.id, pat.user.id);
+    expect(plan.total).toBe(full.total - 2000);
+    expect(plan.payees[0].amount).toBe(full.payees[0].amount - 2000);
+    expect(plan.platformAmount).toBe(full.platformAmount); // N-Health still collects its commission and booking fee
+    const ref = 'PY-CP-' + uniq();
+    await prisma.paymentGatewayLog.create({ data: { userId: pat.user.id, gateway: 'paystack', internalRef: ref, gatewayRef: 'pending', amount: plan.total, status: 'pending', purpose: 'direct_payment', requestPayload: { payableType: 'APPOINTMENT', payableId: appt.id, plan, settled: { [doc.user.id]: true } } as any } });
+    const wb = JSON.stringify({ event: 'charge.success', data: { status: 'success', reference: ref, amount: plan.total * 100, currency: 'NGN', id: 778 } });
+    const sig = crypto.createHmac('sha512', 'sk_test_dummy').update(wb).digest('hex');
+    expect((await request(app).post('/api/webhooks/paystack').set('Content-Type', 'application/json').set('x-paystack-signature', sig).send(wb)).status).toBe(200);
+    expect((await balanceOf(doc.user.id)).balance).toBe(2000); // the coin part, paid by N-Health
+    expect(await coins()).toBe(100);
+    // Doctor declines: card part refunded by the gateway, coins back to the patient, coin credit reversed.
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'CANCEL', notes: 'Away' });
+    expect(await coins()).toBe(300);
+    expect((await balanceOf(doc.user.id)).balance).toBe(-(full.payees[0].amount - 2000)); // only the settled card share is recovered
+  });
+
+  it('coins for the rest of a bill: paying the remainder with coins earns the provider the full fee', async () => {
+    const { doc, pat, appt } = await booking(2000);
+    const total = Number(appt.fee) + Number(appt.serviceFee);
+    await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, coins: 100 });
+    const pay = await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, method: 'WALLET' });
+    expect(pay.status).toBe(201);
+    expect(Number(pay.body.amount)).toBe(total - 1000);
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'CONFIRM' });
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'COMPLETE' });
+    const rate = (await getFinance()).commission.APPOINTMENT;
+    expect((await balanceOf(doc.user.id)).balance).toBeCloseTo(Number(appt.fee) * (1 - rate / 100), 2);
+  });
+});

@@ -1783,3 +1783,21 @@ model ProviderPageVisit {
 
   @@index([providerId, createdAt])
 }
+
+/// Reward coins a patient applied to part of a bill; the rest is paid by card or cash. N-Health pays the provider
+/// for the coin part. One per bill; refunded to the patient if the bill is cancelled.
+model CoinRedemption {
+  id          String   @id @default(uuid())
+  userId      String
+  payableType String
+  payableId   String
+  amount      Decimal  @db.Decimal(12, 2) // naira value of the coins (what N-Health funds)
+  coins       Int
+  reference   String   @unique
+  status      String   @default("ACTIVE") // ACTIVE | REFUNDED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([payableType, payableId])
+  @@index([userId])
+}
