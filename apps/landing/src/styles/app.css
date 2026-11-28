@@ -308,3 +308,7 @@ body.has-install .help-fab{bottom:calc(250px + env(safe-area-inset-bottom))}
 .hp-form{padding:8px;border-top:1px solid var(--border,#e0e0e0);display:flex;flex-direction:column;gap:6px}
 .hp-who{display:flex;gap:6px}.hp-who input{flex:1;min-width:0}
 .hp-send{display:flex;gap:6px;align-items:flex-end}.hp-send textarea{flex:1;resize:none}
+.backup-codes{font-size:16px;columns:2;background:var(--surface,#f6f7f9);padding:10px;border-radius:8px;user-select:all}
+.selfie-cam{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:3/4;max-height:60vh;margin:0 auto}
+.selfie-cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.selfie-guide{position:absolute;inset:12% 18% 30%;border:3px dashed rgba(255,255,255,.7);border-radius:50%}

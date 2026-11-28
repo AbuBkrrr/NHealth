@@ -598,6 +598,10 @@ describe('identity form, role changes, blood banks and medicines', () => {
     expect((await request(app).post('/api/kyc/manual').set(auth(pat.token)).send({ fullName: 'Ada Obi' })).status).toBe(400);
     const form = { fullName: 'Ada Obi', dateOfBirth: '1990-04-02', address: '12 Marina', state: 'Lagos', idType: 'NIN', idNumber: '1234', idFront: 'https://f.test/a.jpg', selfie: 'https://f.test/b.jpg', proofOfAddress: 'https://f.test/c.pdf' };
     expect((await request(app).post('/api/kyc/manual').set(auth(pat.token)).send(form)).status).toBe(400);
+    const future = await request(app).post('/api/kyc/manual').set(auth(pat.token)).send({ ...form, idNumber: '12345678901', dateOfBirth: '2999-11-30' });
+    expect(future.status).toBe(400); expect(future.body.error || future.body.message).toMatch(/future/);
+    const expired = await request(app).post('/api/kyc/manual').set(auth(pat.token)).send({ ...form, idNumber: '12345678901', idExpiry: '1990-03-30' });
+    expect(expired.status).toBe(400); expect(expired.body.error || expired.body.message).toMatch(/expired/);
     const sub = await request(app).post('/api/kyc/manual').set(auth(pat.token)).send({ ...form, idNumber: '12345678901' });
     expect(sub.body.status).toBe('IN_REVIEW');
     expect((await prisma.user.findUnique({ where: { id: pat.user.id } }))!.kycStatus).toBe('IN_REVIEW');
@@ -1047,7 +1051,7 @@ describe('consents, support chat, enquiry replies, invite tracking, in-person on
     expect(ok.status).toBe(201);
     const admin = await prisma.user.create({ data: { email: `ib-${uniq()}@test.io`, name: 'Admin', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
     const { saveInsuranceBroker } = await import('../src/services/settings');
-    await expect(saveInsuranceBroker({ enabled: true, name: 'X' }, admin.id)).rejects.toThrow();
+    await expect(saveInsuranceBroker({ enabled: true, name: 'X', email: '' }, admin.id)).rejects.toThrow();
     await saveInsuranceBroker({ enabled: true, name: 'SafeCover Brokers', email: 'leads@safecover.test', licence: 'NAICOM/BR/001' }, admin.id);
     try {
       expect((await request(app).get('/api/config')).body.insuranceBroker).toMatchObject({ name: 'SafeCover Brokers' });
@@ -1073,5 +1077,68 @@ describe('provider verification contact', () => {
     expect(n?.body).toMatch(/MDCN licence/);
     const q = await request(app).get('/api/admin-ops/verifications?status=PENDING&q=' + encodeURIComponent(doc.email)).set(auth(adminTok));
     expect(q.body[0].lastContactedAt).toBeTruthy();
+  });
+});
+
+describe('two-step verification (2FA)', () => {
+  it('sets up an authenticator app, asks for a code at sign-in, accepts backup codes once, and can be turned off', async () => {
+    const { totp } = await import('../src/services/twoFactor');
+    const u = await register('PATIENT');
+    const setup = await request(app).post('/api/auth/2fa/setup').set(auth(u.token)).send({ method: 'totp' });
+    expect(setup.body.qr).toMatch(/^data:image\/png/);
+    expect(setup.body.otpauth).toContain('issuer=N-Health');
+    expect((await request(app).post('/api/auth/2fa/enable').set(auth(u.token)).send({ method: 'totp', code: '000000' })).status).toBe(400);
+    const en = await request(app).post('/api/auth/2fa/enable').set(auth(u.token)).send({ method: 'totp', code: totp(setup.body.secret) });
+    expect(en.status).toBe(200);
+    expect(en.body.backupCodes).toHaveLength(10);
+    const stored = await prisma.user.findUnique({ where: { id: u.user.id } });
+    expect(stored?.twoFactorSecret).not.toContain(setup.body.secret); // encrypted at rest
+    // The old session ends; signing in now needs the code
+    expect((await request(app).get('/api/auth/me').set(auth(u.token))).status).toBe(401);
+    const login = await request(app).post('/api/auth/login').send({ email: u.email, password: 'password123' });
+    expect(login.body).toMatchObject({ twoFactorRequired: true, method: 'totp' });
+    expect(login.body.token).toBeUndefined();
+    expect((await request(app).post('/api/auth/2fa/verify').send({ challenge: login.body.challenge, code: '123456' })).status).toBe(401);
+    expect((await request(app).post('/api/auth/2fa/verify').send({ challenge: 'forged', code: totp(setup.body.secret) })).status).toBe(401);
+    const ok = await request(app).post('/api/auth/2fa/verify').send({ challenge: login.body.challenge, code: totp(setup.body.secret) });
+    expect(ok.status).toBe(200);
+    expect(ok.body.user.twoFactor).toBe('totp');
+    expect((await request(app).get('/api/auth/me').set(auth(ok.body.token))).status).toBe(200);
+    // A challenge is not an access token
+    expect((await request(app).get('/api/auth/me').set(auth(login.body.challenge))).status).toBe(401);
+    // Backup code works once
+    const l2 = await request(app).post('/api/auth/login').send({ email: u.email, password: 'password123' });
+    expect((await request(app).post('/api/auth/2fa/verify').send({ challenge: l2.body.challenge, code: en.body.backupCodes[0] })).status).toBe(200);
+    const l3 = await request(app).post('/api/auth/login').send({ email: u.email, password: 'password123' });
+    expect((await request(app).post('/api/auth/2fa/verify').send({ challenge: l3.body.challenge, code: en.body.backupCodes[0] })).status).toBe(401);
+    expect((await request(app).get('/api/auth/2fa').set(auth(ok.body.token))).body).toMatchObject({ enabled: true, method: 'totp', backupCodesLeft: 9 });
+    // Turning it off needs a valid code
+    expect((await request(app).post('/api/auth/2fa/disable').set(auth(ok.body.token)).send({ code: '111111' })).status).toBe(400);
+    expect((await request(app).post('/api/auth/2fa/disable').set(auth(ok.body.token)).send({ code: totp(setup.body.secret) })).body).toMatchObject({ enabled: false });
+    expect((await request(app).post('/api/auth/login').send({ email: u.email, password: 'password123' })).body.token).toBeTruthy();
+  });
+
+  it('supports emailed codes, and super admins can require 2FA for admins', async () => {
+    const u = await register('DOCTOR', { specialty: 'GP', licenseNumber: 'MDCN-2F' + uniq() });
+    const s = await request(app).post('/api/auth/2fa/setup').set(auth(u.token)).send({ method: 'email' });
+    expect(s.body).toMatchObject({ method: 'email', sentTo: expect.stringContaining('•••@') });
+    // Enable with a code we put in place (the real one is emailed)
+    const { issueOtp } = await import('../src/services/otp');
+    const code = await issueOtp(u.email, '2fa_setup', u.user.id);
+    const en = await request(app).post('/api/auth/2fa/enable').set(auth(u.token)).send({ method: 'email', code });
+    expect(en.body.method).toBe('email');
+    const login = await request(app).post('/api/auth/login').send({ email: u.email, password: 'password123', role: 'PROVIDER' });
+    expect(login.body).toMatchObject({ twoFactorRequired: true, method: 'email', sentTo: expect.any(String) });
+    const c2 = await issueOtp(u.email, '2fa_login', u.user.id);
+    const ok = await request(app).post('/api/auth/2fa/verify').send({ challenge: login.body.challenge, code: c2 });
+    expect(ok.body.user.role).toBe('DOCTOR');
+    // Admin policy
+    const sa = await prisma.user.create({ data: { email: `sec-${uniq()}@test.io`, name: 'Sec', passwordHash: await (await import('bcryptjs')).hash('password123', 4), role: 'ADMIN', isSuperAdmin: true } });
+    const saLogin = await request(app).post('/api/auth/login').send({ email: sa.email, password: 'password123' });
+    expect((await request(app).put('/api/auth/security').set(auth(saLogin.body.token)).send({ requireAdmin2fa: true })).body).toMatchObject({ requireAdmin2fa: true });
+    try {
+      const again = await request(app).post('/api/auth/login').send({ email: sa.email, password: 'password123' });
+      expect(again.body.user.mustSetup2fa).toBe(true);
+    } finally { await request(app).put('/api/auth/security').set(auth(saLogin.body.token)).send({ requireAdmin2fa: false }); }
   });
 });

@@ -136,7 +136,8 @@ export function authScreen(el, _params = {}, query = {}) {
         btn.disabled = true; btn.textContent = 'Please wait…';
         if (login) {
           if (!v.email || !v.password) throw new Error('Enter your email and password');
-          const r = await post('/auth/login', { email: v.email, password: v.password, role: s.side === 'PROVIDER' ? role : 'PATIENT' });
+          let r = await post('/auth/login', { email: v.email, password: v.password, role: s.side === 'PROVIDER' ? role : 'PATIENT' });
+          if (r.twoFactorRequired) r = await twoFactorStep(r);
           if (s.side === 'PROVIDER' && r.user.role === 'PATIENT') toast('No ' + role.toLowerCase() + ' profile on this account - signed in as patient');
           return startSession(r.token, r.user);
         }
@@ -176,7 +177,7 @@ function googleButton(host, role) {
       client_id: state.config.googleClientId,
       callback: async (resp) => {
         const body = { credential: resp.credential, role, referralCode: (() => { try { return localStorage.getItem('nh_ref') || undefined; } catch { return undefined; } })() };
-        try { const r = await post('/auth/google', body); startSession(r.token, r.user); }
+        try { let r = await post('/auth/google', body); if (r.twoFactorRequired) r = await twoFactorStep(r); startSession(r.token, r.user); }
         catch (e) {
           if (e.status !== 428) return toastErr(e);
           try { await consentSteps({ data: true }); const r = await post('/auth/google', { ...body, dataConsent: true }); startSession(r.token, r.user); } catch (e2) { toastErr(e2); }
@@ -206,6 +207,29 @@ async function forgot() {
   });
 }
 
+
+/** Second sign-in step when the account has two-step verification on. Resolves with { token, user }. */
+export function twoFactorStep(r) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    modal(`<div class="modal-title">🔐 Enter your code</div>
+      <p class="muted">${r.method === 'email' ? `We emailed a 6-digit code to ${esc(r.sentTo || 'your email')}.` : 'Open your authenticator app and enter the 6-digit code for N-Health.'}</p>
+      <div class="form-group"><input id="tfcode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" style="font-size:20px;letter-spacing:4px;text-align:center"></div>
+      <button class="btn btn-primary btn-block" id="tfok">Verify</button>
+      ${r.method === 'email' ? '<button class="btn btn-outline btn-block mt8" id="tfre">Send a new code</button>' : ''}
+      <p class="small muted center mt8">Lost access? Enter one of your backup codes instead.</p>`, (box, close) => {
+      const go = async () => {
+        const b = $('#tfok', box); b.disabled = true;
+        try { const s = await post('/auth/2fa/verify', { challenge: r.challenge, code: $('#tfcode', box).value.trim() }); done = true; close(); resolve(s); }
+        catch (e) { toastErr(e); b.disabled = false; }
+      };
+      $('#tfok', box).onclick = go;
+      $('#tfcode', box).onkeydown = (e) => { if (e.key === 'Enter') go(); };
+      $('#tfcode', box).focus();
+      $('#tfre', box)?.addEventListener('click', async () => { try { await post('/auth/2fa/resend', { challenge: r.challenge }); toast('📧 New code sent'); } catch (e) { toastErr(e); } });
+    }, () => { if (!done) reject(new Error('Sign-in cancelled')); });
+  });
+}
 
 // ---------- Consent steps (sign-up, Google sign-up, and once for existing accounts) ----------
 export const PROVIDER_TERMS_VERSION = 'PT-2026-11';

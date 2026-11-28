@@ -8,6 +8,8 @@ import { signToken } from '../utils/jwt';
 import { ApiError } from '../utils/ApiError';
 import { Role } from '@nhealth/shared-types';
 import crypto from 'crypto';
+import QRCode from 'qrcode';
+import { verifyTotp, seal, unseal, base32Encode, newBackupCodes, useBackupCode, makeChallenge, readChallenge, getSecurityPolicy, saveSecurityPolicy } from '../services/twoFactor';
 import { OAuth2Client } from 'google-auth-library';
 import { issueOtp, checkOtp } from '../services/otp';
 import { sendEmail } from '../services/email';
@@ -31,7 +33,7 @@ function publicUser(user: any, role: string, roles: string[]) {
     avatarUrl: user.avatarUrl, phone: user.phone, country: user.country, currency: user.currency, locale: user.locale,
     timezone: user.timezone, kycStatus: user.kycStatus, verificationStatus: user.verificationStatus,
     emailVerified: !!user.emailVerifiedAt, phoneVerified: !!user.phoneVerifiedAt, referralCode: user.referralCode,
-    dataConsent: !!user.dataConsentAt, providerTerms: !!user.providerTermsAt,
+    dataConsent: !!user.dataConsentAt, providerTerms: !!user.providerTermsAt, twoFactor: user.twoFactorMethod || null,
   };
 }
 
@@ -340,7 +342,7 @@ export async function login(req: Request, res: Response) {
     activeRole = roles[0] as any;
   }
 
-  res.json({ token: tokenFor(user, activeRole), user: publicUser(user, activeRole, roles) });
+  return finishSignIn(res, user, activeRole, roles);
 }
 
 // ============================================================
@@ -546,7 +548,7 @@ export async function googleAuth(req: Request, res: Response) {
 
     if (!user!.isActive || user!.deletedAt) return res.status(403).json({ error: 'This account has been deactivated' });
     await prisma.user.update({ where: { id: user!.id }, data: { lastLoginAt: new Date(), emailVerifiedAt: user!.emailVerifiedAt ?? new Date() } });
-    return res.json({ token: tokenFor(user, activeRole), user: publicUser(user, activeRole, roles) });
+    return finishSignIn(res, user, activeRole, roles);
   } catch (err) {
     console.error('Google auth error:', err);
     return res.status(401).json({ error: 'Google authentication failed' });
@@ -656,3 +658,127 @@ export async function acceptConsents(req: Request, res: Response) {
   const u = await prisma.user.update({ where: { id: req.user!.userId }, data, select: { dataConsentAt: true, providerTermsAt: true, providerTermsVersion: true } });
   res.json({ dataConsent: !!u.dataConsentAt, providerTerms: !!u.providerTermsAt, providerTermsVersion: u.providerTermsVersion });
 }
+
+// ============================================================
+// TWO-STEP VERIFICATION (2FA)
+// ============================================================
+
+const maskEmail = (e: string) => { const [u, d] = e.split('@'); return u.slice(0, 2) + '•••@' + d; };
+async function emailCode(userId: string, email: string, purpose: string) {
+  const code = await issueOtp(email, purpose, userId);
+  await sendEmail(email, 'Your N-Health sign-in code', 'Your sign-in code',
+    `Your N-Health verification code is <b style="font-size:20px;letter-spacing:3px">${code}</b>.<br>It expires in 10 minutes. If you didn't try to sign in, change your password now.`);
+}
+
+/** After the password (or Google) step: either the session, or a 2FA challenge when the account has 2FA on. */
+async function finishSignIn(res: Response, user: any, activeRole: string, roles: string[]) {
+  if (user.twoFactorMethod) {
+    if (user.twoFactorMethod === 'email') await emailCode(user.id, user.email, '2fa_login');
+    return res.json({ twoFactorRequired: true, method: user.twoFactorMethod, challenge: makeChallenge(user.id, activeRole), sentTo: user.twoFactorMethod === 'email' ? maskEmail(user.email) : undefined });
+  }
+  const pub: any = publicUser(user, activeRole, roles);
+  if (user.role === 'ADMIN' && (await getSecurityPolicy()).requireAdmin2fa) pub.mustSetup2fa = true;
+  return res.json({ token: tokenFor(user, activeRole), user: pub });
+}
+
+/** Checks a 2FA code for an account: authenticator code, emailed code, or a backup code. */
+async function check2fa(u: { id: string; email: string; twoFactorMethod: string | null; twoFactorSecret: string | null }, code: string, emailPurpose: string) {
+  const c = String(code || '').trim();
+  if (u.twoFactorMethod === 'totp' && u.twoFactorSecret && verifyTotp(unseal(u.twoFactorSecret), c)) return true;
+  if (u.twoFactorMethod === 'email' && /^\d{6}$/.test(c) && await checkOtp(u.email, emailPurpose, c, true)) return true;
+  return /^[a-z0-9]{5}-?[a-z0-9]{5}$/i.test(c) && useBackupCode(u.id, c);
+}
+
+/** POST /api/auth/2fa/verify { challenge, code } - second step of sign-in. */
+export async function verify2fa(req: Request, res: Response) {
+  const ch = readChallenge(req.body?.challenge);
+  if (!ch) throw ApiError.unauthorized('This sign-in has expired - enter your password again');
+  const user = await getUserWithProfiles({ id: ch.userId });
+  if (!user || !user.isActive || user.deletedAt) throw ApiError.unauthorized('Account is not active');
+  if (user.lockedUntil && user.lockedUntil > new Date()) throw new ApiError(429, 'Too many attempts - try again in a few minutes');
+  if (!(await check2fa(user as any, req.body?.code, '2fa_login'))) {
+    const fails = (user.failedLogins || 0) + 1;
+    await prisma.user.update({ where: { id: user.id }, data: { failedLogins: fails, lockedUntil: fails >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null } });
+    throw ApiError.unauthorized('That code is not right. Check your app or email and try again.');
+  }
+  await prisma.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
+  const roles = buildRolesArray(user);
+  const pub: any = publicUser(user, ch.role, roles);
+  res.json({ token: tokenFor(user, ch.role), user: pub });
+}
+
+/** POST /api/auth/2fa/resend { challenge } - another emailed code (email method). */
+export async function resend2fa(req: Request, res: Response) {
+  const ch = readChallenge(req.body?.challenge);
+  if (!ch) throw ApiError.unauthorized('This sign-in has expired - enter your password again');
+  const u = await prisma.user.findUnique({ where: { id: ch.userId }, select: { id: true, email: true, twoFactorMethod: true } });
+  if (u?.twoFactorMethod !== 'email') throw ApiError.badRequest('Use the code in your authenticator app');
+  await emailCode(u.id, u.email, '2fa_login');
+  res.json({ ok: true, sentTo: maskEmail(u.email) });
+}
+
+/** GET /api/auth/2fa - my 2FA status. */
+export async function twoFactorStatus(req: Request, res: Response) {
+  const u = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { twoFactorMethod: true, twoFactorEnabledAt: true, twoFactorBackupCodes: true, role: true } });
+  const policy = await getSecurityPolicy();
+  res.json({ enabled: !!u?.twoFactorMethod, method: u?.twoFactorMethod || null, since: u?.twoFactorEnabledAt || null,
+    backupCodesLeft: ((u?.twoFactorBackupCodes as string[] | null) || []).length, required: u?.role === 'ADMIN' && policy.requireAdmin2fa });
+}
+
+/** POST /api/auth/2fa/setup { method: totp|email } - starts setting up: a QR code for the app, or an emailed code. */
+export async function setup2fa(req: Request, res: Response) {
+  const u = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { id: true, email: true } });
+  if (!u) throw ApiError.notFound('User not found');
+  if (req.body?.method === 'email') { await emailCode(u.id, u.email, '2fa_setup'); return res.json({ method: 'email', sentTo: maskEmail(u.email) }); }
+  const secret = base32Encode(crypto.randomBytes(20));
+  await prisma.user.update({ where: { id: u.id }, data: { twoFactorPending: seal(secret) } });
+  const otpauth = `otpauth://totp/${encodeURIComponent('N-Health:' + u.email)}?secret=${secret}&issuer=N-Health&algorithm=SHA1&digits=6&period=30`;
+  res.json({ method: 'totp', secret, otpauth, qr: await QRCode.toDataURL(otpauth, { margin: 1, width: 220 }) });
+}
+
+/** POST /api/auth/2fa/enable { method, code } - confirms the first code and switches 2FA on; returns backup codes (shown once). */
+export async function enable2fa(req: Request, res: Response) {
+  const u = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { id: true, email: true, twoFactorPending: true } });
+  if (!u) throw ApiError.notFound('User not found');
+  const method = req.body?.method === 'email' ? 'email' : 'totp';
+  const code = String(req.body?.code || '').trim();
+  if (method === 'totp') {
+    if (!u.twoFactorPending || !verifyTotp(unseal(u.twoFactorPending), code)) throw ApiError.badRequest('That code is not right. Enter the 6-digit code your app shows now.');
+  } else if (!(await checkOtp(u.email, '2fa_setup', code, true))) throw ApiError.badRequest('That code is not right or has expired');
+  const { codes, hashes } = newBackupCodes();
+  await prisma.user.update({ where: { id: u.id }, data: {
+    twoFactorMethod: method, twoFactorSecret: method === 'totp' ? u.twoFactorPending : null, twoFactorPending: null,
+    twoFactorBackupCodes: hashes, twoFactorEnabledAt: new Date(), tokenVersion: { increment: 1 },
+  } });
+  invalidateUserState(u.id);
+  await notify(u.id, 'system', '🔐 Two-step verification is on', 'Your account now asks for a code when you sign in. Keep your backup codes somewhere safe.', { email: true });
+  const fresh = await prisma.user.findUnique({ where: { id: u.id } });
+  res.json({ enabled: true, method, backupCodes: codes, token: tokenFor(fresh, req.user!.role) });
+}
+
+/** POST /api/auth/2fa/disable { code } - switches 2FA off (needs a current code or a backup code). */
+export async function disable2fa(req: Request, res: Response) {
+  const u = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { id: true, email: true, role: true, twoFactorMethod: true, twoFactorSecret: true } });
+  if (!u?.twoFactorMethod) return res.json({ enabled: false });
+  if (u.role === 'ADMIN' && (await getSecurityPolicy()).requireAdmin2fa) throw ApiError.forbidden('Two-step verification is required for admin accounts');
+  if (u.twoFactorMethod === 'email' && !req.body?.code) { await emailCode(u.id, u.email, '2fa_login'); return res.json({ enabled: true, codeSent: maskEmail(u.email) }); }
+  if (!(await check2fa(u as any, req.body?.code, '2fa_login'))) throw ApiError.badRequest('That code is not right');
+  await prisma.user.update({ where: { id: u.id }, data: { twoFactorMethod: null, twoFactorSecret: null, twoFactorPending: null, twoFactorBackupCodes: [], twoFactorEnabledAt: null } });
+  await notify(u.id, 'system', 'Two-step verification was turned off', 'If this was not you, change your password and turn it back on in Settings.', { email: true });
+  res.json({ enabled: false });
+}
+
+/** POST /api/auth/2fa/backup-codes { code } - 10 new backup codes (the old ones stop working). */
+export async function regenBackupCodes(req: Request, res: Response) {
+  const u = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { id: true, email: true, twoFactorMethod: true, twoFactorSecret: true } });
+  if (!u?.twoFactorMethod) throw ApiError.badRequest('Turn on two-step verification first');
+  if (u.twoFactorMethod === 'email' && !req.body?.code) { await emailCode(u.id, u.email, '2fa_login'); return res.json({ codeSent: maskEmail(u.email) }); }
+  if (!(await check2fa(u as any, req.body?.code, '2fa_login'))) throw ApiError.badRequest('That code is not right');
+  const { codes, hashes } = newBackupCodes();
+  await prisma.user.update({ where: { id: u.id }, data: { twoFactorBackupCodes: hashes } });
+  res.json({ backupCodes: codes });
+}
+
+/** GET/PUT /api/admin/security - super admins can require 2FA for all admin accounts. */
+export async function getSecurity(_req: Request, res: Response) { res.json(await getSecurityPolicy()); }
+export async function putSecurity(req: Request, res: Response) { res.json(await saveSecurityPolicy(req.body || {}, req.user!.userId)); }
