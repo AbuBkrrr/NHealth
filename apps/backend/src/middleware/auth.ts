@@ -55,6 +55,12 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
   }).catch(next);
 }
 
+/** Like requireAuth, but lets signed-out visitors through (req.user stays undefined). A bad token is treated as signed out. */
+export function optionalAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!extractBearerToken(req.headers.authorization)) return next();
+  requireAuth(req, res, (err?: any) => { if (err) delete (req as any).user; next(); });
+}
+
 /**
  * Restricts a route to one or more roles. Use after requireAuth.
  * @param roles - Allowed role strings

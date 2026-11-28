@@ -13,7 +13,7 @@ const uniq = () => crypto.randomBytes(4).toString('hex');
 
 async function register(role: string, profile: Record<string, unknown> = {}) {
   const email = `${role.toLowerCase()}-${uniq()}@test.io`;
-  const r = await request(app).post('/api/auth/register').send({ email, password: 'password123', name: role + ' Tester', role, profile, acceptTerms: true });
+  const r = await request(app).post('/api/auth/register').send({ email, password: 'password123', name: role + ' Tester', role, profile, acceptTerms: true, dataConsent: true, providerTerms: true });
   expect(r.status).toBe(201);
   return { token: r.body.token as string, user: r.body.user, email };
 }
@@ -340,7 +340,7 @@ describe('marketing links', () => {
     expect(r4.body).toMatchObject({ deviceNo: 2, openNo: 1, newDevice: true });
     await request(app).post('/api/mkt/lead').send({ slug: link.slug, deviceId: phoneB, name: 'Bola', phone: '+2348030000000', consent: true }).expect(201);
     const email = `mk-${uniq()}@test.io`;
-    await request(app).post('/api/auth/register').send({ email, password: 'password123', name: 'Bola', role: 'PATIENT', acceptTerms: true, mkt: { deviceKey: 'd:' + phoneB } }).expect(201);
+    await request(app).post('/api/auth/register').send({ email, password: 'password123', name: 'Bola', role: 'PATIENT', acceptTerms: true, dataConsent: true, providerTerms: true, mkt: { deviceKey: 'd:' + phoneB } }).expect(201);
 
     ov = (await request(app).get('/api/admin-ops/marketing/overview?linkId=' + link.id).set(auth(t))).body;
     const l = ov.perLink[0];
@@ -512,7 +512,7 @@ describe('invite reward (coins)', () => {
     const inviter = await register('PATIENT');
     const code = (await prisma.user.findUnique({ where: { id: inviter.user.id } }))!.referralCode!;
     const email = `inv-${uniq()}@test.io`;
-    const r = await request(app).post('/api/auth/register').send({ email, password: 'password123', name: 'Ada Friend', role: 'PATIENT', acceptTerms: true, referralCode: code });
+    const r = await request(app).post('/api/auth/register').send({ email, password: 'password123', name: 'Ada Friend', role: 'PATIENT', acceptTerms: true, dataConsent: true, providerTerms: true, referralCode: code });
     expect(r.status).toBe(201);
     const friendId = r.body.user.id;
     const bal = async () => Number((await prisma.creditLedger.findUnique({ where: { userId: inviter.user.id } }))?.balance || 0);
@@ -959,5 +959,102 @@ describe('help someone pay for care with your coins (no transfer between balance
     // Daily limit
     await grantRewardCoins(sender.user.id, 1000, 'TEST-HELP2-' + uniq(), 'more');
     expect((await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 400 })).status).toBe(400);
+  });
+});
+
+describe('consents, support chat, enquiry replies, invite tracking, in-person only, broker', () => {
+  it('needs data-use consent for every new account and provider terms for providers, and records them', async () => {
+    const base = { password: 'password123', name: 'Consent Test', acceptTerms: true };
+    const r1 = await request(app).post('/api/auth/register').send({ ...base, email: `c1-${uniq()}@test.io`, role: 'PATIENT' });
+    expect(r1.status).toBe(400);
+    expect(r1.body.error).toMatch(/health data/i);
+    const r2 = await request(app).post('/api/auth/register').send({ ...base, email: `c2-${uniq()}@test.io`, role: 'DOCTOR', dataConsent: true, profile: { specialty: 'GP', licenseNumber: 'MDCN-C' + uniq() } });
+    expect(r2.status).toBe(400);
+    expect(r2.body.error).toMatch(/provider terms/i);
+    const ok = await request(app).post('/api/auth/register').send({ ...base, email: `c3-${uniq()}@test.io`, role: 'DOCTOR', dataConsent: true, providerTerms: true, profile: { specialty: 'GP', licenseNumber: 'MDCN-C' + uniq() } });
+    expect(ok.status).toBe(201);
+    expect(ok.body.user).toMatchObject({ dataConsent: true, providerTerms: true });
+    const u = await prisma.user.findUnique({ where: { id: ok.body.user.id } });
+    expect(u?.providerTermsVersion).toBe('PT-2026-11');
+    // Existing accounts accept later
+    const old = await register('PATIENT');
+    await prisma.user.update({ where: { id: old.user.id }, data: { dataConsentAt: null } });
+    expect((await request(app).post('/api/auth/consents').set(auth(old.token)).send({ providerTerms: true })).status).toBe(400);
+    expect((await request(app).post('/api/auth/consents').set(auth(old.token)).send({ dataConsent: true })).body).toMatchObject({ dataConsent: true });
+  });
+
+  it('runs a live chat from the help bubble for visitors and members, with staff replies', async () => {
+    const admin = await prisma.user.create({ data: { email: `sa-${uniq()}@test.io`, name: 'Support', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const adminTok = (await import('../src/utils/jwt')).signToken({ userId: admin.id, role: 'ADMIN' as any, isSuperAdmin: true, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    // Visitor
+    expect((await request(app).post('/api/support/chat').send({ message: 'Hello' })).status).toBe(400); // needs name + email
+    const v1 = await request(app).post('/api/support/chat').send({ message: 'Do you deliver in Kano?', name: 'Musa', email: `musa-${uniq()}@test.io` });
+    expect(v1.status).toBe(201);
+    expect(v1.body.token).toBeTruthy();
+    const v2 = await request(app).post('/api/support/chat').send({ message: 'Also Kaduna?', token: v1.body.token });
+    expect(v2.body.messages.map((m: any) => m.body)).toEqual(['Do you deliver in Kano?', 'Also Kaduna?']);
+    expect((await request(app).post(`/api/admin-ops/tickets/${v1.body.id}/reply`).set(auth(adminTok)).send({ reply: 'Yes, both!' })).status).toBe(200);
+    const seen = await request(app).get('/api/support/chat?token=' + v1.body.token);
+    expect(seen.body.messages.at(-1)).toMatchObject({ fromStaff: true, body: 'Yes, both!' });
+    expect((await request(app).get('/api/support/chat?token=wrong')).body.messages).toEqual([]);
+    // Member
+    const pat = await register('PATIENT');
+    const m1 = await request(app).post('/api/support/chat').set(auth(pat.token)).send({ message: 'My order is late' });
+    const m2 = await request(app).post('/api/support/chat').set(auth(pat.token)).send({ message: 'Order 123' });
+    expect(m2.body.id).toBe(m1.body.id);
+    const th = await request(app).get(`/api/admin-ops/tickets/${m1.body.id}/messages`).set(auth(adminTok));
+    expect(th.body.messages).toHaveLength(2);
+    expect(th.body.guestToken).toBeUndefined();
+  });
+
+  it('replies to enquiries and tracks each member\'s invite link like a campaign', async () => {
+    const admin = await prisma.user.create({ data: { email: `sb-${uniq()}@test.io`, name: 'Mkt', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const adminTok = (await import('../src/utils/jwt')).signToken({ userId: admin.id, role: 'ADMIN' as any, isSuperAdmin: true, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    const lead = await prisma.marketingLead.create({ data: { name: 'Abubakar Lead', email: `lead-${uniq()}@test.io`, phone: '+2348030000000', message: 'i am testing' } });
+    const r = await request(app).post(`/api/admin-ops/marketing/leads/${lead.id}/reply`).set(auth(adminTok)).send({ body: 'Thanks! How can we help?', channel: 'email' });
+    expect(r.status).toBe(201);
+    expect((await prisma.marketingLead.findUnique({ where: { id: lead.id } }))!.status).toBe('CONTACTED');
+    const t = await request(app).get(`/api/admin-ops/marketing/leads/${lead.id}/messages`).set(auth(adminTok));
+    expect(t.body.messages.map((m: any) => m.body)).toEqual(['i am testing', 'Thanks! How can we help?']);
+    // Invite link: opened on two phones (shared), one signs up through it
+    const inviter = await register('PATIENT');
+    const code = (await prisma.user.findUnique({ where: { id: inviter.user.id } }))!.referralCode!;
+    const open = (deviceId: string, utm?: string) => request(app).post('/api/mkt/open').send({ slug: 'inv-' + code.toLowerCase(), deviceId, utm: utm ? { source: utm } : {} });
+    const o1 = await open('dev-inv-a-' + uniq(), 'whatsapp');
+    expect(o1.body.link).toBeTruthy();
+    const devB = 'dev-inv-b-' + uniq();
+    await open(devB, 'whatsapp'); await open(devB);
+    const friend = await request(app).post('/api/auth/register').send({ email: `invf-${uniq()}@test.io`, password: 'password123', name: 'Invited Friend', role: 'PATIENT', acceptTerms: true, dataConsent: true, referralCode: code, mkt: { deviceKey: 'd:' + devB } });
+    expect(friend.status).toBe(201);
+    const rep = await request(app).get('/api/admin-ops/marketing/invites?days=7').set(auth(adminTok));
+    const row = rep.body.rows.find((x: any) => x.inviter?.id === inviter.user.id);
+    expect(row).toMatchObject({ opens: 3, devices: 2, repeatOpens: 1, verdict: 'Shared · 2 devices', signups: 1, slug: 'inv-' + code });
+    expect(row.channels.whatsapp).toBe(2);
+    // Personal invite links don't crowd the campaign link list
+    const links = await request(app).get('/api/admin-ops/marketing/links').set(auth(adminTok));
+    expect(links.body.some((l: any) => l.slug === 'inv-' + code)).toBe(false);
+  });
+
+  it('books in-person visits only and sends insurance requests to the broker partner', async () => {
+    const doc = await register('DOCTOR', { specialty: 'GP', licenseNumber: 'MDCN-V' + uniq(), consultationFee: 5000 });
+    const pat = await register('PATIENT');
+    await request(app).put('/api/availability/me').set(auth(doc.token)).send({ timezone: 'Africa/Lagos', rules: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, startTime: '08:00', endTime: '18:00', slotMinutes: 30 })) });
+    const dprof = await prisma.doctorProfile.findUnique({ where: { userId: doc.user.id } });
+    const day = new Date(Date.now() + 8 * 864e5).toISOString().slice(0, 10);
+    const slots = await request(app).get(`/api/availability/${doc.user.id}/slots?date=${day}`).set(auth(pat.token));
+    expect((await request(app).post('/api/patient/appointments').set(auth(pat.token)).send({ doctorId: dprof!.id, scheduledAt: slots.body.slots[0].start, type: 'VIDEO' })).status).toBe(400);
+    const ok = await request(app).post('/api/patient/appointments').set(auth(pat.token)).send({ doctorId: dprof!.id, scheduledAt: slots.body.slots[0].start });
+    expect(ok.status).toBe(201);
+    const admin = await prisma.user.create({ data: { email: `ib-${uniq()}@test.io`, name: 'Admin', passwordHash: 'x', role: 'ADMIN', isSuperAdmin: true } });
+    const { saveInsuranceBroker } = await import('../src/services/settings');
+    await expect(saveInsuranceBroker({ enabled: true, name: 'X' }, admin.id)).rejects.toThrow();
+    await saveInsuranceBroker({ enabled: true, name: 'SafeCover Brokers', email: 'leads@safecover.test', licence: 'NAICOM/BR/001' }, admin.id);
+    try {
+      expect((await request(app).get('/api/config')).body.insuranceBroker).toMatchObject({ name: 'SafeCover Brokers' });
+      const plan = await prisma.insurancePlan.create({ data: { name: 'Basic ' + uniq(), provider: 'Some HMO', type: 'HMO', monthlyPremium: 2000, coverage: ['Outpatient'] } });
+      expect((await request(app).post(`/api/insurance/plans/${plan.id}/enrol`).set(auth(pat.token)).send({})).status).toBe(201);
+      const n = await prisma.notification.findFirst({ where: { userId: pat.user.id, type: 'insurance' }, orderBy: { createdAt: 'desc' } });
+      expect(n?.body).toMatch(/SafeCover Brokers/);
+    } finally { await saveInsuranceBroker({ enabled: false }, admin.id); }
   });
 });

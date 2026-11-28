@@ -14,15 +14,18 @@ import { COIN_VALUE_NGN, INVITE_REWARD_COINS, toCoins } from '../../services/coi
 
 /** GET /api/config - public runtime configuration for the apps. */
 export async function config(_req: Request, res: Response) {
-  const [fin, ngo] = await Promise.all([getFinance(), getDonationPartner()]);
+  const { getInsuranceBroker } = await import('../../services/settings');
+  const [fin, ngo, broker] = await Promise.all([getFinance(), getDonationPartner(), getInsuranceBroker()]);
   res.json({
+    insuranceBroker: broker.enabled ? { name: broker.name, licence: broker.licence || null } : null,
     donationPartner: ngo.enabled ? { name: ngo.name, regNumber: ngo.regNumber || null, website: ngo.website || null } : null,
     cashEnabled: fin.cashEnabled, commission: fin.commission,
     gateways: enabledGateways(), escrow: !!process.env.PAYSCROW_API_KEY, kyc: DIDIT_CONFIGURED(), vapidPublicKey: vapidPublicKey(),
     currencies: SUPPORTED_CURRENCIES, rates: await ratesPerNgn(), baseCurrency: 'NGN', serviceFeePercent: fin.patientServiceFeePercent,
     posTaxPercent: fin.posTaxPercent, coinValue: COIN_VALUE_NGN, coinSales: env.raw.COIN_TOPUP_ENABLED === 'true',
     company: { name: env.raw.COMPANY_LEGAL_NAME, rc: env.raw.COMPANY_RC_NUMBER || null, address: env.raw.COMPANY_ADDRESS || null, dpoEmail: env.raw.DPO_EMAIL, supportEmail: env.raw.SUPPORT_EMAIL },
-    whatsapp: !!(env.raw.WHATSAPP_TOKEN && env.raw.WHATSAPP_PHONE_NUMBER_ID), inviteRewardCoins: INVITE_REWARD_COINS, googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+    whatsapp: !!(env.raw.WHATSAPP_TOKEN && env.raw.WHATSAPP_PHONE_NUMBER_ID),
+    support: { email: env.raw.SUPPORT_EMAIL, whatsapp: env.raw.SUPPORT_WHATSAPP ? env.raw.SUPPORT_WHATSAPP.replace(/\D/g, '') : null }, inviteRewardCoins: INVITE_REWARD_COINS, googleClientId: process.env.GOOGLE_CLIENT_ID || null,
     emergencyNumbers: { NG: ['112', '767', '199'], GH: ['112', '193'], KE: ['999', '112'], ZA: ['10177', '112'], US: ['911'], GB: ['999', '112'], DEFAULT: ['112'] },
   });
 }

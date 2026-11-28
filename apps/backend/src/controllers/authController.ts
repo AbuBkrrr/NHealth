@@ -17,6 +17,10 @@ import { invalidateUserState } from '../middleware/auth';
 import { rewardInviter } from '../services/coins';
 
 const PROVIDER_ROLES = ['DOCTOR', 'PHARMACY', 'LAB', 'AMBULANCE', 'NURSE', 'INSTITUTION'];
+/** Version of the provider terms shown at sign-up (stored with each acceptance). */
+export const PROVIDER_TERMS_VERSION = 'PT-2026-11';
+const NEED_DATA_CONSENT = 'Please agree to how N-Health uses your health data (the data-use step) to create an account';
+const NEED_PROVIDER_TERMS = 'Please accept the provider terms (valid licences, responsibility for your services, data sharing) to join as a provider';
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
 
@@ -27,6 +31,7 @@ function publicUser(user: any, role: string, roles: string[]) {
     avatarUrl: user.avatarUrl, phone: user.phone, country: user.country, currency: user.currency, locale: user.locale,
     timezone: user.timezone, kycStatus: user.kycStatus, verificationStatus: user.verificationStatus,
     emailVerified: !!user.emailVerifiedAt, phoneVerified: !!user.phoneVerifiedAt, referralCode: user.referralCode,
+    dataConsent: !!user.dataConsentAt, providerTerms: !!user.providerTermsAt,
   };
 }
 
@@ -54,6 +59,8 @@ const registerSchema = z.object({
   timezone: z.string().optional(),
   locale: z.string().optional(),
   acceptTerms: z.boolean().optional(),
+  dataConsent: z.boolean().optional(),
+  providerTerms: z.boolean().optional(),
   marketingOptIn: z.boolean().optional(),
   referralCode: z.string().optional(),
   mkt: z.object({ deviceKey: z.string().max(80).optional(), slug: z.string().max(60).optional() }).optional(),
@@ -233,6 +240,10 @@ export async function register(req: Request, res: Response) {
       throw ApiError.conflict('You already have a provider profile. Only one provider role allowed per email.');
     }
 
+    if (PROVIDER_ROLES.includes(data.role)) {
+      if (data.providerTerms !== true) throw ApiError.badRequest(NEED_PROVIDER_TERMS);
+      await prisma.user.update({ where: { id: existing.id }, data: { providerTermsAt: new Date(), providerTermsVersion: PROVIDER_TERMS_VERSION } });
+    }
     await createRoleProfile(existing.id, data.role, data.profile ?? {});
     if (PROVIDER_ROLES.includes(data.role) && existing.verificationStatus === 'UNVERIFIED') {
       await prisma.user.update({ where: { id: existing.id }, data: { verificationStatus: 'PENDING' } });
@@ -240,6 +251,9 @@ export async function register(req: Request, res: Response) {
     user = existing;
   } else {
     if (data.acceptTerms === false) throw ApiError.badRequest('You must accept the Terms of Service and Privacy Policy');
+    if (data.dataConsent !== true) throw ApiError.badRequest(NEED_DATA_CONSENT);
+    const isProvider = PROVIDER_ROLES.includes(data.role);
+    if (isProvider && data.providerTerms !== true) throw ApiError.badRequest(NEED_PROVIDER_TERMS);
     const passwordHash = await bcrypt.hash(String(data.password), 12);
     const referrer = data.referralCode ? await prisma.user.findUnique({ where: { referralCode: data.referralCode.toUpperCase() } }) : null;
     user = await prisma.user.create({
@@ -255,6 +269,9 @@ export async function register(req: Request, res: Response) {
         locale: data.locale ?? 'en',
         termsAcceptedAt: new Date(),
         privacyAcceptedAt: new Date(),
+        dataConsentAt: new Date(),
+        providerTermsAt: isProvider ? new Date() : null,
+        providerTermsVersion: isProvider ? PROVIDER_TERMS_VERSION : null,
         marketingOptIn: !!data.marketingOptIn,
         referralCode: makeReferralCode(),
         referredById: referrer?.id,
@@ -467,7 +484,7 @@ export async function confirmVerifyPhone(req: Request, res: Response) {
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export async function googleAuth(req: Request, res: Response) {
-  const { credential, role = 'PATIENT', referralCode } = req.body;
+  const { credential, role = 'PATIENT', referralCode, dataConsent } = req.body;
   if (!credential) return res.status(400).json({ error: 'Missing credential' });
 
   try {
@@ -483,6 +500,8 @@ export async function googleAuth(req: Request, res: Response) {
     let user = await getUserWithProfiles({ email });
 
     if (!user) {
+      // New accounts must agree to how their health data is used before the account is created.
+      if (dataConsent !== true) return res.status(428).json({ error: NEED_DATA_CONSENT, needConsent: true });
       // Auto-register with Google — only supports PATIENT self-registration.
       // Provider signups must go through email registration to collect license/specialty.
       const finalRole = (role === 'PROVIDER') ? 'PATIENT' : role;
@@ -499,6 +518,7 @@ export async function googleAuth(req: Request, res: Response) {
           emailVerifiedAt: new Date(),
           termsAcceptedAt: new Date(),
           privacyAcceptedAt: new Date(),
+          dataConsentAt: new Date(),
           referralCode: makeReferralCode(),
           referredById: referrer?.id,
         },
@@ -620,4 +640,19 @@ export async function updateProfile(req: Request, res: Response) {
 
   const { passwordHash, failedLogins, lockedUntil, tokenVersion, ...safe } = updated as any;
   res.json(safe);
+}
+/**
+ * POST /api/auth/consents { dataConsent?, providerTerms? } - existing accounts accept the data-use consent and, for
+ * providers, the provider terms (asked once in the app). Each acceptance is stored with its date and version.
+ */
+export async function acceptConsents(req: Request, res: Response) {
+  const data: any = {};
+  if (req.body?.dataConsent === true) data.dataConsentAt = new Date();
+  if (req.body?.providerTerms === true) {
+    if (!PROVIDER_ROLES.includes(req.user!.role)) throw ApiError.badRequest('Provider terms are for provider accounts');
+    data.providerTermsAt = new Date(); data.providerTermsVersion = PROVIDER_TERMS_VERSION;
+  }
+  if (!Object.keys(data).length) throw ApiError.badRequest('Nothing to accept');
+  const u = await prisma.user.update({ where: { id: req.user!.userId }, data, select: { dataConsentAt: true, providerTermsAt: true, providerTermsVersion: true } });
+  res.json({ dataConsent: !!u.dataConsentAt, providerTerms: !!u.providerTermsAt, providerTermsVersion: u.providerTermsVersion });
 }

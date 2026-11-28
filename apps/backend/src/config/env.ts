@@ -52,6 +52,7 @@ const envSchema = z.object({
   COMPANY_ADDRESS: z.string().optional(),
   DPO_EMAIL: z.string().default('privacy@nhealth.com.ng'),
   SUPPORT_EMAIL: z.string().default('support@nhealth.com.ng'),
+  SUPPORT_WHATSAPP: z.string().optional(), // e.g. 2348012345678 - shows "WhatsApp us" in the help bubble
   SENTRY_DSN: z.string().optional(),
 });
 

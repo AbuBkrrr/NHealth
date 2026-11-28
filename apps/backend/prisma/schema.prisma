@@ -176,6 +176,9 @@ model User {
   lastLoginAt        DateTime?
   termsAcceptedAt    DateTime?
   privacyAcceptedAt  DateTime?
+  dataConsentAt       DateTime? // explicit consent to process health data (sign-up step)
+  providerTermsAt     DateTime? // provider terms accepted (licences, responsibility, data sharing)
+  providerTermsVersion String?
   marketingOptIn     Boolean              @default(false)
   referralCode       String?              @unique
   referredById       String?
@@ -761,9 +764,31 @@ model SupportTicket {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  guestToken  String?   @unique // live chat from the help bubble without an account
+  channel     String    @default("form") // form | chat
+  lastMessageAt DateTime?
+  messages    SupportMessage[]
+
   @@index([status])
   @@index([createdAt])
   @@index([userId])
+}
+
+/// A message in a support chat or an enquiry (lead) conversation.
+model SupportMessage {
+  id        String         @id @default(uuid())
+  ticketId  String?
+  ticket    SupportTicket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  leadId    String?
+  authorId  String?
+  fromStaff Boolean        @default(false)
+  channel   String         @default("chat") // chat | email | whatsapp
+  body      String         @db.Text
+  delivered Boolean        @default(true)
+  createdAt DateTime       @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([leadId, createdAt])
 }
 
 // ============================================================
@@ -1558,6 +1583,7 @@ model MarketingLink {
   notes       String?
   active      Boolean          @default(true)
   createdById String?
+  inviterId   String?          @unique // set for a member's personal invite link (/?ref=CODE), created automatically
   createdAt   DateTime         @default(now())
   visits      MarketingVisit[]
   leads       MarketingLead[]

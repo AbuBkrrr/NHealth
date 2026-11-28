@@ -4,7 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { authLimiter, otpLimiter } from '../middleware/rateLimit';
 import {
   register, login, me, googleAuth, forgotPassword, verifyResetCode, resetPassword, switchRole, updateProfile,
-  changePassword, logoutAll, sendVerifyEmail, confirmVerifyEmail, sendVerifyPhone, confirmVerifyPhone,
+  changePassword, logoutAll, sendVerifyEmail, confirmVerifyEmail, sendVerifyPhone, confirmVerifyPhone, acceptConsents,
 } from '../controllers/authController';
 
 const router = Router();
@@ -23,6 +23,7 @@ router.post('/logout-all', requireAuth, asyncHandler(logoutAll));
 router.post('/verify-email/send', requireAuth, otpLimiter, asyncHandler(sendVerifyEmail));
 router.post('/verify-email/confirm', requireAuth, otpLimiter, asyncHandler(confirmVerifyEmail));
 router.post('/verify-phone/send', requireAuth, otpLimiter, asyncHandler(sendVerifyPhone));
+router.post('/consents', requireAuth, asyncHandler(acceptConsents));
 router.post('/verify-phone/confirm', requireAuth, otpLimiter, asyncHandler(confirmVerifyPhone));
 
 export default router;

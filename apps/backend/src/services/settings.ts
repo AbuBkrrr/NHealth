@@ -129,3 +129,28 @@ export async function saveDonationPartner(patch: any, adminId: string): Promise<
   partnerCache = null;
   return next;
 }
+
+/**
+ * The licensed insurance broker that receives patients' "Request enrolment" requests (Admin → Catalogs & rates).
+ * When switched on, each request is emailed to the broker, who advises the patient and arranges cover with the
+ * insurer/HMO; N-Health only passes the request on (with the patient's consent) and never collects premiums.
+ */
+export interface InsuranceBroker { enabled: boolean; name: string; email: string; phone: string; licence: string }
+const EMPTY_BROKER: InsuranceBroker = { enabled: false, name: '', email: '', phone: '', licence: '' };
+let brokerCache: { at: number; v: InsuranceBroker } | null = null;
+export async function getInsuranceBroker(): Promise<InsuranceBroker> {
+  if (brokerCache && Date.now() - brokerCache.at < 30_000) return brokerCache.v;
+  const row = await prisma.platformSetting.findUnique({ where: { key: 'insurance_broker' } }).catch(() => null);
+  const v = { ...EMPTY_BROKER, ...((row?.value as Partial<InsuranceBroker>) || {}) };
+  brokerCache = { at: Date.now(), v };
+  return v;
+}
+export async function saveInsuranceBroker(patch: any, adminId: string): Promise<InsuranceBroker> {
+  const cur = await getInsuranceBroker();
+  const s = (k: keyof InsuranceBroker, max = 160) => (typeof patch?.[k] === 'string' ? String(patch[k]).trim().slice(0, max) : (cur[k] as string));
+  const next: InsuranceBroker = { enabled: typeof patch?.enabled === 'boolean' ? patch.enabled : cur.enabled, name: s('name'), email: s('email').toLowerCase(), phone: s('phone', 30), licence: s('licence', 60) };
+  if (next.enabled && (!next.name || !/^\S+@\S+\.\S+$/.test(next.email))) throw Object.assign(new Error('Add the broker\'s name and email before switching it on'), { status: 400 });
+  await prisma.platformSetting.upsert({ where: { key: 'insurance_broker' }, create: { key: 'insurance_broker', value: next as any, updatedById: adminId }, update: { value: next as any, updatedById: adminId } });
+  brokerCache = null;
+  return next;
+}
