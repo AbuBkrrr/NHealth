@@ -67,7 +67,7 @@ export async function listAppointments(req: Request, res: Response) {
     include: { doctor: { include: { user: { select: { name: true, avatarUrl: true } } } } },
     orderBy: { scheduledAt: 'desc' },
   });
-  res.json(appointments);
+  res.json(await withCoinParts('APPOINTMENT', appointments));
 }
 
 export async function createAppointment(req: Request, res: Response) {
@@ -139,13 +139,13 @@ export async function listOrders(req: Request, res: Response) {
     include: { pharmacy: { include: { user: { select: { name: true } } } } },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(orders);
+  res.json(await withCoinParts('PHARMACY_ORDER', orders));
 }
 
 export async function createOrder(req: Request, res: Response) {
   const data = createOrderSchema.parse(req.body);
   const patient = await getPatientProfile(req.user!.userId);
-  const pharmacy = await prisma.pharmacyProfile.findUnique({ where: { id: data.pharmacyId }, select: { id: true, userId: true, pharmacyName: true } });
+  const pharmacy = await prisma.pharmacyProfile.findUnique({ where: { id: data.pharmacyId }, select: { id: true, userId: true, pharmacyName: true, deliveryFee: true } });
   if (!pharmacy) throw ApiError.notFound('Pharmacy not found');
   let rx: any = null;
   if (data.prescriptionId) {
@@ -166,9 +166,11 @@ export async function createOrder(req: Request, res: Response) {
       if (updated.count === 0) throw ApiError.conflict(`Not enough stock for ${inv.name}`);
       lines.push({ inventoryId: inv.id, name: inv.name, qty: item.qty, price: Number(inv.price) });
     }
-    const total = lines.reduce((sum, i) => sum + i.qty * i.price, 0);
+    // Delivery orders add the pharmacy's delivery fee (patients may pay it with reward coins).
+    const deliveryFee = deliveryMethod === 'DELIVERY' ? Number(pharmacy.deliveryFee || 0) : 0;
+    const total = lines.reduce((sum, i) => sum + i.qty * i.price, 0) + deliveryFee;
     return tx.pharmacyOrder.create({
-      data: { patientId: patient.id, pharmacyId: pharmacy.id, prescriptionId: data.prescriptionId, items: lines, total,
+      data: { patientId: patient.id, pharmacyId: pharmacy.id, prescriptionId: data.prescriptionId, items: lines, total, deliveryFee,
         deliveryMethod, deliveryAddress: deliveryMethod === 'DELIVERY' ? String(req.body.deliveryAddress || patient.address || '') : null },
     });
   });
@@ -266,7 +268,7 @@ export async function listLabTests(req: Request, res: Response) {
     include: { lab: { include: { user: { select: { name: true } } } }, result: true },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(tests);
+  res.json(await withCoinParts('LAB_TEST', tests));
 }
 
 export async function createLabTest(req: Request, res: Response) {
@@ -480,4 +482,11 @@ export async function addInsurance(req: Request, res: Response) {
     },
   });
   res.status(201).json(policy);
+}
+
+/** Adds the reward coins applied to part of each bill, so the app shows what is really left to pay. */
+async function withCoinParts<T extends { id: string }>(payableType: string, list: T[]) {
+  const parts = await prisma.coinRedemption.findMany({ where: { payableType, payableId: { in: list.map((x) => x.id) }, status: 'ACTIVE' }, select: { payableId: true, coins: true, amount: true } });
+  const by = new Map(parts.map((x) => [x.payableId, x]));
+  return list.map((x) => { const c = by.get(x.id); return c ? { ...x, coinsApplied: c.coins, coinsValue: Number(c.amount) } : x; });
 }

@@ -6,6 +6,7 @@ import { notify } from './notify';
 import { sendTransfer, gatewayReady, PayoutGateway } from './transfers';
 import { payeesFor, SplitPlan } from './splits';
 import { coinsText } from './coins';
+import { coinCredit } from './coinParts';
 
 type Source = 'APPOINTMENT' | 'PHARMACY_ORDER' | 'LAB_TEST' | 'NURSE_REQUEST' | 'EMERGENCY' | 'POS_SALE';
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -59,8 +60,11 @@ export async function accrueForSource(type: Source, id: string) {
   if (!payment && !escrow) return null;
   const fin = await getFinance();
   const rate = fin.commission[type as keyof typeof fin.commission] ?? 0;
+  // Reward coins applied to part of the bill: N-Health pays that part, so it counts towards what the patient paid.
+  const credit = payment ? await coinCredit(type, id) : 0;
+  const paidTotal = round2(Number(payment?.amount ?? escrow?.amount ?? 0) + credit);
   // Appointment payments include the patient booking fee, which is platform revenue - providers earn the consultation fee.
-  const gross = round2(type === 'APPOINTMENT' && src.gross ? src.gross : Number(payment?.amount ?? escrow?.amount ?? 0));
+  const gross = round2(type === 'APPOINTMENT' && src.gross ? src.gross : paidTotal);
   const commission = round2((gross * rate) / 100);
   const base = { providerUserId: src.providerUserId, sourceType: type, sourceId: id, gross, commissionRate: rate };
   const label = type.replace('_', ' ').toLowerCase();
@@ -83,8 +87,10 @@ export async function accrueForSource(type: Source, id: string) {
   if (payment!.method === 'CASH') {
     // The provider also collected the patient booking fee (payment amount above their own fee) - that belongs to the platform.
     const collected = round2(Number(payment!.amount));
-    const owed = round2(commission + Math.max(0, collected - gross));
+    const owed = round2(commission + Math.max(0, collected + credit - gross));
     const fee = owed - commission;
+    // N-Health pays the part of the bill the patient covered with reward coins.
+    if (credit > 0) await entry({ ...base, type: 'COIN_REDEMPTION', amount: credit, method: 'IN_APP', description: `Patient's reward coins on a cash ${label} (paid by N-Health)` });
     if (owed > 0 && await entry({ ...base, type: 'CASH_COMMISSION', amount: -owed, method: 'CASH', description: `Commission on cash ${label} (${rate}%)${fee > 0 ? ` + booking fee ${fee.toLocaleString()}` : ''}` })) {
       await notify(src.providerUserId, 'payment', 'Cash job recorded', `You collected ${collected.toLocaleString()} in cash. ${owed.toLocaleString()} (commission${fee > 0 ? ' + booking fee' : ''}) was deducted from your balance.`);
     }
@@ -243,6 +249,9 @@ export async function recordDirectSettlement(type: string, id: string, plan: Spl
   for (const p of plan.payees) {
     if (!p.userId) continue; // the partner NGO (donations) has no earnings ledger
     const base = { providerUserId: p.userId, sourceType: type, sourceId: id, gross: plan.gross, commissionRate: plan.commissionRate };
+    // The part of their share the patient covered with reward coins is paid by N-Health into their balance.
+    const coinPart = round2(Number((p as any).fullAmount ?? p.amount) - p.amount);
+    if (coinPart > 0) await entry({ ...base, type: 'COIN_REDEMPTION', amount: coinPart, method: 'IN_APP', description: `Patient's reward coins on a ${label} (paid by N-Health)` });
     if (settled[p.userId]) {
       await entry({ ...base, type: 'DIRECT_SETTLED', amount: 0, method: 'DIRECT', description: `${label} paid by card - ${p.amount.toLocaleString()} settled to your bank by ${gateway}` });
       await notify(p.userId, 'payment', 'Payment received 💳', `${p.amount.toLocaleString()} for a ${label} is being settled to your bank account by ${gateway}.`);
@@ -258,5 +267,13 @@ export async function clawbackDirect(type: string, id: string, plan: SplitPlan, 
   for (const p of plan.payees) {
     if (!p.userId) continue;
     await entry({ providerUserId: p.userId, type: 'REFUND_CLAWBACK', amount: -p.amount, method: 'DIRECT', sourceType: type, sourceId: id, description: `Refund to patient: ${reason}` });
+  }
+}
+
+/** Reverses N-Health's coin credit to providers when a bill that was partly paid with coins is cancelled. */
+export async function reverseCoinCredit(type: string, id: string, reason: string) {
+  const credits = await prisma.providerLedgerEntry.findMany({ where: { type: 'COIN_REDEMPTION', sourceType: type, sourceId: id } });
+  for (const c of credits) {
+    await entry({ providerUserId: c.providerUserId, type: 'COIN_REDEMPTION_REVERSAL', amount: -Number(c.amount), method: 'IN_APP', sourceType: type, sourceId: id, description: `Cancelled: ${reason}` });
   }
 }

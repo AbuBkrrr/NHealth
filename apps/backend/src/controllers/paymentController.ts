@@ -123,8 +123,12 @@ export async function createPayment(req: Request, res: Response) {
     if (!['APPOINTMENT', 'PHARMACY_ORDER', 'LAB_TEST', 'NURSE_REQUEST'].includes(data.payableType)) throw ApiError.badRequest('Cash is not available for this item');
     const pp = await prisma.patientProfile.findUnique({ where: { userId: req.user!.userId } });
     if (!pp) throw ApiError.notFound('Patient profile not found');
-    const { amount, providerUserId } = await resolvePayable(data.payableType, data.payableId, pp.id);
+    const resolved = await resolvePayable(data.payableType, data.payableId, pp.id);
+    const providerUserId = resolved.providerUserId;
     if (!providerUserId) throw ApiError.badRequest('Cash is not available for this item');
+    // Coins already applied to part of the bill: the patient pays the rest in cash.
+    const { coinCredit } = await import('../services/coinParts');
+    const amount = Math.round((resolved.amount - (await coinCredit(data.payableType, data.payableId))) * 100) / 100;
     const allowed = await cashAllowed(providerUserId);
     if (!allowed.ok) throw ApiError.badRequest(allowed.reason + ' - please pay in-app');
     const existing = await prisma.payment.findFirst({ where: { payableType: data.payableType, payableId: data.payableId, status: { in: ['PENDING', 'CONFIRMED'] } } });

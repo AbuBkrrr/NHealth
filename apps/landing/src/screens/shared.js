@@ -219,7 +219,7 @@ export async function profileScreen(el) {
 const PROV_FIELDS = {
   DOCTOR: [['specialty', 'Specialty', 'select'], ['hospital', 'Hospital / clinic'], ['consultationFee', 'Consultation fee (₦)', 'number'], ['yearsExperience', 'Years of experience', 'number'], ['qualifications', 'Qualifications', 'text', 'e.g. MBBS, FWACS'], ['languages', 'Languages', 'text', 'English, Yoruba'], ['city', 'City'], ['state', 'State'], ['bio', 'About you', 'textarea'], ['homeVisit', 'I offer home visits', 'checkbox'], ['licenseNumber', 'Licence number (MDCN)']],
   NURSE: [['specialty', 'Specialty', 'select'], ['hourlyRate', 'Hourly rate (₦)', 'number'], ['yearsExperience', 'Years of experience', 'number'], ['city', 'City'], ['state', 'State'], ['bio', 'About you', 'textarea'], ['licenseNumber', 'Licence number (NMCN)']],
-  PHARMACY: [['pharmacyName', 'Pharmacy name'], ['address', 'Address'], ['city', 'City'], ['state', 'State'], ['phone', 'Phone', 'tel'], ['operatingHours', 'Opening hours', 'text', 'Mon-Sat 8am-9pm'], ['homeDelivery', 'We deliver', 'checkbox'], ['licenseNumber', 'PCN licence number']],
+  PHARMACY: [['pharmacyName', 'Pharmacy name'], ['address', 'Address'], ['city', 'City'], ['state', 'State'], ['phone', 'Phone', 'tel'], ['operatingHours', 'Opening hours', 'text', 'Mon-Sat 8am-9pm'], ['homeDelivery', 'We deliver', 'checkbox'], ['deliveryFee', 'Delivery fee (₦) - patients can pay it with coins', 'number', '1000'], ['licenseNumber', 'PCN licence number']],
   LAB: [['labName', 'Diagnostic center name'], ['address', 'Address'], ['city', 'City'], ['state', 'State'], ['phone', 'Phone', 'tel'], ['operatingHours', 'Opening hours'], ['homeCollection', 'We do home sample collection', 'checkbox'], ['licenseNumber', 'MLSCN licence number']],
   AMBULANCE: [['operatorName', 'Operator / company'], ['vehicleNumber', 'Vehicle plate'], ['vehicleType', 'Service level', 'select'], ['phone', 'Dispatch phone', 'tel'], ['baseFee', 'Base fee (₦)', 'number'], ['licenseNumber', 'Operating licence']],
 };
@@ -387,7 +387,7 @@ export async function settingsScreen(el) {
 
 // ================= SUPPORT & ARTICLES =================
 const FAQ = [
-  ['How do coins work?', 'Coins are a free reward from N-Health: you earn them by inviting friends and in promotions. Use them towards bookings, orders and tests when you pay. Coins can\'t be bought, sold, sent to others or exchanged for cash. You pay for care by card (straight to the provider) or in cash.'],
+  ['How do coins work?', 'Coins are a free reward from N-Health: you earn them by inviting friends and in promotions. Use them towards bookings, orders and tests when you pay. Coins can\'t be bought, sold, moved into another person\'s balance or exchanged for cash. You can offer them towards a family member\'s or friend\'s bill. You pay for care by card (straight to the provider) or in cash.'],
   ['Are providers verified?', 'Yes. Every provider passes Didit identity verification and an N-Health compliance review of their licence before patients can book them. Look for the ✓ Verified badge.'],
   ['What if my appointment is cancelled?', 'If the provider declines or you cancel 12+ hours ahead, a card payment is refunded to your card or account, and any coins you used are returned to you.'],
   ['Is my medical data safe?', 'Your records are visible only to providers treating you. Every access is logged in Settings → Privacy, and you can download or delete your data at any time.'],

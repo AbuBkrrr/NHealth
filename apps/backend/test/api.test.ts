@@ -783,3 +783,181 @@ describe('health quests and coin donations (Muslim Pro-style rewards)', () => {
     } finally { await saveDonationPartner({ enabled: false }, admin.id); }
   });
 });
+
+describe('reward coins on part of a bill', () => {
+  async function booking(fee = 10000) {
+    const doc = await register('DOCTOR', { specialty: 'GP', licenseNumber: 'MDCN-P' + uniq(), consultationFee: fee });
+    const pat = await register('PATIENT');
+    await request(app).put('/api/availability/me').set(auth(doc.token)).send({ timezone: 'Africa/Lagos', rules: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, startTime: '08:00', endTime: '18:00', slotMinutes: 30 })) });
+    const dprof = await prisma.doctorProfile.findUnique({ where: { userId: doc.user.id } });
+    const day = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+    const slots = await request(app).get(`/api/availability/${doc.user.id}/slots?date=${day}`).set(auth(pat.token));
+    const appt = (await request(app).post('/api/patient/appointments').set(auth(pat.token)).send({ doctorId: dprof!.id, scheduledAt: slots.body.slots[0].start })).body;
+    const { grantRewardCoins } = await import('../src/services/coins');
+    await grantRewardCoins(pat.user.id, 300, 'TEST-PART-' + uniq(), 'test coins');
+    const coins = async () => Number((await request(app).get('/api/credits/balance').set(auth(pat.token))).body.balance) / 10;
+    return { doc, pat, appt, coins };
+  }
+  const getFinance = async () => (await import('../src/services/settings')).getFinance();
+
+  it('cash: coins cover part, the provider collects the rest and N-Health pays the coin part', async () => {
+    const { doc, pat, appt, coins } = await booking();
+    const total = Number(appt.fee) + Number(appt.serviceFee);
+    const body = { payableType: 'APPOINTMENT', payableId: appt.id };
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: total / 10 })).status).toBe(400); // whole bill: use "pay with coins"
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 900 })).status).toBe(400); // more than they have
+    const ap = await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 300 });
+    expect(ap.body).toMatchObject({ coins: 300, amount: 3000, remaining: total - 3000 });
+    expect(await coins()).toBe(0);
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 1 })).status).toBe(409);
+    const st = await request(app).get(`/api/coins/bill?payableType=APPOINTMENT&payableId=${appt.id}`).set(auth(pat.token));
+    expect(st.body).toMatchObject({ total, applied: 3000, appliedCoins: 300, remaining: total - 3000 });
+    // Taking the coins back, then applying again
+    expect((await request(app).delete('/api/coins/bill').set(auth(pat.token)).send(body)).status).toBe(200);
+    expect(await coins()).toBe(300);
+    await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ ...body, coins: 300 });
+    const cash = await request(app).post('/api/payments').set(auth(pat.token)).send({ ...body, method: 'CASH' });
+    expect(cash.status).toBe(201);
+    expect(Number(cash.body.amount)).toBe(total - 3000);
+    expect((await request(app).delete('/api/coins/bill').set(auth(pat.token)).send(body)).status).toBe(409); // already being paid
+    await request(app).post(`/api/payments/${cash.body.id}/confirm`).set(auth(doc.token));
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'CONFIRM' });
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'COMPLETE' });
+    const rate = (await getFinance()).commission.APPOINTMENT;
+    const commission = (Number(appt.fee) * rate) / 100;
+    // Provider holds the cash; their balance gets +coin part - commission - booking fee. Total = fee - commission.
+    const b = (await balanceOf(doc.user.id)).balance;
+    expect(b).toBeCloseTo(3000 - commission - (total - Number(appt.fee)), 2);
+    expect(total - 3000 + b).toBeCloseTo(Number(appt.fee) - commission, 2);
+  });
+
+  it('card: the gateway charges only the rest, the provider share shrinks by the coin part and N-Health credits it; a cancellation returns the coins', async () => {
+    const { doc, pat, appt, coins } = await booking();
+    await prisma.bankAccount.create({ data: { userId: doc.user.id, bankCode: '058', bankName: 'GTBank', accountNumber: '01' + String(Date.now()).slice(-8), accountName: 'Dr P', isPrimary: true, isVerified: true, paystackSubaccount: 'ACCT_p' + uniq() } });
+    const full = await planFor('APPOINTMENT', appt.id, pat.user.id);
+    await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, coins: 200 });
+    const plan = await planFor('APPOINTMENT', appt.id, pat.user.id);
+    expect(plan.total).toBe(full.total - 2000);
+    expect(plan.payees[0].amount).toBe(full.payees[0].amount - 2000);
+    expect(plan.platformAmount).toBe(full.platformAmount); // N-Health still collects its commission and booking fee
+    const ref = 'PY-CP-' + uniq();
+    await prisma.paymentGatewayLog.create({ data: { userId: pat.user.id, gateway: 'paystack', internalRef: ref, gatewayRef: 'pending', amount: plan.total, status: 'pending', purpose: 'direct_payment', requestPayload: { payableType: 'APPOINTMENT', payableId: appt.id, plan, settled: { [doc.user.id]: true } } as any } });
+    const wb = JSON.stringify({ event: 'charge.success', data: { status: 'success', reference: ref, amount: plan.total * 100, currency: 'NGN', id: 778 } });
+    const sig = crypto.createHmac('sha512', 'sk_test_dummy').update(wb).digest('hex');
+    expect((await request(app).post('/api/webhooks/paystack').set('Content-Type', 'application/json').set('x-paystack-signature', sig).send(wb)).status).toBe(200);
+    expect((await balanceOf(doc.user.id)).balance).toBe(2000); // the coin part, paid by N-Health
+    expect(await coins()).toBe(100);
+    // Doctor declines: card part refunded by the gateway, coins back to the patient, coin credit reversed.
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'CANCEL', notes: 'Away' });
+    expect(await coins()).toBe(300);
+    expect((await balanceOf(doc.user.id)).balance).toBe(-(full.payees[0].amount - 2000)); // only the settled card share is recovered
+  });
+
+  it('coins for the rest of a bill: paying the remainder with coins earns the provider the full fee', async () => {
+    const { doc, pat, appt } = await booking(2000);
+    const total = Number(appt.fee) + Number(appt.serviceFee);
+    await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, coins: 100 });
+    const pay = await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'APPOINTMENT', payableId: appt.id, method: 'WALLET' });
+    expect(pay.status).toBe(201);
+    expect(Number(pay.body.amount)).toBe(total - 1000);
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'CONFIRM' });
+    await request(app).post(`/api/doctor/appointments/${appt.id}/respond`).set(auth(doc.token)).send({ action: 'COMPLETE' });
+    const rate = (await getFinance()).commission.APPOINTMENT;
+    expect((await balanceOf(doc.user.id)).balance).toBeCloseTo(Number(appt.fee) * (1 - rate / 100), 2);
+  });
+});
+
+describe('pharmacy delivery fee and coins (no regulatory issue)', () => {
+  it('adds the delivery fee, lets coins pay delivery and over-the-counter items but not prescription-only medicines, and needs the patient\'s code at the counter', async () => {
+    const ph = await register('PHARMACY', { pharmacyName: 'Del Pharm ' + uniq(), licenseNumber: 'PCN-D' + uniq() });
+    await request(app).patch('/api/provider-profile').set(auth(ph.token)).send({ homeDelivery: true, deliveryFee: 1500 });
+    const pat = await register('PATIENT');
+    const { grantRewardCoins } = await import('../src/services/coins');
+    await grantRewardCoins(pat.user.id, 1000, 'TEST-DEL-' + uniq(), 'test coins');
+    const otc = await request(app).post('/api/pharmacy/inventory').set(auth(ph.token)).send({ name: 'Paracetamol', stock: 20, price: 500 });
+    const pom = await request(app).post('/api/pharmacy/inventory').set(auth(ph.token)).send({ name: 'Amoxicillin', stock: 20, price: 3000, requiresPrescription: true });
+    const pid = (await prisma.pharmacyProfile.findUnique({ where: { userId: ph.user.id } }))!.id;
+    // Delivery order: fee added to the total; pickup: no fee
+    const del = await request(app).post('/api/patient/orders').set(auth(pat.token)).send({ pharmacyId: pid, deliveryMethod: 'DELIVERY', deliveryAddress: '5 Allen Ave', items: [{ inventoryId: otc.body.id, name: 'x', qty: 2, price: 1 }] });
+    expect(Number(del.body.total)).toBe(2500);
+    expect(Number(del.body.deliveryFee)).toBe(1500);
+    const pick = await request(app).post('/api/patient/orders').set(auth(pat.token)).send({ pharmacyId: pid, items: [{ inventoryId: otc.body.id, name: 'x', qty: 1, price: 1 }] });
+    expect(Number(pick.body.total)).toBe(500);
+    // Over-the-counter order with delivery: coins may pay all of it
+    expect((await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: del.body.id, method: 'WALLET' })).status).toBe(201);
+    // Order with a prescription-only medicine (prescription checked) + delivery: coins only for delivery + OTC
+    const pp = await prisma.patientProfile.findUnique({ where: { userId: pat.user.id } });
+    const mixed = await prisma.pharmacyOrder.create({ data: { patientId: pp!.id, pharmacyId: pid, items: [{ inventoryId: otc.body.id, name: 'Paracetamol', qty: 1, price: 500 }, { inventoryId: pom.body.id, name: 'Amoxicillin', qty: 1, price: 3000 }], total: 5000, deliveryFee: 1500, deliveryMethod: 'DELIVERY' } });
+    const bill = await request(app).get(`/api/coins/bill?payableType=PHARMACY_ORDER&payableId=${mixed.id}`).set(auth(pat.token));
+    expect(bill.body).toMatchObject({ total: 5000, maxCoins: 200, coinNote: expect.stringMatching(/prescription/) });
+    expect((await request(app).post('/api/payments').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: mixed.id, method: 'WALLET' })).status).toBe(400);
+    expect((await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: mixed.id, coins: 201 })).status).toBe(400);
+    const part = await request(app).post('/api/coins/bill').set(auth(pat.token)).send({ payableType: 'PHARMACY_ORDER', payableId: mixed.id, coins: 150 }); // the delivery fee
+    expect(part.body).toMatchObject({ amount: 1500, remaining: 3500 });
+    // Pharmacy counter: coins need the patient's one-time code, and never pay prescription-only medicines
+    const sell = (inventoryId: string, extra: any) => request(app).post('/api/pharmacy-ops/pos/checkout').set(auth(ph.token)).send({ items: [{ inventoryId, qty: 1 }], paymentMethod: 'CREDITS', patientEmail: pat.email, ...extra });
+    expect((await sell(otc.body.id, {})).status).toBe(400);
+    expect((await sell(otc.body.id, { patientCode: '123456' })).status).toBe(400);
+    const code = (await request(app).post('/api/coins/pos-code').set(auth(pat.token))).body.code;
+    expect((await sell(pom.body.id, { patientCode: code, prescriptionChecked: true })).status).toBe(400);
+    expect((await sell(otc.body.id, { patientCode: code })).status).toBe(201); // the code wasn't used up by the refused sale
+  });
+});
+
+describe('help someone pay for care with your coins (no transfer between balances)', () => {
+  it('finds and confirms the recipient, applies the offer to their own bill, never credits their balance, and returns unused coins', async () => {
+    const { grantRewardCoins } = await import('../src/services/coins');
+    const sender = await register('PATIENT');
+    const friend = await register('PATIENT');
+    await grantRewardCoins(sender.user.id, 400, 'TEST-HELP-' + uniq(), 'test coins');
+    const bal = async (t: string) => Number((await request(app).get('/api/credits/balance').set(auth(t))).body.balance) / 10;
+    const friendPhone = '080' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
+    await prisma.user.update({ where: { id: friend.user.id }, data: { phone: friendPhone } });
+    // Find by phone (any format), email or N-Health ID; the profile is masked for confirmation
+    const byPhone = await request(app).get('/api/coins/help/find?q=' + encodeURIComponent('+234' + friendPhone.slice(1))).set(auth(sender.token));
+    expect(byPhone.status).toBe(200);
+    expect(byPhone.body).toMatchObject({ id: friend.user.id, name: 'PATIENT Tester' });
+    expect(byPhone.body.phone).toContain('•••');
+    expect(byPhone.body.email).not.toContain(friend.email.split('@')[0]);
+    expect((await request(app).get('/api/coins/help/find?q=' + friend.email).set(auth(sender.token))).body.id).toBe(friend.user.id);
+    expect((await request(app).get('/api/coins/help/find?q=' + sender.email).set(auth(sender.token))).status).toBe(400); // yourself
+    // The recipient must have confirmed their email or phone
+    expect((await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 100 })).status).toBe(400);
+    await prisma.user.update({ where: { id: friend.user.id }, data: { emailVerifiedAt: new Date() } });
+    expect((await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 999 })).status).toBe(400); // more than they have
+    const offer = await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 300, note: 'Get well' });
+    expect(offer.status).toBe(201);
+    expect(await bal(sender.token)).toBe(100);
+    expect(await bal(friend.token)).toBe(0); // nothing lands in the friend's balance
+    // The friend applies it to their own pharmacy order (delivery + OTC = 2,500, so 250 coins used, 50 returned)
+    const ph = await register('PHARMACY', { pharmacyName: 'Help Pharm ' + uniq(), licenseNumber: 'PCN-H' + uniq() });
+    await request(app).patch('/api/provider-profile').set(auth(ph.token)).send({ homeDelivery: true, deliveryFee: 1500 });
+    const otc = await request(app).post('/api/pharmacy/inventory').set(auth(ph.token)).send({ name: 'ORS', stock: 10, price: 500 });
+    const pid = (await prisma.pharmacyProfile.findUnique({ where: { userId: ph.user.id } }))!.id;
+    const order = await request(app).post('/api/patient/orders').set(auth(friend.token)).send({ pharmacyId: pid, deliveryMethod: 'DELIVERY', deliveryAddress: 'Kano', items: [{ inventoryId: otc.body.id, name: 'x', qty: 2, price: 1 }] });
+    const bills = await request(app).get(`/api/coins/help/${offer.body.id}/bills`).set(auth(friend.token));
+    expect(bills.body.some((b: any) => b.payableId === order.body.id)).toBe(true);
+    expect((await request(app).get(`/api/coins/help/${offer.body.id}/bills`).set(auth(sender.token))).status).toBe(404); // only the recipient
+    const used = await request(app).post(`/api/coins/help/${offer.body.id}/use`).set(auth(friend.token)).send({ payableType: 'PHARMACY_ORDER', payableId: order.body.id });
+    expect(used.body).toMatchObject({ usedCoins: 250, paidInFull: true, remaining: 0 });
+    expect(await bal(sender.token)).toBe(150); // 50 unused coins came back
+    expect(await bal(friend.token)).toBe(0);
+    expect((await prisma.pharmacyOrder.findUnique({ where: { id: order.body.id } }))!.paymentStatus).toBe('PAID');
+    expect((await request(app).post(`/api/coins/help/${offer.body.id}/use`).set(auth(friend.token)).send({ payableType: 'PHARMACY_ORDER', payableId: order.body.id })).status).toBe(409);
+    // Pharmacy declines the order: coins go back to the SENDER, never to the friend
+    await request(app).post(`/api/pharmacy/orders/${order.body.id}/status`).set(auth(ph.token)).send({ status: 'CANCELLED', reason: 'Out of stock' });
+    expect(await bal(sender.token)).toBe(400);
+    expect(await bal(friend.token)).toBe(0);
+    // Decline and cancel return coins to the sender too
+    const o2 = await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 100 });
+    expect((await request(app).post(`/api/coins/help/${o2.body.id}/decline`).set(auth(friend.token))).status).toBe(200);
+    const o3 = await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 50 });
+    expect((await request(app).post(`/api/coins/help/${o3.body.id}/cancel`).set(auth(sender.token))).status).toBe(200);
+    expect(await bal(sender.token)).toBe(400);
+    const list = await request(app).get('/api/coins/help').set(auth(friend.token));
+    expect(list.body.map((x: any) => x.status).sort()).toEqual(['CANCELLED', 'DECLINED', 'USED']);
+    // Daily limit
+    await grantRewardCoins(sender.user.id, 1000, 'TEST-HELP2-' + uniq(), 'more');
+    expect((await request(app).post('/api/coins/help').set(auth(sender.token)).send({ toUserId: friend.user.id, coins: 400 })).status).toBe(400);
+  });
+});

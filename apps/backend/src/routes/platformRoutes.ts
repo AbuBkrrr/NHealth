@@ -57,6 +57,15 @@ r.get('/flyer/me', auth, h(flyer.myFlyer));
 r.get('/quests', auth, h(quest.board));
 r.post('/quests/:key/claim', auth, sensitiveLimiter, h(quest.claim));
 r.post('/coins/donate', auth, sensitiveLimiter, h(quest.donateCoins));
+r.post('/coins/pos-code', auth, requireRole('PATIENT'), sensitiveLimiter, h(quest.posCode));
+// Help someone pay for care with your coins (never a transfer to their balance)
+r.get('/coins/help/find', auth, sensitiveLimiter, h(quest.helpFind));
+r.get('/coins/help', auth, h(quest.helpList));
+r.post('/coins/help', auth, sensitiveLimiter, h(quest.helpOffer));
+r.get('/coins/help/:id/bills', auth, h(quest.helpBills));
+r.post('/coins/help/:id/use', auth, sensitiveLimiter, h(quest.helpUse));
+r.post('/coins/help/:id/decline', auth, h(quest.helpDecline));
+r.post('/coins/help/:id/cancel', auth, h(quest.helpCancel));
 r.get('/medicines/search', auth, h(fac.searchMedicines));
 
 // Unified provider profile
@@ -221,6 +230,9 @@ r.post('/doctor-ops/lab-requests', auth, requireRole('DOCTOR'), requireVerifiedP
 
 // Direct card payment with split settlement (provider/institution paid straight to their bank)
 r.post('/payments/card', auth, requireRole('PATIENT'), sensitiveLimiter, h(direct.startCardPayment));
+r.get('/coins/bill', auth, requireRole('PATIENT'), h(direct.coinPartStatus));
+r.post('/coins/bill', auth, requireRole('PATIENT'), sensitiveLimiter, h(direct.applyCoinPart));
+r.delete('/coins/bill', auth, requireRole('PATIENT'), sensitiveLimiter, h(direct.removeCoinPart));
 
 // Provider earnings & payouts (Bolt-style)
 r.get('/earnings', auth, requireRole(...PROVIDERS), h(fin.myEarnings));

@@ -146,6 +146,68 @@ async function drawQuests(box, refresh) {
   };
 }
 
+/** Step 1-3: find the person, confirm their profile (like OPay), choose coins and send the offer. */
+function helpSomeone(done) {
+  formModal('💚 Help someone pay for care', [{ name: 'q', label: 'Their phone number, email, N-Health ID or user ID', required: true, placeholder: 'e.g. 0803 123 4567' }], {
+    submit: 'Find', onSubmit: async (v) => {
+      const u = await get('/coins/help/find?q=' + encodeURIComponent(v.q.trim()));
+      setTimeout(() => confirmRecipient(u, done), 50);
+    },
+  });
+}
+function confirmRecipient(u, done) {
+  const myCoins = Math.floor((state.balance || 0) / (state.config?.coinValue || 10));
+  modal(`<div class="modal-title">Is this the right person?</div>
+    <div class="center">${avatar('PATIENT', u.avatarUrl).replace('class="avatar', 'style="width:72px;height:72px;font-size:32px;margin:0 auto 8px" class="avatar')}
+      <div style="font-weight:700;font-size:17px">${esc(u.name)}</div>
+      <div class="small muted">N-Health ID ${esc(u.nhealthId || '')}</div>
+      <div class="small muted">${[u.phone && '📱 ' + esc(u.phone), u.email && '✉️ ' + esc(u.email)].filter(Boolean).join(' • ')}</div>
+      <div class="small muted">Member since ${dateOnly(u.memberSince)}</div>
+      <div class="mt8">${u.identityVerified ? '<span class="badge badge-verified">✓ Identity verified</span>' : ''} ${u.contactConfirmed ? '<span class="badge">Contact confirmed</span>' : '<span class="badge badge-warning">Contact not confirmed yet</span>'}</div></div>
+    <div class="form-group mt12"><label>Coins to offer (you have ${myCoins})</label><input type="number" id="hc" min="1" max="${myCoins}" inputmode="numeric" placeholder="e.g. 100"></div>
+    <div class="form-group"><label>Message (optional)</label><input id="hn" maxlength="140" placeholder="Get well soon"></div>
+    <p class="small muted">${esc(u.name.split(' ')[0])} can use your coins on one of their own bills within 7 days. Unused coins come back to you.</p>
+    <button class="btn btn-primary btn-block" id="hsend">Yes, send coins</button><button class="btn btn-outline btn-block mt8" data-close>Not this person</button>`, (box, close) => {
+    $('#hsend', box).onclick = (e) => busy(e.target, async () => {
+      const coins = Math.floor(Number($('#hc', box).value));
+      if (!(coins >= 1)) throw new Error('Enter how many coins to offer');
+      await post('/coins/help', { toUserId: u.id, coins, note: $('#hn', box).value || undefined });
+      await loadBalance();
+      close(); toast(`💚 ${coins} coins offered to ${u.name.split(' ')[0]}`); done?.();
+    });
+  });
+}
+/** Offers waiting for me (use on a bill / decline) and offers I sent (cancel while unused). */
+async function drawOffers(box, refresh) {
+  if (!box) return;
+  const list = await getFresh('/coins/help').catch(() => []);
+  if (!list.length) { box.innerHTML = ''; return; }
+  const label = { OFFERED: 'Waiting', USED: 'Used', DECLINED: 'Declined', CANCELLED: 'Cancelled', EXPIRED: 'Expired' };
+  box.innerHTML = '<div class="mt12">' + list.slice(0, 10).map((o) => {
+    const inbound = o.direction === 'RECEIVED';
+    const who = esc((inbound ? o.from?.name : o.to?.name) || '');
+    const actions = o.status !== 'OFFERED' ? '' : inbound
+      ? `<div class="row mt8"><button class="btn btn-success btn-sm grow" data-useo="${o.id}">Use on a bill</button><button class="btn btn-outline btn-sm grow" data-deco="${o.id}">Decline</button></div>`
+      : `<div class="row mt8"><button class="btn btn-outline btn-sm grow" data-cano="${o.id}">Cancel offer</button></div>`;
+    return item({ icon: inbound ? '🎁' : '💚', title: inbound ? `${who} offered you ${o.coins} coins` : `You offered ${who} ${o.coins} coins`, sub: (o.note ? '"' + esc(o.note) + '" • ' : '') + (o.status === 'USED' ? `${o.usedCoins} used` : label[o.status]) + ' • ' + ago(o.createdAt) }) + actions;
+  }).join('') + '</div>';
+  box.onclick = async (e) => {
+    const b = e.target.closest('[data-useo],[data-deco],[data-cano]'); if (!b) return;
+    if (b.dataset.deco) return busy(b, async () => { await post(`/coins/help/${b.dataset.deco}/decline`); toast('Offer declined - coins returned to the sender'); refresh(); });
+    if (b.dataset.cano) return busy(b, async () => { await post(`/coins/help/${b.dataset.cano}/cancel`); await loadBalance(); toast('Offer cancelled - coins are back'); refresh(); });
+    const id = b.dataset.useo;
+    const bills = await get(`/coins/help/${id}/bills`).catch(toastErr);
+    if (!bills) return;
+    modal(`<div class="modal-title">Use the coins on which bill?</div>` + (bills.length ? bills.map((x) => item({ icon: { APPOINTMENT: '📅', PHARMACY_ORDER: '💊', LAB_TEST: '🔬', NURSE_REQUEST: '🩺' }[x.payableType] || '🧾', title: esc(x.title), sub: money(x.total) + (x.note ? ' • ' + esc(x.note) : ''), attrs: `data-bt="${x.payableType}" data-bid="${x.payableId}" tabindex="0"` })).join('')
+      : empty('🧾', 'You have no unpaid bills yet. Book care or order medicines first, then come back to use the coins.')), (mb, close) => {
+      mb.onclick = (ev) => { const r = ev.target.closest('[data-bid]'); if (!r) return; busy(r, async () => {
+        const u = await post(`/coins/help/${id}/use`, { payableType: r.dataset.bt, payableId: r.dataset.bid });
+        close(); toast(u.paidInFull ? `✅ Bill paid with ${u.usedCoins} coins` : `✅ ${u.usedCoins} coins applied - pay ${money(u.remaining)} by card or cash`); refresh();
+      }); };
+    });
+  };
+}
+
 /** Coins are free rewards (like loyalty points): earned by inviting friends and in promotions, never bought or cashed out. */
 async function rewardsScreen(el) {
   const reward = state.config?.inviteRewardCoins || 1;
@@ -155,15 +217,24 @@ async function rewardsScreen(el) {
     ${card(cardHead('More ways to earn') + `
       ${item({ icon: '👥', title: `Invite friends: ${reward} coin${reward > 1 ? 's' : ''} each`, sub: 'When a friend joins with your link and confirms their email or phone', attrs: 'data-go="/patient/home"' })}
       ${item({ icon: '🎁', title: 'Promotions', sub: 'Watch your notifications for N-Health offers' })}`)}
+    ${card(cardHead('💚 Help someone pay for care') + '<p class="small muted">Offer some of your coins towards a family member\'s or friend\'s bill. They choose which of their bills to use them on; anything unused comes back to you. Coins never go into their balance.</p><button class="btn btn-primary btn-block btn-sm" id="helpbtn">Help someone</button><div id="offers"></div>')}
+    ${card(cardHead('🏪 Pay at a pharmacy counter') + '<p class="small muted">Show the pharmacist a one-time code to pay with your coins (over-the-counter items only). Nobody can use your coins without it.</p><button class="btn btn-outline btn-block btn-sm" id="poscode">Show my code</button>')}
     ${state.config?.donationPartner ? card(cardHead('💚 Donate your coins') + `<p class="small muted">Give coins to ${esc(state.config.donationPartner.name)}, our registered NGO partner. N-Health turns them into a real donation from its own funds.</p><button class="btn btn-success btn-block btn-sm" id="givecoins">Donate coins</button>`) : ''}
     ${card(cardHead('How coins work') + `<div class="small muted" style="line-height:1.6">
-      • When you pay for a booking, order or test, choose <b>Use my coins</b> if you have enough.<br>
-      • Coins are a free reward from N-Health. They can't be bought, sold, sent to someone else or exchanged for cash.<br>
+      • When you pay for a booking, order or test, use your coins for all of it or part of it, and pay the rest by card or cash.<br>
+      • At pharmacies, coins pay the delivery fee and over-the-counter items (not prescription-only medicines).<br>
+      • Coins are a free reward from N-Health. They can't be bought, sold, moved into someone else's balance or exchanged for cash. You can offer them towards a family member's or friend's bill.<br>
       • Using or donating coins is final. Coins don't expire, but N-Health may change the programme with notice.<br>
       • You pay for care by card (the money goes straight to the provider) or in cash at the service.</div>`)}
     <div id="history">${skeleton(3)}</div>`;
   const b = await loadBalance(); $('#bal', el).textContent = '🪙 ' + coins(b);
   drawQuests($('#quests', el), () => rewardsScreen(el));
+  drawOffers($('#offers', el), () => rewardsScreen(el));
+  $('#helpbtn', el)?.addEventListener('click', () => helpSomeone(() => rewardsScreen(el)));
+  $('#poscode', el)?.addEventListener('click', (e) => busy(e.target, async () => {
+    const r = await post('/coins/pos-code');
+    modal(`<div class="modal-title">🏪 Your counter code</div><div class="center" style="font-size:40px;font-weight:700;letter-spacing:8px;margin:12px 0">${esc(r.code)}</div><p class="small muted center">Tell the pharmacist this code and your N-Health email. It works once, for ${r.expiresInMinutes} minutes. Only share it at the counter.</p>`);
+  }));
   $('#givecoins', el)?.addEventListener('click', () => formModal('💚 Donate coins', [{ name: 'coins', label: `Coins to give (you have ${coins(state.balance || 0)})`, type: 'number', min: 1, required: true }], { submit: 'Donate', intro: `<p class="muted mb8">To ${esc(state.config.donationPartner.name)}. This can't be undone.</p>`, onSubmit: async (v) => { await post('/coins/donate', { coins: Math.floor(Number(v.coins)) }); toast('💚 Thank you for giving!'); rewardsScreen(el); } }));
   const tx = await get('/credits/transactions').catch(() => []);
   $('#history', el).innerHTML = card(cardHead('📊 Coin history') + (tx.length ? tx.map((x) => item({
@@ -455,6 +526,7 @@ export async function appointmentsScreen(el, _p, q) {
     tb.innerHTML = shown.length ? shown.map((a) => card(`${item({ avatarHtml: avatar('DOCTOR', a.doctor.user.avatarUrl), title: 'Dr. ' + esc(a.doctor.user.name), sub: esc(a.doctor.specialty) + ' • ' + relDay(a.scheduledAt), trailing: badge(a.status) })}
       ${a.reason ? `<div class="muted small">Reason: ${esc(a.reason)}</div>` : ''}${a.notes ? `<div class="banner info">📝 ${esc(a.notes)}</div>` : ''}${a.cancelReason ? `<div class="muted small">Cancelled: ${esc(a.cancelReason)}</div>` : ''}
       <div class="kv"><span class="k">Fee</span><span class="v">${money(Number(a.fee) + Number(a.serviceFee) || a.doctor.consultationFee)} • ${badge(a.paymentStatus === 'UNPAID' ? 'UNPAID' : 'PAID', a.paymentStatus.replace('_', ' ').toLowerCase())}</span></div>
+      ${a.coinsApplied ? `<div class="kv"><span class="k">🪙 ${a.coinsApplied} coins used</span><span class="v">−${money(a.coinsValue)} • ${a.paymentStatus === 'CASH_DUE' ? 'pay' : 'left'} <b>${money((Number(a.fee) + Number(a.serviceFee)) - a.coinsValue)}</b>${a.paymentStatus === 'CASH_DUE' ? ' in cash' : ''}</span></div>` : ''}
       <div class="row wrap mt8">
         ${tab === 'upcoming' && a.paymentStatus === 'UNPAID' && a.status !== 'CANCELLED' ? `<button class="btn btn-primary btn-sm" data-pay="${a.id}" data-amt="${Number(a.fee) + Number(a.serviceFee) || a.doctor.consultationFee}">💳 Pay</button>` : ''}
         <button class="btn btn-outline btn-sm" data-go="/chat/${a.doctor.userId}">💬 Message</button>
@@ -715,7 +787,8 @@ export async function pharmacyScreen(el, _p, q) {
 }
 const orderCard = (o) => card(`${item({ avatarHtml: '<div class="avatar pharmacy-avatar">📦</div>', title: esc(o.pharmacy?.pharmacyName || 'Pharmacy'), sub: dt(o.createdAt) + ' • ' + (o.deliveryMethod === 'DELIVERY' ? '🛵 Delivery' : '🏪 Pickup'), trailing: badge(o.status) })}
   ${(o.items || []).map((i) => `<div class="kv"><span class="k">${esc(i.name)} × ${i.qty}</span><span class="v">${money(i.qty * i.price)}</span></div>`).join('')}
-  <div class="kv"><span class="k"><b>Total</b></span><span class="v"><b>${money(o.total)}</b> ${badge(o.paymentStatus)}</span></div>${o.declineReason ? `<div class="muted small">Reason: ${esc(o.declineReason)}</div>` : ''}
+  ${Number(o.deliveryFee) ? `<div class="kv"><span class="k">🛵 Delivery</span><span class="v">${money(o.deliveryFee)}</span></div>` : ''}
+  <div class="kv"><span class="k"><b>Total</b></span><span class="v"><b>${money(o.total)}</b> ${badge(o.paymentStatus)}</span></div>${o.coinsApplied ? `<div class="kv"><span class="k">🪙 ${o.coinsApplied} coins used</span><span class="v">−${money(o.coinsValue)} • left <b>${money(Number(o.total) - o.coinsValue)}</b></span></div>` : ''}${o.declineReason ? `<div class="muted small">Reason: ${esc(o.declineReason)}</div>` : ''}
   <div class="row mt8">${o.paymentStatus !== 'PAID' && o.status === 'PENDING' ? `<button class="btn btn-pharmacy btn-sm grow" data-paor="${o.id}" data-amt="${o.total}">💳 Pay</button>` : ''}<button class="btn btn-outline btn-sm grow" data-inv="${o.id}">⬇️ Invoice</button>${o.status === 'DELIVERED' ? `<button class="btn btn-outline btn-sm grow" data-revo="${o.id}" data-name="${esc(o.pharmacy?.pharmacyName || '')}">⭐ Review</button>` : ''}<button class="btn btn-outline btn-sm grow" data-go="/chat/${o.pharmacy?.userId}">💬</button></div>`);
 
 export async function ordersScreen(el) {
@@ -731,7 +804,8 @@ export async function ordersScreen(el) {
 }
 
 export async function storeScreen(el, { id }, q) {
-  const [inv, rxList] = await Promise.all([get('/providers/pharmacies/' + id + '/inventory'), get('/patient/prescriptions').catch(() => [])]);
+  const [inv, rxList, info] = await Promise.all([get('/providers/pharmacies/' + id + '/inventory'), get('/patient/prescriptions').catch(() => []), get('/providers/pharmacies/' + id + '/info').catch(() => null)]);
+  const delFee = Number(info?.deliveryFee || 0);
   const rxId = q.rx || sessionStorage.getItem('nh_rx') || '';
   sessionStorage.removeItem('nh_rx');
   const cartKey = 'nh_cart_' + id;
@@ -754,10 +828,15 @@ export async function storeScreen(el, { id }, q) {
     $('#cart', el).innerHTML = card(cardHead('🛒 Cart') + lines.map((l) => `<div class="pos-cart-item"><div class="item-info"><div class="item-name">${esc(l.i.name)}</div><div class="item-price">${money(l.i.price)}</div></div><div class="item-qty"><button data-dec="${l.i.id}">−</button><span class="qty">${l.qty}</span><button data-inc="${l.i.id}">+</button></div></div>`).join('') + `
       <div class="receipt-total">Total: ${money(total)}</div>
       ${needsRx ? `<div class="form-group mt8"><label>Prescription <span style="color:var(--error)">*</span></label><select id="rxsel"><option value="">— Select a prescription —</option>${rxList.map((r) => `<option value="${r.id}" ${r.id === rxId ? 'selected' : ''}>Dr. ${esc(r.doctor?.user?.name || '')} • ${dateOnly(r.issuedAt)} • ${esc((r.medications || []).map((m) => m.name).join(', ').slice(0, 40))}</option>`).join('')}</select></div>` : ''}
-      <div class="form-group"><label>Delivery</label><select id="dm"><option value="PICKUP">🏪 Pick up at pharmacy</option><option value="DELIVERY">🛵 Deliver to me</option></select></div>
+      <div class="form-group"><label>Delivery</label><select id="dm"><option value="PICKUP">🏪 Pick up at pharmacy</option><option value="DELIVERY">🛵 Deliver to me${delFee ? ' (+' + money(delFee) + ')' : ''}</option></select></div>
+      ${delFee ? `<div class="small muted hidden" id="delnote">🛵 Delivery fee ${money(delFee)}: you can pay it with your reward coins.</div>` : ''}
       <div class="form-group hidden" id="addrg"><input id="addr" placeholder="Delivery address" value="${esc(state.user.patientProfile?.address || '')}"></div>
       <button class="btn btn-pharmacy btn-block" id="checkout">Checkout ${money(total)}</button>`);
-    $('#dm', el).onchange = (e) => $('#addrg', el).classList.toggle('hidden', e.target.value !== 'DELIVERY');
+    $('#dm', el).onchange = (e) => {
+      const d = e.target.value === 'DELIVERY';
+      $('#addrg', el).classList.toggle('hidden', !d); $('#delnote', el)?.classList.toggle('hidden', !d);
+      $('#checkout', el).textContent = 'Checkout ' + money(total + (d ? delFee : 0));
+    };
     $('#checkout', el).onclick = (e) => busy(e.target, async () => {
       const rx = $('#rxsel', el)?.value;
       if (needsRx && !rx) throw new Error('Select the prescription for prescription-only items');
@@ -799,7 +878,7 @@ export async function labsScreen(el, _p, q) {
       const tests = await get('/patient/lab-tests');
       tb.innerHTML = tests.length ? tests.map((x) => card(`${item({ avatarHtml: '<div class="avatar lab-avatar">🔬</div>', title: esc(x.testType), sub: esc(x.lab?.labName || '') + ' • ' + dt(x.scheduledAt || x.createdAt), trailing: badge(x.status) })}
         ${x.result ? `<div class="banner ok">✅ Result ready</div>${(x.result.resultData?.results || []).map((r) => `<div class="kv"><span class="k">${esc(r.parameter)}</span><span class="v" style="color:${r.flag === 'HIGH' || r.flag === 'LOW' ? 'var(--error)' : 'inherit'}">${esc(r.value)} ${esc(r.unit || '')} ${r.referenceRange ? '<span class="muted">(' + esc(r.referenceRange) + ')</span>' : ''} ${r.flag && r.flag !== 'NORMAL' ? badge('FAILED', r.flag) : ''}</span></div>`).join('')}${x.result.resultData?.notes ? `<div class="muted small">${esc(x.result.resultData.notes)}</div>` : ''}` : ''}
-        <div class="row mt8">${x.paymentStatus === 'UNPAID' && x.status !== 'CANCELLED' ? `<button class="btn btn-lab btn-sm grow" data-paylab="${x.id}" data-amt="${x.fee}">💳 Pay ${money(x.fee)}</button>` : ''}${x.result ? `<button class="btn btn-outline btn-sm grow" data-pdf="${x.id}">⬇️ Result PDF</button>` : ''}${x.status === 'COMPLETED' ? `<button class="btn btn-outline btn-sm grow" data-revl="${x.id}">⭐</button>` : ''}</div>`)).join('') : empty('🔬', 'No tests or scans yet');
+        <div class="row mt8">${x.paymentStatus === 'UNPAID' && x.status !== 'CANCELLED' ? `<button class="btn btn-lab btn-sm grow" data-paylab="${x.id}" data-amt="${x.fee}">💳 Pay ${money(Number(x.fee) - (x.coinsValue || 0))}${x.coinsApplied ? ' + ' + x.coinsApplied + ' 🪙' : ''}</button>` : ''}${x.result ? `<button class="btn btn-outline btn-sm grow" data-pdf="${x.id}">⬇️ Result PDF</button>` : ''}${x.status === 'COMPLETED' ? `<button class="btn btn-outline btn-sm grow" data-revl="${x.id}">⭐</button>` : ''}</div>`)).join('') : empty('🔬', 'No tests or scans yet');
     }
   };
   $$('[data-tab]', el).forEach((x) => (x.onclick = () => { tab = x.dataset.tab; $$('[data-tab]', el).forEach((y) => y.classList.toggle('active', y === x)); draw(); }));

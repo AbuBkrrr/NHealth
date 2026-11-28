@@ -46,3 +46,43 @@ export async function startCardPayment(req: Request, res: Response) {
   const checkout = await initialize(gateway, { reference: internalRef, amount: plan.total, currency: 'NGN', email: user!.email, name: user!.name, callbackUrl: returnUrl, split, description: 'N-Health ' + payableType.replace('_', ' ').toLowerCase() });
   res.json({ internalRef, gateway, amount: plan.total, breakdown: { providerShares: plan.payees.map((p) => ({ role: p.role, amount: p.amount, direct: !!settled[p.userId] })), platform: plan.platformAmount }, ...checkout });
 }
+
+/**
+ * Reward coins on part of a bill.
+ *  GET    /api/coins/bill?payableType&payableId  -> what is applied, the bill, what is left to pay, my coins
+ *  POST   /api/coins/bill { payableType, payableId, coins }  -> apply coins (the rest is paid by card or cash)
+ *  DELETE /api/coins/bill { payableType, payableId }         -> take the coins back before paying
+ */
+async function billFor(req: Request, payableType: string, payableId: string) {
+  const { resolvePayable } = await import('../paymentController');
+  const p = await prisma.patientProfile.findUnique({ where: { userId: uid(req) } });
+  if (!p) throw ApiError.notFound('Patient profile not found');
+  return (await resolvePayable(payableType, payableId, p.id)).amount;
+}
+export async function coinPartStatus(req: Request, res: Response) {
+  const payableType = String(req.query.payableType || ''), payableId = String(req.query.payableId || '');
+  const { getRedemption } = await import('../../services/coinParts');
+  const { COIN_VALUE_NGN } = await import('../../services/coins');
+  const total = await billFor(req, payableType, payableId);
+  const r = await getRedemption(payableType, payableId);
+  const ledger = await prisma.creditLedger.findUnique({ where: { userId: uid(req) } });
+  const applied = r ? Number(r.amount) : 0;
+  const { coinCap } = await import('../../services/coinParts');
+  const lim = await coinCap(payableType, payableId, total);
+  res.json({ maxCoins: Math.floor(lim.cap / COIN_VALUE_NGN), coinNote: lim.note || null, total, applied, appliedCoins: r?.coins || 0, remaining: Math.round((total - applied) * 100) / 100, balanceCoins: Math.floor(Number(ledger?.balance || 0) / COIN_VALUE_NGN), coinValue: COIN_VALUE_NGN });
+}
+export async function applyCoinPart(req: Request, res: Response) {
+  const { applyCoins } = await import('../../services/coinParts');
+  const payableType = String(req.body?.payableType || ''), payableId = String(req.body?.payableId || '');
+  const total = await billFor(req, payableType, payableId);
+  res.status(201).json(await applyCoins(uid(req), payableType, payableId, Number(req.body?.coins), total));
+}
+export async function removeCoinPart(req: Request, res: Response) {
+  const { getRedemption, returnCoins } = await import('../../services/coinParts');
+  const payableType = String(req.body?.payableType || ''), payableId = String(req.body?.payableId || '');
+  const r = await getRedemption(payableType, payableId);
+  if (!r || r.userId !== uid(req)) throw ApiError.notFound('No coins applied to this bill');
+  if (await prisma.payment.findFirst({ where: { payableType: payableType as any, payableId, status: { in: ['PENDING', 'CONFIRMED'] } } })) throw ApiError.conflict('This bill is already being paid');
+  await returnCoins(payableType, payableId, 'removed from the bill');
+  res.json({ ok: true });
+}

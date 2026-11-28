@@ -9,9 +9,31 @@
 - **Coins are never sold.**
   - Buying coins is switched off (`COIN_TOPUP_ENABLED=false`), so the top-up screen is gone and the API refuses top-ups.
   - Selling coins for naira and letting people pay providers with them would be stored value, which needs a CBN licence or a licensed partner. See [COMPLIANCE_MODEL.md](COMPLIANCE_MODEL.md).
-- **Coins can't be withdrawn, transferred to another person or exchanged for cash.** The terms of service say so, and the app enforces it.
-- **Using coins:** when paying for a booking, pharmacy order, test or home-care visit, a patient with enough coins can choose **Use my reward coins**. Coins can't be used for donations or insurance premiums.
-- **Who pays for used coins:** N-Health. The provider is paid in full for the part covered by coins (less the usual commission), credited to their N-Health earnings balance and paid out on the payout schedule. Reward coins are a marketing cost.
+- **Coins can't be withdrawn, moved into another person's balance or exchanged for cash.** The terms of service say so, and the app enforces it.
+- **Helping someone pay for care** (My coins → Help someone), the licence-free alternative to transfers:
+  1. The sender finds a member by phone, email, N-Health ID or user ID.
+  2. They confirm the profile (name, photo, masked phone and email, member since, verified badges), choose coins and send.
+  3. The coins leave the sender's balance but **never enter the recipient's balance**. The recipient applies the offer to one of **their own unpaid bills**, and the provider is paid for that part by N-Health, as with any coin payment.
+  4. Unused, declined, cancelled or expired (7 days) coins go back to the sender. If the bill is later cancelled, the coins go back to the sender, never to the recipient.
+
+  Limits:
+  - up to 500 coins offered per person per day;
+  - recipients must have confirmed their email or phone;
+  - the pharmacy rule applies (delivery and over-the-counter items only).
+
+  Person-to-person transfers into another person's balance would make coins transferable stored value, which needs a CBN licence. This design avoids that.
+- **Using coins:** for a booking, pharmacy order, test or home-care visit:
+  - **All of the bill:** choose **Pay it all with my coins** if they have enough.
+  - **Part of the bill:** tick **Use some of my coins and pay the rest**, choose how many, then pay what's left by card or cash. The bill, the booking card and the cash amount the provider collects all show the coins taken off.
+  - Coins on part of a bill can be **removed** before paying, and are **returned** if the bill is cancelled.
+  - **Pharmacy orders:** coins can pay the **delivery fee** (set by each pharmacy in its practice details) and **over-the-counter items**, but not **prescription-only medicines**. Nigerian rules restrict inducements to buy prescription medicines, so the app limits the coins it accepts, says why, and asks the patient to pay the rest by card or cash.
+  - **At the pharmacy counter:** the patient taps **My coins → Pay at a pharmacy counter** and gives the pharmacist a one-time code (valid 10 minutes). Without the code nobody can spend their coins. Prescription-only items can't be paid with coins at the counter either.
+  - Coins can't be used for donations or insurance premiums, or with escrow.
+- **Who pays for used coins:** N-Health. The provider still earns their full share, so reward coins are a marketing cost.
+  - Card: the gateway settles the provider's share of what the patient paid straight to their bank, and N-Health credits the coin part to their earnings balance. N-Health's commission and booking fee are unchanged.
+  - Cash: the provider collects the reduced amount, and N-Health credits the coin part to their balance.
+  - All coins: the provider's fee, less commission, is credited to their balance.
+  - Credits are paid out on the payout schedule.
 - **Value:** `COIN_VALUE_NGN` (default 10) is what N-Health pays a provider for each coin used. Patients see coin balances only.
 - **Prices:** all prices are shown in naira, because patients pay providers in money (card or cash).
 

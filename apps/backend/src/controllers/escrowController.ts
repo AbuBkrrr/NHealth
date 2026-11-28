@@ -27,6 +27,8 @@ export async function initiateEscrow(req: Request, res: Response) {
   const patientProfile = await prisma.patientProfile.findUnique({ where: { userId: patientUserId } });
   if (!patientProfile) throw ApiError.notFound('Patient profile not found');
   const resolved = await resolvePayable(PURPOSE_TO_PAYABLE[purpose], purposeId, patientProfile.id);
+  const { getRedemption } = await import('../services/coinParts');
+  if (await getRedemption(PURPOSE_TO_PAYABLE[purpose], purposeId)) throw ApiError.badRequest('Coins are applied to this bill: pay the rest by card or cash, or remove the coins first');
   const amount = resolved.amount;
   const providerUserId = resolved.providerUserId;
   if (!providerUserId || amount < 100) throw ApiError.badRequest('This item cannot be paid through escrow');

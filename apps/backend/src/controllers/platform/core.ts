@@ -221,7 +221,7 @@ export async function myTickets(req: Request, res: Response) {
 const PROFILE_FIELDS: Record<string, { model: string; text: string[]; nums: string[]; bools: string[] }> = {
   DOCTOR: { model: 'doctorProfile', text: ['specialty', 'hospital', 'bio', 'languages', 'qualifications', 'city', 'state', 'country', 'licenseNumber'], nums: ['consultationFee', 'yearsExperience', 'lat', 'lng', 'slotMinutes'], bools: ['homeVisit'] },
   NURSE: { model: 'nurseProfile', text: ['specialty', 'bio', 'city', 'state', 'licenseNumber'], nums: ['hourlyRate', 'yearsExperience', 'lat', 'lng'], bools: ['isAvailable'] },
-  PHARMACY: { model: 'pharmacyProfile', text: ['pharmacyName', 'address', 'operatingHours', 'phone', 'city', 'state', 'country', 'licenseNumber'], nums: ['lat', 'lng'], bools: ['homeDelivery'] },
+  PHARMACY: { model: 'pharmacyProfile', text: ['pharmacyName', 'address', 'operatingHours', 'phone', 'city', 'state', 'country', 'licenseNumber'], nums: ['lat', 'lng', 'deliveryFee'], bools: ['homeDelivery'] },
   LAB: { model: 'labProfile', text: ['labName', 'address', 'operatingHours', 'phone', 'city', 'state', 'country', 'licenseNumber'], nums: ['lat', 'lng'], bools: ['homeCollection', 'homeDelivery'] },
   AMBULANCE: { model: 'ambulanceProfile', text: ['vehicleNumber', 'operatorName', 'vehicleType', 'phone', 'licenseNumber'], nums: ['baseFee'], bools: ['isAvailable'] },
 };

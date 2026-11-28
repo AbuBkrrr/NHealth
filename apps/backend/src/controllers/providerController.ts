@@ -60,6 +60,12 @@ export async function listAvailableNurses(req: Request, res: Response) {
   res.json(nurses);
 }
 
+/** GET /api/providers/pharmacies/:pharmacyId/info - name and delivery terms shown at checkout. */
+export async function pharmacyInfo(req: Request, res: Response) {
+  const p = await prisma.pharmacyProfile.findUnique({ where: { id: req.params.pharmacyId }, select: { id: true, pharmacyName: true, homeDelivery: true, deliveryFee: true } });
+  if (!p) return res.status(404).json({ error: 'Pharmacy not found' });
+  res.json({ ...p, deliveryFee: Number(p.deliveryFee) });
+}
 export async function pharmacyInventory(req: Request, res: Response) {
   const items = await prisma.inventory.findMany({
     where: { pharmacyId: req.params.pharmacyId, stock: { gt: 0 } },

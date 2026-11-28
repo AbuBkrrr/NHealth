@@ -315,6 +315,7 @@ model PharmacyProfile {
   rating       Float   @default(0)
   reviewCount  Int     @default(0)
   homeDelivery Boolean @default(false)
+  deliveryFee  Decimal @default(0) // charged on delivery orders; patients may pay it with reward coins
 
   stockIntakes        StockIntake[]
   stockAudits         StockAudit[]
@@ -506,6 +507,7 @@ model PharmacyOrder {
   currency        String  @default("NGN")
   deliveryMethod  String  @default("PICKUP")
   deliveryAddress String?
+  deliveryFee     Decimal @default(0) // included in total
   declineReason   String?
 
   @@index([patientId])
@@ -1782,4 +1784,45 @@ model ProviderPageVisit {
   createdAt  DateTime @default(now())
 
   @@index([providerId, createdAt])
+}
+
+/// Reward coins a patient applied to part of a bill; the rest is paid by card or cash. N-Health pays the provider
+/// for the coin part. One per bill; refunded to the patient if the bill is cancelled.
+model CoinRedemption {
+  id          String   @id @default(uuid())
+  userId      String
+  payableType String
+  payableId   String
+  amount      Decimal  @db.Decimal(12, 2) // naira value of the coins (what N-Health funds)
+  coins       Int
+  reference   String   @unique
+  status      String   @default("ACTIVE") // ACTIVE | REFUNDED
+  sponsorshipId String? // set when the coins came from someone helping the patient (refunds go back to them)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([payableType, payableId])
+  @@index([userId])
+}
+
+/// Coins one person offers towards another person's care. The coins never enter the recipient's balance: the
+/// recipient applies the offer to one of their own bills (the provider is paid), and anything unused returns
+/// to the sender. This keeps coins non-transferable (no stored-value/e-money licence needed).
+model CoinSponsorship {
+  id          String    @id @default(uuid())
+  fromUserId  String
+  toUserId    String
+  coins       Int
+  reference   String    @unique
+  note        String?
+  status      String    @default("OFFERED") // OFFERED | USED | DECLINED | CANCELLED | EXPIRED
+  payableType String?
+  payableId   String?
+  usedCoins   Int       @default(0)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([fromUserId, createdAt])
+  @@index([toUserId, status])
 }
