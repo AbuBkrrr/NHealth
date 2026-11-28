@@ -11,6 +11,8 @@ import * as er from '../controllers/platform/er';
 import * as fac from '../controllers/platform/facilities';
 import * as gig from '../controllers/platform/gigs';
 import * as flyer from '../controllers/platform/flyer';
+import * as support from '../controllers/platform/support';
+import { optionalAuth } from '../middleware/auth';
 import * as quest from '../controllers/platform/quests';
 import * as ph from '../controllers/platform/pharmacyExt';
 import * as lab from '../controllers/platform/labExt';
@@ -119,6 +121,9 @@ r.post('/referrals/:id/respond', auth, requireRole(...PROVIDERS), h(core.respond
 
 // Support
 r.get('/support/tickets', auth, h(core.myTickets));
+// Help bubble live chat (signed-in users and visitors)
+r.get('/support/chat', optionalAuth, h(support.getChat));
+r.post('/support/chat', optionalAuth, marketingLimiter, h(support.postChat));
 r.post('/support/tickets', auth, sensitiveLimiter, h(core.createTicket));
 
 // Availability (doctor / nurse / lab calendars)
@@ -253,11 +258,14 @@ r.get('/admin-ops/quests', ...A, h(quest.getSettings));
 r.put('/admin-ops/quests', ...A, requireSuperAdmin, h(quest.putSettings));
 // Donation partner NGO (receives donations directly) and transfers waiting for confirmation
 r.get('/admin-ops/donation-partner', ...A, h(don.getPartner));
+r.get('/admin-ops/insurance-broker', ...A, h(don.getBroker));
+r.put('/admin-ops/insurance-broker', ...A, requireSuperAdmin, h(don.putBroker));
 r.put('/admin-ops/donation-partner', ...A, requireSuperAdmin, h(don.putPartner));
 r.get('/admin-ops/donations/pending', ...A, h(don.adminPendingDonations));
 r.get('/admin-ops/stats', ...A, h(adm.platformStats));
 r.get('/admin-ops/verifications', ...A, h(adm.verificationQueue));
 r.post('/admin-ops/verifications/:userId', ...A, h(adm.decideVerification));
+r.post('/admin-ops/verifications/:userId/contact', ...A, sensitiveLimiter, h(adm.contactProvider));
 r.get('/admin-ops/campaigns', ...A, h(adm.campaignQueue));
 r.post('/admin-ops/campaigns/:id', ...A, h(adm.decideCampaign));
 r.get('/admin-ops/kyc', ...A, h(adm.kycList));
@@ -269,7 +277,8 @@ r.post('/admin-ops/catalog/:kind', ...A, h(adm.catalogUpsert));
 r.delete('/admin-ops/catalog/:kind/:id', ...A, h(adm.catalogDelete));
 r.post('/admin-ops/rates', ...A, h(adm.setRate));
 r.get('/admin-ops/tickets', ...A, h(adm.listTickets));
-r.post('/admin-ops/tickets/:id/reply', ...A, h(adm.replyTicket));
+r.post('/admin-ops/tickets/:id/reply', ...A, h(support.replyTicket));
+r.get('/admin-ops/tickets/:id/messages', ...A, h(support.ticketThread));
 
 // Marketing (super admin): links & QR codes, opens per device, leads, broadcasts, pixels
 const SA = [auth, requireRole('ADMIN'), requireSuperAdmin];
@@ -284,7 +293,10 @@ r.patch('/admin-ops/marketing/links/:id', ...SA, h(mkt.updateLink));
 r.get('/admin-ops/marketing/links/:id/qr.:fmt', ...SA, h(mkt.linkQr));
 r.get('/admin-ops/marketing/leads/summary', ...SA, h(mkt.leadSummary));
 r.patch('/admin-ops/marketing/leads/:id', ...SA, h(mkt.updateLead));
+r.get('/admin-ops/marketing/leads/:id/messages', ...SA, h(support.leadThread));
+r.post('/admin-ops/marketing/leads/:id/reply', ...SA, sensitiveLimiter, h(support.replyLead));
 r.get('/admin-ops/marketing/leads.csv', ...SA, h(mkt.leadsCsv));
+r.get('/admin-ops/marketing/invites', ...SA, h(mkt.inviteReport));
 r.get('/admin-ops/marketing/settings', ...SA, h(mkt.getSettings));
 r.put('/admin-ops/marketing/settings', ...SA, h(mkt.putSettings));
 r.get('/admin-ops/marketing/broadcasts', ...SA, h(mkt.listBroadcasts));

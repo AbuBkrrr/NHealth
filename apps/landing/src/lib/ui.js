@@ -115,12 +115,12 @@ export function toast(msg, ms = 2800) {
 export const toastErr = (e) => toast('⚠️ ' + (e?.message || 'Something went wrong'));
 
 let modalClose = null;
-export function modal(html, onMount) {
+export function modal(html, onMount, onClose) {
   const ov = $('#modal');
   const box = ov.querySelector('.modal-content');
   box.innerHTML = `<button class="close-btn" aria-label="Close" data-close>✕</button>${html}`;
   ov.classList.add('active');
-  const close = () => { ov.classList.remove('active'); box.innerHTML = ''; modalClose = null; };
+  const close = () => { if (modalClose !== close) return; ov.classList.remove('active'); box.innerHTML = ''; modalClose = null; onClose?.(); };
   modalClose = close;
   box.querySelector('[data-close]').onclick = close;
   ov.onclick = (e) => { if (e.target === ov) close(); };
@@ -142,11 +142,12 @@ export function confirmBox(message, { ok = 'Confirm', danger = false } = {}) {
  * Renders a form inside a modal. fields: [{name,label,type,options,value,required,placeholder,hint}]
  * Resolves with the values object, or null if cancelled. `onSubmit` may throw to keep the modal open.
  */
-export function formModal(title, fields, { submit = 'Save', onSubmit, intro = '' } = {}) {
+export function formModal(title, fields, { submit = 'Save', onSubmit, intro = '', onMount } = {}) {
   return new Promise((resolve) => {
     const body = fields.map(field).join('');
     modal(`<div class="modal-title">${title}</div>${intro}<form novalidate>${body}<button class="btn btn-primary btn-block mt8" type="submit">${esc(submit)}</button></form>`, (box, close) => {
       const form = box.querySelector('form');
+      onMount?.(box);
       form.onsubmit = async (e) => {
         e.preventDefault();
         const vals = readForm(form);
@@ -168,7 +169,7 @@ export function field(f) {
   else if (f.type === 'textarea') input = `<textarea id="${id}" name="${f.name}" rows="${f.rows || 3}" placeholder="${esc(f.placeholder || '')}">${esc(v)}</textarea>`;
   else if (f.type === 'checkbox') return `<label class="check"><input type="checkbox" name="${f.name}" ${v ? 'checked' : ''}> <span>${f.label}</span></label>`;
   else if (f.type === 'password') input = `<div class="pw-wrap"><input id="${id}" name="${f.name}" type="password" autocomplete="${f.autocomplete || 'current-password'}" placeholder="${esc(f.placeholder || '')}" value="${esc(v)}"><button type="button" data-pw aria-label="Show password">👁</button></div>`;
-  else input = `<input id="${id}" name="${f.name}" type="${f.type || 'text'}" ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} placeholder="${esc(f.placeholder || '')}" value="${esc(v)}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''} ${f.inputmode ? `inputmode="${f.inputmode}"` : ''}>`;
+  else input = `<input id="${id}" name="${f.name}" type="${f.type || 'text'}" ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} ${f.max !== undefined ? `max="${f.max}"` : ''} placeholder="${esc(f.placeholder || '')}" value="${esc(v)}" ${f.autocomplete ? `autocomplete="${f.autocomplete}"` : ''} ${f.inputmode ? `inputmode="${f.inputmode}"` : ''}>`;
   return `<div class="form-group"><label for="${id}">${f.label}${req}</label>${input}${f.hint ? `<div class="hint">${f.hint}</div>` : ''}</div>`;
 }
 export function readForm(form) {
@@ -240,5 +241,39 @@ export function locate({ timeout = 10000 } = {}) {
     navigator.geolocation.getCurrentPosition((p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
       (e) => reject(new Error(e.code === 1 ? 'Location permission denied - enable it in your browser settings' : 'Could not get your location')),
       { enableHighAccuracy: true, timeout, maximumAge: 30000 });
+  });
+}
+
+/**
+ * Takes a photo with the FRONT camera only (live preview, no gallery upload). Resolves with a JPEG File, or null if cancelled.
+ * Phones without camera access in the browser fall back to the system camera opened on the front lens.
+ */
+export function takeSelfie({ title = '🤳 Take a selfie', hint = 'Hold your ID next to your face, so both are clear.' } = {}) {
+  return new Promise((resolve) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      if (matchMedia('(pointer: coarse)').matches) return pickFile('image/*', { capture: 'user' }).then(resolve);
+      toast('⚠️ A camera is needed for the selfie. Open N-Health on your phone to take it.');
+      return resolve(null);
+    }
+    let stream = null, done = false;
+    const stop = () => stream?.getTracks().forEach((t) => t.stop());
+    modal(`<div class="modal-title">${title}</div><p class="muted small">${esc(hint)}</p>
+      <div class="selfie-cam"><video playsinline autoplay muted></video><div class="selfie-guide"></div></div>
+      <button class="btn btn-primary btn-block mt8" id="snap" disabled>📸 Take photo</button>`, async (box, close) => {
+      const v = box.querySelector('video');
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'user' }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false })
+          .catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }));
+        v.srcObject = stream; $('#snap', box).disabled = false;
+      } catch (e) {
+        toast('⚠️ Please allow camera access to take your selfie.'); close(); return;
+      }
+      $('#snap', box).onclick = () => {
+        const c = document.createElement('canvas');
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        c.toBlob((b) => { done = true; stop(); close(); resolve(b ? new File([b], 'selfie.jpg', { type: 'image/jpeg' }) : null); }, 'image/jpeg', 0.9);
+      };
+    }, () => { stop(); if (!done) resolve(null); });
   });
 }

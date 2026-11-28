@@ -190,9 +190,21 @@ export async function requestEnrolment(req: Request, res: Response) {
     policyNumber: 'REQ-' + Date.now().toString(36).toUpperCase(), premiumAmount: Number(plan.monthlyPremium) * members, coverageDetails: str(req.body.note, 500),
   } });
   const u = await prisma.user.findUnique({ where: { id: uid(req) }, select: { name: true, phone: true, email: true } });
+  const { getInsuranceBroker } = await import('../../services/settings');
+  const broker = await getInsuranceBroker();
+  const who = `${u?.name} (${[u?.phone, u?.email].filter(Boolean).join(', ')})`;
+  const what = `${plan.name} by ${plan.provider} for ${members} ${members > 1 ? 'people' : 'person'}${policy.coverageDetails ? '. Note: ' + policy.coverageDetails : ''}`;
+  if (broker.enabled) {
+    // Our licensed broker partner advises the patient and arranges the cover; N-Health only passes the request on.
+    const { sendEmail } = await import('../../services/email');
+    const { escapeHtml } = await import('../../services/notify');
+    await sendEmail(broker.email, `New health insurance request: ${plan.name}`, 'New enrolment request from N-Health',
+      `${escapeHtml(who)} asked to join <b>${escapeHtml(what)}</b>.<br>Reference: ${policy.policyNumber}.<br>Please contact them to advise and arrange the cover. The patient agreed to share these details with you.`);
+  }
   const admins = await prisma.user.findMany({ where: { role: 'ADMIN', isActive: true }, select: { id: true } });
-  await Promise.all(admins.map((a) => notify(a.id, 'insurance', 'Insurance enrolment request', `${u?.name} (${u?.phone || u?.email}) wants ${plan.name} by ${plan.provider} for ${members} ${members > 1 ? 'people' : 'person'}. Pass it to the HMO.`, { email: true, data: { policyId: policy.id } })));
-  await notify(uid(req), 'insurance', 'Request sent to ' + plan.provider, `${plan.provider} will contact you to complete enrolment. You pay the HMO directly; N-Health never collects premiums.`);
+  await Promise.all(admins.map((a) => notify(a.id, 'insurance', 'Insurance enrolment request', `${who} wants ${what}. ${broker.enabled ? 'Sent to ' + broker.name + '.' : 'Pass it to the HMO or broker.'}`, { email: true, data: { policyId: policy.id } })));
+  const by = broker.enabled ? broker.name + ', our licensed insurance broker partner,' : plan.provider;
+  await notify(uid(req), 'insurance', 'Request sent', `${by} will contact you to complete enrolment. You pay for cover directly; N-Health never collects premiums.`);
   res.status(201).json(policy);
 }
 /** Premiums are paid to the HMO, not through N-Health. */
@@ -210,4 +222,11 @@ export async function putPartner(req: Request, res: Response) {
 export async function adminPendingDonations(_req: Request, res: Response) {
   res.json(await prisma.donation.findMany({ where: { status: 'PENDING', campaignId: { not: null } }, orderBy: { createdAt: 'desc' }, take: 500,
     select: { id: true, amount: true, reference: true, createdAt: true, campaign: true, campaignId: true, patient: { select: { user: { select: { name: true, email: true } } } } } }));
+}
+
+/** GET/PUT /api/admin-ops/insurance-broker - the licensed broker that receives enrolment requests. */
+export async function getBroker(_req: Request, res: Response) { const { getInsuranceBroker } = await import('../../services/settings'); res.json(await getInsuranceBroker()); }
+export async function putBroker(req: Request, res: Response) {
+  const { saveInsuranceBroker } = await import('../../services/settings');
+  try { res.json(await saveInsuranceBroker(req.body || {}, uid(req))); } catch (e: any) { throw new ApiError(e.status || 400, e.message); }
 }

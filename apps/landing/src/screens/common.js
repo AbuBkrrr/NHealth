@@ -144,7 +144,10 @@ export function inviteText() {
 }
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-invite]'); if (!b) return;
-  const { text } = inviteText();
+  // Tag the link with where it was shared from, so Marketing → Invites shows which channel works.
+  const ch = { wa: 'whatsapp', share: 'share' }[b.dataset.invite] || 'copy';
+  const base = inviteText();
+  const text = base.text.replace(base.link, base.link + '&utm_source=' + ch + '&utm_medium=invite');
   if (b.dataset.invite === 'wa') { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener'); return; }
   if (b.dataset.invite === 'share' && navigator.share) { navigator.share({ title: 'N-Health', text }).catch(() => null); return; }
   try { await navigator.clipboard.writeText(text); toast('📋 Invite copied - paste it in any chat'); } catch { toast(text); }

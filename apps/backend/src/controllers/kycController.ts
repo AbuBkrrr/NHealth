@@ -68,7 +68,10 @@ export async function submitManualKyc(req: Request, res: Response) {
   const idNumber = String(b.idNumber).replace(/\s+/g, '');
   if (b.idType === 'NIN' && !/^\d{11}$/.test(idNumber)) throw ApiError.badRequest('A NIN has 11 digits');
   const dob = new Date(String(b.dateOfBirth));
-  if (isNaN(dob.getTime()) || dob > new Date()) throw ApiError.badRequest('Enter a valid date of birth');
+  if (isNaN(dob.getTime())) throw ApiError.badRequest('Enter a valid date of birth');
+  if (dob > new Date()) throw ApiError.badRequest('Your date of birth is in the future. Check the year.');
+  if (new Date().getFullYear() - dob.getFullYear() > 120) throw ApiError.badRequest('Check the year of your date of birth');
+  if (b.idExpiry && !isNaN(new Date(String(b.idExpiry)).getTime()) && String(b.idExpiry).slice(0, 10) < new Date().toISOString().slice(0, 10)) throw ApiError.badRequest('This ID has expired. Use an ID that is still valid, or leave the expiry date empty if it has none.');
   const files = ['idFront', 'idBack', 'selfie', 'proofOfAddress'].reduce((o: any, k) => { const u = strv(b[k], 600); if (u) { if (!/^https?:\/\//.test(u)) throw ApiError.badRequest('Upload the documents again'); o[k] = u; } return o; }, {});
   const form = {
     fullName: strv(b.fullName, 120), dateOfBirth: dob.toISOString().slice(0, 10), gender: strv(b.gender, 20), phone: strv(b.phone, 30) || user.phone,

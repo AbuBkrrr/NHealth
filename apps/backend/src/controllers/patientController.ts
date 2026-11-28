@@ -56,7 +56,8 @@ export async function updateProfile(req: Request, res: Response) {
 const createAppointmentSchema = z.object({
   doctorId: z.string(),
   scheduledAt: z.string().datetime(),
-  type: z.enum(['IN_PERSON', 'VIDEO']).default('IN_PERSON'),
+  // N-Health books in-person and home visits only (no remote consultations).
+  type: z.literal('IN_PERSON').default('IN_PERSON'),
   reason: z.string().optional(),
 });
 

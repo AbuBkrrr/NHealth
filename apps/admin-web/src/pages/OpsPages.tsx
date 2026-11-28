@@ -17,6 +17,47 @@ function useList<T>(path: string) {
 const fmt = (d?: string) => (d ? new Date(d).toLocaleString() : '—');
 const naira = (n: number | string) => '₦' + Number(n || 0).toLocaleString();
 
+/** A conversation (support chat or enquiry) with a reply box. `send` posts the reply and returns a message to show. */
+export function ThreadModal({ title, sub, load, send, channels, extra, onClose }: {
+  title: string; sub?: React.ReactNode; load: () => Promise<any[]>; send: (body: string, channel: string, close: boolean) => Promise<string | void>;
+  channels?: [string, string][]; extra?: React.ReactNode; onClose: () => void;
+}) {
+  const [msgs, setMsgs] = useState<any[]>([]);
+  const [body, setBody] = useState('');
+  const [channel, setChannel] = useState(channels?.[0]?.[0] || 'chat');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const reload = useCallback(() => { load().then(setMsgs).catch((e) => setMsg(getErrorMessage(e))); }, [load]);
+  useEffect(() => { reload(); const t = setInterval(reload, 10000); return () => clearInterval(t); }, [reload]);
+  const go = async (close: boolean) => {
+    if (!body.trim() && !close) return;
+    setBusy(true); setMsg('');
+    try { const w = await send(body.trim(), channel, close); setBody(''); setMsg(w || 'Sent ✓'); reload(); } catch (e) { setMsg(getErrorMessage(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+        <h3 style={{ margin: '0 0 4px' }}>{title}</h3>{sub && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>{sub}</div>}
+        <div className="thread">{msgs.map((m) => (
+          <div key={m.id} className={`thread-msg ${m.fromStaff ? 'staff' : 'them'}`}>
+            <div>{m.body}</div>
+            <div className="thread-meta">{m.fromStaff ? 'N-Health' : 'Them'}{m.channel && m.channel !== 'chat' && m.channel !== 'form' ? ' · ' + m.channel : ''} · {new Date(m.createdAt).toLocaleString()}{m.delivered === false ? ' · not delivered' : ''}</div>
+          </div>))}
+          {!msgs.length && <div className="empty-state">No messages yet.</div>}</div>
+        <textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your reply…" style={{ width: '100%', marginTop: 8 }} />
+        <div className="toolbar" style={{ marginTop: 8 }}>
+          {channels && channels.length > 1 && <select value={channel} onChange={(e) => setChannel(e.target.value)}>{channels.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
+          <button disabled={busy} onClick={() => go(false)}>Send</button>
+          {!channels && <button className="outline" disabled={busy} onClick={() => go(true)}>Send & close</button>}
+          {extra}
+          <button className="outline" onClick={onClose}>Close</button>
+        </div>
+        {msg && <div style={{ fontSize: 13, marginTop: 6 }}>{msg}</div>}
+      </div>
+    </div>
+  );
+}
+
 function Status({ text }: { text: string }) {
   return <span className={`badge ${/VERIFIED|APPROVED|ACTIVE|Approved|answered|closed/.test(text) ? 'badge-active' : /REJECT|DECLIN|SUSPEND|Declined/.test(text) ? 'badge-inactive' : 'badge-role'}`}>{text}</span>;
 }
@@ -48,6 +89,7 @@ export function VerificationsPage() {
   const [qd, setQd] = useState('');
   useEffect(() => { const t = setTimeout(() => setQd(q.trim()), 300); return () => clearTimeout(t); }, [q]);
   const { items, error, reload } = useList<any>('/admin-ops/verifications?status=' + status + (qd ? '&q=' + encodeURIComponent(qd) : ''));
+  const [contact, setContact] = useState<any | null>(null);
   const decide = async (id: string, decision: string, kycOk: boolean) => {
     const note = decision === 'VERIFIED' ? '' : window.prompt('Reason (sent to the provider):') || '';
     let overrideKyc = false;
@@ -83,12 +125,14 @@ export function VerificationsPage() {
                   })}
                 </div>
                 {u.missingDocuments?.length > 0 && <div style={{ fontSize: 12, marginTop: 4, color: 'var(--error)' }}>Approve unlocks when all three documents are uploaded.</div>}
+                {u.lastContactedAt && <div style={{ fontSize: 12, marginTop: 4 }}>✉️ Last contacted {fmt(u.lastContactedAt)}</div>}
                 {u.claimedListing && <div style={{ fontSize: 12, marginTop: 4 }}>📍 Claims directory listing: <b>{u.claimedListing.name}</b> ({[u.claimedListing.lga, u.claimedListing.state].filter(Boolean).join(', ')}{u.claimedListing.nhfrCode ? ' • NHFR ' + u.claimedListing.nhfrCode : ''}). Check it matches their documents.</div>}
               </div>
               <div className="row-actions">
                 <button disabled={!!u.missingDocuments?.length} title={u.missingDocuments?.length ? 'Missing: ' + u.missingDocuments.join(', ') : 'Approve'} onClick={() => decide(u.id, 'VERIFIED', u.kycStatus === 'APPROVED')}>Approve</button>
                 <button className="outline" onClick={() => decide(u.id, 'REJECTED', true)}>Reject</button>
                 <button className="outline" onClick={() => decide(u.id, 'SUSPENDED', true)}>Suspend</button>
+                <button className="outline" onClick={() => setContact(u)}>Contact</button>
               </div>
             </div>
             <table style={{ marginTop: 10 }}>
@@ -99,6 +143,63 @@ export function VerificationsPage() {
           </div>
         );
       })}
+      {contact && <ContactProvider u={contact} onClose={() => { setContact(null); reload(); }} />}
+    </div>
+  );
+}
+
+/** Message a provider about what they still need to do to be approved (in-app, email, WhatsApp). */
+function ContactProvider({ u, onClose }: { u: any; onClose: () => void }) {
+  const todo = [
+    ...(u.missingDocuments || []).map((d: string) => `• Upload your ${d.toLowerCase()}`),
+    ...(u.kycStatus !== 'APPROVED' ? ['• Complete identity verification (Profile → Verify identity)'] : []),
+  ];
+  const first = String(u.name || '').split(' ')[0];
+  const [text, setText] = useState(`Hello ${first}, thank you for joining N-Health. To approve your account we still need:\n${todo.join('\n') || '• (write what is missing)'}\n\nOpen N-Health → Profile → Verification to upload them. Reply to this message if you need help.`);
+  const [email, setEmail] = useState(true);
+  const [wa, setWa] = useState(!!u.phone);
+  const [msg, setMsg] = useState('');
+  const send = async () => {
+    try { const r = await api.post(`/admin-ops/verifications/${u.id}/contact`, { message: text, email, whatsapp: wa }); setMsg('Sent: ' + r.data.sent.join(', ')); setTimeout(onClose, 900); } catch (e) { setMsg(getErrorMessage(e)); }
+  };
+  const phone = String(u.phone || '').replace(/\D/g, '').replace(/^0/, '234');
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
+        <h3 style={{ marginTop: 0 }}>Contact {u.name}</h3>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{u.email} · {u.phone || 'no phone'}</div>
+        <textarea rows={9} value={text} onChange={(e) => setText(e.target.value)} style={{ width: '100%', marginTop: 10 }} />
+        <div className="toolbar" style={{ marginTop: 6 }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked readOnly style={{ width: 'auto' }} /> In the app</label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={email} onChange={(e) => setEmail(e.target.checked)} style={{ width: 'auto' }} /> Email</label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={wa} disabled={!u.phone} onChange={(e) => setWa(e.target.checked)} style={{ width: 'auto' }} /> WhatsApp</label>
+        </div>
+        <div className="toolbar" style={{ marginTop: 8 }}>
+          <button onClick={send}>Send</button>
+          {u.phone && <a className="mk-btn" target="_blank" rel="noreferrer" href={`https://wa.me/${phone}?text=${encodeURIComponent(text)}`}>Open in WhatsApp</a>}
+          <button className="outline" onClick={onClose}>Cancel</button>
+        </div>
+        {msg && <div style={{ fontSize: 13, marginTop: 6 }}>{msg}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** The licensed insurance broker that receives patients' enrolment requests. */
+function BrokerCard() {
+  const [b, setB] = useState<any>(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { api.get('/admin-ops/insurance-broker').then((r) => setB(r.data)).catch((e) => setMsg(getErrorMessage(e))); }, []);
+  if (!b) return msg ? <div className="error-text">{msg}</div> : null;
+  const f = (k: string, label: string, ph = '') => <label className="field" key={k}>{label}<input value={b[k] || ''} placeholder={ph} onChange={(e) => setB({ ...b, [k]: e.target.value })} /></label>;
+  const save = async () => { setMsg('Saving…'); try { setB((await api.put('/admin-ops/insurance-broker', b)).data); setMsg('Saved ✓'); } catch (e) { setMsg(getErrorMessage(e)); } };
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Insurance broker partner</h3>
+      <p className="page-subtitle">When switched on, every "Request enrolment" from a patient is emailed to this NAICOM-licensed broker, who advises the patient and arranges cover. N-Health only passes the request on (the patient consents) and never collects premiums.</p>
+      <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={!!b.enabled} onChange={(e) => setB({ ...b, enabled: e.target.checked })} style={{ width: 'auto' }} /> Send enrolment requests to this broker</label>
+      <div className="mk-form">{f('name', 'Broker name')}{f('email', 'Email for requests')}{f('phone', 'Phone')}{f('licence', 'NAICOM licence number')}</div>
+      <div className="row-actions"><button onClick={save}>Save</button> <span>{msg}</span></div>
     </div>
   );
 }
@@ -283,25 +384,26 @@ export function PayoutsPage() {
 export function TicketsPage() {
   const [status, setStatus] = useState('open');
   const { items, error, reload } = useList<any>('/admin-ops/tickets?status=' + status);
-  const reply = async (id: string, close: boolean) => {
-    const text = window.prompt('Reply to the user:');
-    if (!text) return;
-    try { await api.post('/admin-ops/tickets/' + id + '/reply', { reply: text, close }); reload(); } catch (e) { alert(getErrorMessage(e)); }
-  };
+  const [open, setOpen] = useState<any | null>(null);
+  useEffect(() => { const t = setInterval(reload, 15000); return () => clearInterval(t); }, [reload]);
+  const load = useCallback(async () => (await api.get('/admin-ops/tickets/' + open?.id + '/messages')).data.messages, [open]);
   return (
     <div>
-      <h1 className="page-title">Support tickets</h1>
+      <h1 className="page-title">Support: chats & tickets</h1>
+      <p className="page-subtitle">Live chats from the help bubble (members and visitors) and support tickets. Your reply appears in their chat and is emailed to them.</p>
       <div className="toolbar">{['open', 'answered', 'closed'].map((s) => <button key={s} className={s === status ? '' : 'outline'} onClick={() => setStatus(s)}>{s}</button>)}</div>
       {error && <div className="error-text">{error}</div>}
-      {items.length === 0 ? <div className="card empty-state">No tickets.</div> : items.map((t) => (
+      {items.length === 0 ? <div className="card empty-state">Nothing here.</div> : items.map((t) => (
         <div className="card" key={t.id}>
-          <h3 style={{ margin: 0 }}>{t.subject} <span className="badge badge-role">{t.category}</span> {t.priority === 'high' && <span className="badge badge-inactive">URGENT</span>}</h3>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t.userName} · {t.userEmail} · {fmt(t.createdAt)}</div>
+          <h3 style={{ margin: 0 }}>{t.subject} <span className="badge badge-role">{t.channel === 'chat' ? '💬 chat' : t.category}</span> {!t.userId && <span className="badge">visitor</span>} {t.priority === 'high' && <span className="badge badge-inactive">URGENT</span>}</h3>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t.userName} · {t.userEmail} · last activity {fmt(t.lastMessageAt || t.repliedAt || t.createdAt)}</div>
           <p style={{ whiteSpace: 'pre-wrap' }}>{t.message}</p>
-          {t.adminReply && <p style={{ background: '#f5f7fa', padding: 8, borderRadius: 8 }}>Reply: {t.adminReply}</p>}
-          <div className="row-actions"><button onClick={() => reply(t.id, false)}>Reply</button><button className="outline" onClick={() => reply(t.id, true)}>Reply & close</button></div>
+          <div className="row-actions"><button onClick={() => setOpen(t)}>{t.channel === 'chat' ? 'Open chat' : 'Open & reply'}</button></div>
         </div>
       ))}
+      {open && <ThreadModal title={open.subject} sub={`${open.userName} · ${open.userEmail}`} load={load}
+        send={async (reply, _c, close) => { await api.post('/admin-ops/tickets/' + open.id + '/reply', { reply, close }); if (close) { setOpen(null); reload(); } }}
+        onClose={() => { setOpen(null); reload(); }} />}
     </div>
   );
 }
@@ -328,6 +430,7 @@ export function CatalogPage() {
   const fields = CATALOG_FIELDS[kind].concat(kind === 'insurance-plans' ? ['coverage'] : []);
   return (
     <div>
+      {kind === 'insurance-plans' && <BrokerCard />}
       <h1 className="page-title">Catalogs</h1>
       <p className="page-subtitle">Reference data shown in the app.</p>
       <div className="toolbar">{Object.keys(CATALOG_FIELDS).map((k) => <button key={k} className={k === kind ? '' : 'outline'} onClick={() => { setKind(k); setEdit(null); }}>{k}</button>)}<button onClick={() => setEdit({})}>+ New</button></div>

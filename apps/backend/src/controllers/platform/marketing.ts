@@ -35,7 +35,9 @@ export async function recordOpen(req: Request, res: Response) {
   const b = req.body || {};
   const dk = deviceKeyOf(b);
   if (!dk) throw ApiError.badRequest('Missing device identifier');
-  const slug = str(b.slug, 60);
+  let slug = str(b.slug, 60);
+  // Members' invite links (inv-CODE) are created on first open.
+  if (slug && /^inv-/i.test(slug)) { const { ensureInviteLink } = await import('../../services/marketing'); slug = (await ensureInviteLink(slug))?.slug || slug; }
   const link = slug ? await prisma.marketingLink.findUnique({ where: { slug } }) : null;
   const linkId = link && link.active ? link.id : null;
 
@@ -130,7 +132,8 @@ export async function unsubscribe(req: Request, res: Response) {
 // =================================================================== admin
 /** GET /api/admin-ops/marketing/links */
 export async function listLinks(_req: Request, res: Response) {
-  const links = await prisma.marketingLink.findMany({ orderBy: { createdAt: 'desc' } });
+  // Members' personal invite links are reported in the Invites tab, not listed here.
+  const links = await prisma.marketingLink.findMany({ where: { inviterId: null }, orderBy: { createdAt: 'desc' } });
   res.json(links.map((l) => ({ ...l, url: linkUrl(l.slug) })));
 }
 
@@ -201,22 +204,24 @@ export async function overview(req: Request, res: Response) {
     prisma.referral.groupBy({ by: ['fromId'], _count: { _all: true }, orderBy: { _count: { fromId: 'desc' } }, take: 10 }).catch(() => [] as any[]),
   ]);
   const linkById = new Map(links.map((l) => [l.id, l]));
+  // All members' invite links are summed into one row here (each member's link is in the Invites tab).
+  const keyOf = (linkId: string | null) => (!linkId ? 'none' : linkById.get(linkId)?.inviterId ? 'invites' : linkId);
 
   // Per link: opens, distinct devices, repeat opens and the verdict.
   const groups = new Map<string, any[]>();
-  for (const v of visits) { const k = v.linkId || 'none'; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(v); }
-  for (const l of links) if (!groups.has(l.id) && !req.query.linkId) groups.set(l.id, []);
+  for (const v of visits) { const k = keyOf(v.linkId); if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(v); }
+  for (const l of links) if (!l.inviterId && !groups.has(l.id) && !req.query.linkId) groups.set(l.id, []);
   const perLink = [...groups.entries()].map(([k, vs]) => {
     const l = k === 'none' ? null : linkById.get(k);
     const byDevice = new Map<string, number>();
     for (const v of vs) byDevice.set(v.deviceKey, (byDevice.get(v.deviceKey) || 0) + 1);
     const devices = byDevice.size;
     const maxOpens = Math.max(0, ...byDevice.values());
-    const signups = conversions.filter((c) => (c.linkId || 'none') === k).length;
-    const leadN = leads.filter((x) => (x.linkId || 'none') === k).length;
+    const signups = conversions.filter((c) => keyOf(c.linkId) === k).length;
+    const leadN = leads.filter((x) => keyOf(x.linkId) === k).length;
     const verdict = vs.length === 0 ? 'No opens yet' : devices === 1 ? `1 device, opened ${vs.length}×` : `Shared · ${devices} devices`;
     return {
-      id: k, slug: l?.slug ?? null, label: l?.label ?? '(no label)', channel: l?.channel ?? '-', campaign: l?.campaign ?? null, active: l?.active ?? true,
+      id: k, slug: l?.slug ?? null, label: k === 'invites' ? "Members' invite links (see Invites tab)" : l?.label ?? '(no label)', channel: k === 'invites' ? 'invite' : l?.channel ?? '-', campaign: l?.campaign ?? null, active: l?.active ?? true,
       url: l ? linkUrl(l.slug) : null, opens: vs.length, devices, repeatOpens: vs.length - devices, maxOpensOneDevice: maxOpens,
       verdict, shared: devices > 1, leads: leadN, signups, conversionRate: devices ? Math.round((signups / devices) * 1000) / 10 : 0,
       lastOpen: vs[0]?.createdAt ?? null,
@@ -351,4 +356,47 @@ export async function broadcast(req: Request, res: Response) {
 /** GET /api/admin-ops/marketing/broadcasts */
 export async function listBroadcasts(_req: Request, res: Response) {
   res.json(await prisma.marketingBroadcast.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }));
+}
+
+/**
+ * GET /api/admin-ops/marketing/invites?days=30 - how members invite: each member's invite link with opens, devices
+ * (same phone again vs shared on to others), where it was shared from, sign-ups, confirmed sign-ups, coins earned,
+ * and how many of their invitees went on to invite others.
+ */
+export async function inviteReport(req: Request, res: Response) {
+  const days = Math.max(1, Math.min(3650, Number(req.query.days) || 30));
+  const since = new Date(Date.now() - days * 86400_000);
+  const links = await prisma.marketingLink.findMany({ where: { inviterId: { not: null } }, select: { id: true, slug: true, inviterId: true, createdAt: true } });
+  const inviterIds = links.map((l) => l.inviterId!) as string[];
+  const [visits, invitees, inviters, rewards] = await Promise.all([
+    prisma.marketingVisit.findMany({ where: { linkId: { in: links.map((l) => l.id) }, createdAt: { gte: since } }, select: { linkId: true, deviceKey: true, openNo: true, utmSource: true, inApp: true, city: true, createdAt: true } }),
+    prisma.user.findMany({ where: { referredById: { not: null }, createdAt: { gte: since } }, select: { id: true, referredById: true, emailVerifiedAt: true, phoneVerifiedAt: true } }),
+    prisma.user.findMany({ where: { id: { in: inviterIds } }, select: { id: true, name: true, email: true, role: true, referralCode: true } }),
+    prisma.creditTransaction.groupBy({ by: ['userId'], where: { reference: { startsWith: 'INVITE-' }, createdAt: { gte: since } }, _sum: { amount: true } }),
+  ]);
+  // Invitees who invited someone themselves (word of mouth spreading)
+  const allInvitees = await prisma.user.findMany({ where: { referredById: { in: inviterIds } }, select: { id: true, referredById: true } });
+  const spread = new Set((await prisma.user.findMany({ where: { referredById: { in: allInvitees.map((x) => x.id) } }, select: { referredById: true } })).map((x) => x.referredById));
+  const { COIN_VALUE_NGN } = await import('../../services/coins');
+  const who = new Map(inviters.map((u) => [u.id, u]));
+  const rows = links.map((l) => {
+    const v = visits.filter((x) => x.linkId === l.id);
+    const devices = new Set(v.map((x) => x.deviceKey)).size;
+    const channels: Record<string, number> = {};
+    for (const x of v) { const c = x.utmSource || x.inApp || 'direct'; channels[c] = (channels[c] || 0) + 1; }
+    const joined = invitees.filter((x) => x.referredById === l.inviterId);
+    const u = who.get(l.inviterId!);
+    const coins = Number(rewards.find((r) => r.userId === l.inviterId)?._sum.amount || 0) / COIN_VALUE_NGN;
+    return {
+      inviter: u ? { id: u.id, name: u.name, email: u.email, role: u.role, code: u.referralCode } : null, slug: l.slug,
+      opens: v.length, devices, repeatOpens: v.length - devices,
+      verdict: devices > 1 ? `Shared · ${devices} devices` : v.length > 1 ? 'Same device' : v.length ? 'Opened once' : 'Not opened',
+      channels, cities: [...new Set(v.map((x) => x.city).filter(Boolean))].slice(0, 5),
+      signups: joined.length, confirmed: joined.filter((x) => x.emailVerifiedAt || x.phoneVerifiedAt).length, coins,
+      inviteesWhoInvited: allInvitees.filter((x) => x.referredById === l.inviterId && spread.has(x.id)).length,
+      lastOpen: v.reduce((a: Date | null, x) => (!a || x.createdAt > a ? x.createdAt : a), null),
+    };
+  }).filter((r) => r.opens || r.signups).sort((a, b) => b.signups - a.signups || b.opens - a.opens);
+  const sum = (k: 'opens' | 'devices' | 'signups' | 'confirmed' | 'coins') => rows.reduce((a, r) => a + (r[k] as number), 0);
+  res.json({ days, totals: { inviters: rows.length, opens: sum('opens'), devices: sum('devices'), signups: sum('signups'), confirmed: sum('confirmed'), coins: sum('coins'), shared: rows.filter((r) => r.devices > 1).length }, rows });
 }

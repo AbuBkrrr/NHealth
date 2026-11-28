@@ -23,7 +23,7 @@ async function publicProfile(userId: string) {
   const base = { id: u.id, role: u.role, roleLabel: ROLE_LABEL[u.role], avatarUrl: u.avatarUrl, verified: u.verificationStatus === 'VERIFIED', referralCode: u.referralCode };
   // What the flyer and page list as services, and the action patients take.
   if (d) return { ...base, name: 'Dr. ' + u.name, title: d.specialty || 'Doctor', place: d.hospital, city: d.city, state: d.state, rating: d.rating, reviews: d.reviewCount, fee: Number(d.consultationFee) || null,
-    services: ['Book a consultation', d.homeVisit ? 'Home visits' : null, 'Video or in-person', 'Prescriptions and test requests'].filter(Boolean), action: 'Book an appointment' };
+    services: ['Book a consultation', d.homeVisit ? 'Home visits' : null, 'In-person visits', 'Prescriptions and test requests'].filter(Boolean), action: 'Book an appointment' };
   if (n) return { ...base, name: 'Nurse ' + u.name, title: n.specialty || 'Nursing care', city: n.city, state: n.state, rating: n.rating, reviews: n.reviewCount, fee: Number(n.hourlyRate) || null,
     services: ['Home nursing care', 'Wound care and injections', 'Elderly and post-operative care'], action: 'Request home care' };
   if (p) return { ...base, name: p.pharmacyName || u.name, title: 'Pharmacy', address: p.address, city: p.city, state: p.state, rating: p.rating, reviews: p.reviewCount, hours: p.operatingHours,

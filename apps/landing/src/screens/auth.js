@@ -136,7 +136,8 @@ export function authScreen(el, _params = {}, query = {}) {
         btn.disabled = true; btn.textContent = 'Please wait…';
         if (login) {
           if (!v.email || !v.password) throw new Error('Enter your email and password');
-          const r = await post('/auth/login', { email: v.email, password: v.password, role: s.side === 'PROVIDER' ? role : 'PATIENT' });
+          let r = await post('/auth/login', { email: v.email, password: v.password, role: s.side === 'PROVIDER' ? role : 'PATIENT' });
+          if (r.twoFactorRequired) r = await twoFactorStep(r);
           if (s.side === 'PROVIDER' && r.user.role === 'PATIENT') toast('No ' + role.toLowerCase() + ' profile on this account - signed in as patient');
           return startSession(r.token, r.user);
         }
@@ -150,10 +151,11 @@ export function authScreen(el, _params = {}, query = {}) {
           ? { name: v.instName, type: v.instType, licenseNumber: v.licenseNumber, email: v.email, phone: v.phone, address: v.address, state: v.state, country: v.country }
           : { specialty: v.specialty, licenseNumber: v.licenseNumber, vehicleNumber: v.vehicleNumber, address: v.address, pharmacyName: role === 'PHARMACY' ? v.name : undefined, labName: role === 'LAB' ? v.name : undefined, operatorName: role === 'AMBULANCE' ? v.name : undefined };
         if (role !== 'PATIENT' && !profile.licenseNumber) throw new Error('Licence number is required');
+        const consents = await consentSteps({ data: true, provider: role !== 'PATIENT' });
         const r = await post('/auth/register', {
           email: v.email, password: v.password, name: role === 'INSTITUTION' ? v.name : v.name, phone: v.phone || undefined, role,
           profile: role === 'PATIENT' ? {} : profile, country: c[0], currency: c[2], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || c[3],
-          locale: (navigator.language || 'en').slice(0, 2), acceptTerms: true, marketingOptIn: !!v.marketingOptIn, referralCode: v.referralCode || undefined, mkt: signupAttribution(),
+          locale: (navigator.language || 'en').slice(0, 2), acceptTerms: true, ...consents, marketingOptIn: !!v.marketingOptIn, referralCode: v.referralCode || undefined, mkt: signupAttribution(),
         });
         adEvent('CompleteRegistration');
         if (v.listingId) { auth.token = r.token; await post('/facilities/' + v.listingId + '/claim').catch((err) => toast('⚠️ ' + err.message)); }
@@ -174,7 +176,13 @@ function googleButton(host, role) {
     window.google.accounts.id.initialize({
       client_id: state.config.googleClientId,
       callback: async (resp) => {
-        try { const r = await post('/auth/google', { credential: resp.credential, role, referralCode: (() => { try { return localStorage.getItem('nh_ref') || undefined; } catch { return undefined; } })() }); startSession(r.token, r.user); } catch (e) { toastErr(e); }
+        const body = { credential: resp.credential, role, referralCode: (() => { try { return localStorage.getItem('nh_ref') || undefined; } catch { return undefined; } })() };
+        try { let r = await post('/auth/google', body); if (r.twoFactorRequired) r = await twoFactorStep(r); startSession(r.token, r.user); }
+        catch (e) {
+          if (e.status !== 428) return toastErr(e);
+          try { await consentSteps({ data: true }); const r = await post('/auth/google', { ...body, dataConsent: true }); startSession(r.token, r.user); } catch (e2) { toastErr(e2); }
+          return;
+        }
       },
     });
     window.google.accounts.id.renderButton(host, { theme: 'outline', size: 'large', width: 300, text: 'continue_with', shape: 'pill' });
@@ -197,6 +205,79 @@ async function forgot() {
     submit: 'Reset password',
     onSubmit: async (v) => { await post('/auth/reset-password', { email, code: v.code, password: v.password }); toast('✅ Password reset - sign in with your new password'); },
   });
+}
+
+
+/** Second sign-in step when the account has two-step verification on. Resolves with { token, user }. */
+export function twoFactorStep(r) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    modal(`<div class="modal-title">🔐 Enter your code</div>
+      <p class="muted">${r.method === 'email' ? `We emailed a 6-digit code to ${esc(r.sentTo || 'your email')}.` : 'Open your authenticator app and enter the 6-digit code for N-Health.'}</p>
+      <div class="form-group"><input id="tfcode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" style="font-size:20px;letter-spacing:4px;text-align:center"></div>
+      <button class="btn btn-primary btn-block" id="tfok">Verify</button>
+      ${r.method === 'email' ? '<button class="btn btn-outline btn-block mt8" id="tfre">Send a new code</button>' : ''}
+      <p class="small muted center mt8">Lost access? Enter one of your backup codes instead.</p>`, (box, close) => {
+      const go = async () => {
+        const b = $('#tfok', box); b.disabled = true;
+        try { const s = await post('/auth/2fa/verify', { challenge: r.challenge, code: $('#tfcode', box).value.trim() }); done = true; close(); resolve(s); }
+        catch (e) { toastErr(e); b.disabled = false; }
+      };
+      $('#tfok', box).onclick = go;
+      $('#tfcode', box).onkeydown = (e) => { if (e.key === 'Enter') go(); };
+      $('#tfcode', box).focus();
+      $('#tfre', box)?.addEventListener('click', async () => { try { await post('/auth/2fa/resend', { challenge: r.challenge }); toast('📧 New code sent'); } catch (e) { toastErr(e); } });
+    }, () => { if (!done) reject(new Error('Sign-in cancelled')); });
+  });
+}
+
+// ---------- Consent steps (sign-up, Google sign-up, and once for existing accounts) ----------
+export const PROVIDER_TERMS_VERSION = 'PT-2026-11';
+const DATA_USE = `<div class="consent-body">
+  <p><b>What we collect:</b> your details, the health information you add, your bookings, orders, prescriptions and test results, and your location when you search nearby or ask for emergency help.</p>
+  <p><b>Why:</b> to book and deliver the care you ask for, share what is needed with the providers you choose, keep you safe in emergencies and prevent fraud.</p>
+  <p><b>Who sees it:</b> only the providers you book with or who treat you. Every time a provider opens your records it is logged and you can see it in Settings → Privacy. We never sell your data.</p>
+  <p><b>Your choices:</b> download or delete your data at any time in Settings. You can withdraw this consent, but we then can't provide care services to you.</p>
+  <p class="small muted">Under the Nigeria Data Protection Act 2023. Full details in the <a href="#/legal/privacy" target="_blank">Privacy Policy</a>.</p></div>`;
+export function providerTermsHtml() {
+  return `<div class="consent-body"><p class="small muted">Version ${PROVIDER_TERMS_VERSION}</p><ol>
+  <li><b>Licences.</b> I hold, and will keep current, every licence my work requires (for example MDCN, NMCN, PCN premises licence, MLSCN, RRBN, state facility registration or ambulance operator licence). I will upload them for verification and tell N-Health at once if any lapses or is suspended.</li>
+  <li><b>My responsibility.</b> I am solely responsible for the care, medicines, tests and services I provide. N-Health is a booking and marketplace platform; it does not practise medicine or pharmacy.</li>
+  <li><b>In-person care.</b> Consultations booked on N-Health are in person or home visits. N-Health does not offer remote consultations.</li>
+  <li><b>Medicines.</b> Prescription-only medicines are dispensed only against a valid prescription, and I will not promote them or offer inducements to buy them.</li>
+  <li><b>Patient data.</b> I use patients' information only to provide the service they booked, keep it confidential under the Nigeria Data Protection Act 2023 and my professional rules, and do not share it outside N-Health unless the law requires it.</li>
+  <li><b>Payments.</b> Patients pay me by card (settled to my bank by the payment partner) or in cash. N-Health deducts its published commission. I will not charge patients extra outside the app for N-Health bookings.</li>
+  <li><b>Suspension.</b> N-Health may suspend my account if my licences lapse, the information I gave is false, or a complaint against me is upheld.</li></ol></div>`;
+}
+/** Shows the data-use step (and, for providers, the provider terms) and resolves when accepted; rejects if closed. */
+export function consentSteps({ data = true, provider = false } = {}) {
+  const step = (title, body, label, id) => new Promise((resolve, reject) => {
+    let ok = false;
+    modal(`<div class="modal-title">${title}</div>${body}
+      <label class="check mt8"><input type="checkbox" id="${id}chk"> <span>${label}</span></label>
+      <button class="btn btn-primary btn-block mt12" id="${id}ok" disabled>Agree and continue</button>`, (box, close) => {
+      $('#' + id + 'chk', box).onchange = (e) => { $('#' + id + 'ok', box).disabled = !e.target.checked; };
+      $('#' + id + 'ok', box).onclick = () => { ok = true; close(); resolve(true); };
+    }, () => { if (!ok) reject(new Error('Please agree to continue')); });
+  });
+  return (async () => {
+    if (data) await step('🔒 How N-Health uses your data', DATA_USE, 'I agree that N-Health may process my personal and health information as described.', 'dc');
+    if (provider) await step('🩺 Provider terms', providerTermsHtml(), `I accept the N-Health provider terms (version ${PROVIDER_TERMS_VERSION}).`, 'pt');
+    return { dataConsent: !!data, providerTerms: !!provider };
+  })();
+}
+/** Existing accounts that haven't given these consents yet are asked once after signing in. */
+export async function ensureConsents(user) {
+  if (!user || user.role === 'ADMIN') return;
+  const provider = user.role !== 'PATIENT';
+  const needData = user.dataConsent === false, needProvider = provider && user.providerTerms === false;
+  if (!needData && !needProvider) return;
+  try {
+    const r = await consentSteps({ data: needData, provider: needProvider });
+    await post('/auth/consents', r);
+    Object.assign(user, r);
+    try { localStorage.setItem('nh_user', JSON.stringify(user)); } catch { /* */ }
+  } catch { setTimeout(() => ensureConsents(user), 60_000); } // ask again shortly; the app keeps working meanwhile
 }
 
 export function legalHtml(kind) {
@@ -228,10 +309,11 @@ export function legalHtml(kind) {
     <p><b>How long we keep it:</b> while your account is open. When you delete your account we erase your profile, documents and reminders; medical and payment records are kept without your identity for as long as the law requires.</p>
     <p><b>Your rights:</b> access and download your data, correct it, object, restrict, withdraw consent, or delete your account at any time from Settings, or write to ${dpo}. You can also complain to the Nigeria Data Protection Commission (ndpc.gov.ng).</p>
     <p><b>We never sell your data.</b> Card details are handled only by our PCI-DSS certified payment partners.</p></div>`;
+  if (kind === 'provider-terms') return `<div class="modal-title">🩺 Provider terms</div>${providerTermsHtml()}`;
   return kind === 'terms' ? terms : privacy;
 }
 export const legal = (kind) => modal(legalHtml(kind));
 /** Public pages for the app stores and links: /#/legal/privacy and /#/legal/terms (also /privacy and /terms). */
 export function legalScreen(el, { kind }) {
-  el.innerHTML = `<div class="pp-hero">${logo(36)}<b>N-Health</b></div><div class="card legal-page">${legalHtml(kind === 'terms' ? 'terms' : 'privacy')}</div>`;
+  el.innerHTML = `<div class="pp-hero">${logo(36)}<b>N-Health</b></div><div class="card legal-page">${legalHtml(['terms', 'provider-terms'].includes(kind) ? kind : 'privacy')}</div>`;
 }

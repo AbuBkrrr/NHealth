@@ -6,7 +6,7 @@ This is a summary for discussion with your lawyer, not legal advice.
 
 | Feature | How it works now | Who holds the licence |
 |---|---|---|
-| Doctors, nurses, telemedicine, prescriptions | Only verified, licensed professionals can take work; N-Health doesn't practise medicine | Each professional (MDCN, NMCN) |
+| Doctor and nurse appointments (in person and home visits only, no remote consultations) | Only verified, licensed professionals can take bookings; N-Health doesn't practise medicine and doesn't offer telemedicine | Each professional (MDCN, NMCN) |
 | Pharmacy orders and delivery | The pharmacy sells, prices and delivers; prescription-only medicines need a prescription | The pharmacy (PCN premises licence). Ask your lawyer whether PCN's online-pharmacy guidelines also need N-Health listed |
 | Diagnostic centres, home sample collection | The centre collects samples and reports results | The centre (MLSCN / RRBN) |
 | Ambulances | N-Health dispatches licensed operators. No balance is needed to call one, and 112/767 are always shown | The operator (state licence) |

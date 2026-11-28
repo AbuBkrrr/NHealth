@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
@@ -60,6 +60,9 @@ export function Layout() {
             </NavLink>
           </>
         )}
+        <NavLink to="/security" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+          Account security {!user?.twoFactor && <span className="nav-count" title="Two-step verification is off">!</span>}
+        </NavLink>
         <div style={{ padding: '20px', marginTop: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{user?.name}</div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>{user?.email}</div>
@@ -69,7 +72,7 @@ export function Layout() {
         </div>
       </aside>
       <main className="main-content">
-        <Outlet />
+        {user?.mustSetup2fa && !user?.twoFactor && location.pathname !== '/security' ? <Navigate to="/security" replace /> : <Outlet />}
       </main>
     </div>
   );

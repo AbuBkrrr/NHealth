@@ -25,7 +25,30 @@ export async function verificationQueue(req: Request, res: Response) {
   });
   // The public listing each provider says is theirs (so the admin can compare name, address and registry code).
   const listings = await prisma.facilityListing.findMany({ where: { claimedByUserId: { in: users.map((u) => u.id) } }, select: { claimedByUserId: true, name: true, category: true, state: true, lga: true, address: true, nhfrCode: true, source: true } });
-  res.json(users.map((u) => ({ ...u, missingDocuments: missingProviderDocs(u.providerDocuments), claimedListing: listings.find((l) => l.claimedByUserId === u.id) || null })));
+  // When each provider was last asked for missing information (Contact button).
+  const contacts = await prisma.adminAuditLog.findMany({ where: { action: 'PROVIDER_CONTACTED', targetId: { in: users.map((u) => u.id) } }, orderBy: { createdAt: 'desc' }, select: { targetId: true, createdAt: true } });
+  res.json(users.map((u) => ({ ...u, missingDocuments: missingProviderDocs(u.providerDocuments), claimedListing: listings.find((l) => l.claimedByUserId === u.id) || null,
+    lastContactedAt: contacts.find((c) => c.targetId === u.id)?.createdAt || null })));
+}
+
+/**
+ * POST /api/admin-ops/verifications/:userId/contact { message, email, whatsapp }
+ * Tells a provider what they still need to do to be approved: in the app (always), by email and on WhatsApp.
+ */
+export async function contactProvider(req: Request, res: Response) {
+  const u = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true, name: true, email: true, phone: true, role: true } });
+  if (!u || u.role === 'PATIENT' || u.role === 'ADMIN') throw ApiError.notFound('Provider not found');
+  const message = str(req.body?.message, 3000);
+  if (!message) throw ApiError.badRequest('Write the message');
+  const sent: string[] = ['in-app'];
+  await notify(u.id, 'kyc', 'Action needed for your N-Health approval', message, { email: req.body?.email !== false, data: { verification: true } });
+  if (req.body?.email !== false) sent.push('email');
+  if (req.body?.whatsapp !== false && u.phone) {
+    const { sendWhatsApp } = await import('../../services/whatsapp');
+    if (await sendWhatsApp(u.phone, 'Action needed for your N-Health approval. ' + message)) sent.push('WhatsApp');
+  }
+  await audit(req, 'PROVIDER_CONTACTED', 'User', u.id, message.slice(0, 500));
+  res.json({ ok: true, sent });
 }
 /** POST /api/admin/verifications/:userId { decision: VERIFIED|REJECTED|SUSPENDED, note } */
 export async function decideVerification(req: Request, res: Response) {

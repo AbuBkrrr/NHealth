@@ -1,6 +1,6 @@
 import { get, getFresh, post, postLater, pendingWrites, patch, put, del, download, auth, API_BASE } from '../lib/api.js';
 import { state, setState } from '../lib/store.js';
-import { esc, $, $$, appBar, card, cardHead, item, avatar, badge, empty, skeleton, toast, toastErr, formModal, modal, confirmBox, busy, dt, ago, relDay, dateOnly, timeOnly, money, coins, fileToDataUri, pickFile, field, readForm, tabs, closeModal, webOrigin } from '../lib/ui.js';
+import { esc, $, $$, appBar, card, cardHead, item, avatar, badge, empty, skeleton, toast, toastErr, formModal, modal, confirmBox, busy, dt, ago, relDay, dateOnly, timeOnly, money, coins, fileToDataUri, pickFile, takeSelfie, field, readForm, tabs, closeModal, webOrigin } from '../lib/ui.js';
 import { on, emit } from '../lib/realtime.js';
 import { go, home } from '../lib/router.js';
 import { enablePush } from '../lib/push.js';
@@ -273,7 +273,7 @@ export async function kycScreen(el) {
       ${formOpen ? `<p class="muted mb8">Verify your identity once to unlock emergency dispatch, insurance and donations. Fill in your details as they appear on your ID and add clear photos. Your documents are stored privately and seen only by N-Health's verification team.</p>
       <form id="kycf" novalidate>
         ${field({ name: 'fullName', label: 'Full name (as on your ID)', required: true, value: state.user.name || '' })}
-        <div class="form-row">${field({ name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true })}${field({ name: 'gender', label: 'Sex', type: 'select', options: [['', '—'], 'Female', 'Male'] })}</div>
+        <div class="form-row">${field({ name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true, max: new Date().toISOString().slice(0, 10), hint: 'Day, month and year you were born' })}${field({ name: 'gender', label: 'Sex', type: 'select', options: [['', '—'], 'Female', 'Male'] })}</div>
         ${field({ name: 'phone', label: 'Phone number', type: 'tel', value: state.user.phone || '' })}
         ${field({ name: 'address', label: 'Home address', required: true })}
         <div class="form-row">${field({ name: 'city', label: 'City / town' })}${field({ name: 'state', label: 'State', type: 'select', required: true, options: [['', 'Choose…'], ...NG_STATES] })}</div>
@@ -281,7 +281,7 @@ export async function kycScreen(el) {
         ${field({ name: 'idType', label: 'ID type', type: 'select', required: true, options: [['NIN', 'National ID (NIN slip or card)'], ['PASSPORT', 'International passport'], ['DRIVERS_LICENCE', "Driver's licence"], ['VOTERS_CARD', "Voter's card"]] })}
         <div class="form-row">${field({ name: 'idNumber', label: 'ID number', required: true, inputmode: 'numeric', placeholder: '11-digit NIN' })}${field({ name: 'idExpiry', label: 'Expiry date (if any)', type: 'date' })}</div>
         <div class="kyc-uploads">
-          ${[['idFront', '🪪 Front of your ID', 'image/*,application/pdf', ''], ['idBack', '🪪 Back of your ID (if it has one)', 'image/*,application/pdf', ''], ['selfie', '🤳 Selfie holding your ID', 'image/*', 'user'], ['proofOfAddress', '🏠 Proof of address (utility bill or bank statement, last 3 months)', 'image/*,application/pdf', '']].map(([k, l, acc, cap]) => `<button type="button" class="kyc-up" data-kup="${k}" data-acc="${acc}" data-cap="${cap}"><span class="ic">⬜</span><span class="grow">${l}${k === 'idBack' ? '' : ' <span style="color:var(--error)">*</span>'}</span><span class="small muted" id="kn_${k}">Add</span></button>`).join('')}
+          ${[['idFront', '🪪 Front of your ID', 'image/*,application/pdf', ''], ['idBack', '🪪 Back of your ID (if it has one)', 'image/*,application/pdf', ''], ['selfie', '🤳 Selfie holding your ID (front camera)', 'image/*', 'user'], ['proofOfAddress', '🏠 Proof of address (utility bill or bank statement, last 3 months)', 'image/*,application/pdf', '']].map(([k, l, acc, cap]) => `<button type="button" class="kyc-up" data-kup="${k}" data-acc="${acc}" data-cap="${cap}"><span class="ic">⬜</span><span class="grow">${l}${k === 'idBack' ? '' : ' <span style="color:var(--error)">*</span>'}</span><span class="small muted" id="kn_${k}">Add</span></button>`).join('')}
         </div>
         <label class="check"><input type="checkbox" name="consent"> <span>I confirm these details are true and agree that N-Health may check them to verify my identity.</span></label>
         <button class="btn btn-primary btn-block mt8" type="submit">Submit for verification</button>
@@ -302,7 +302,7 @@ export async function kycScreen(el) {
   $('#refresh', el)?.addEventListener('click', (e) => busy(e.target, async () => { await post('/kyc/refresh'); await refreshMe(); kycScreen(el); }));
   const files = {};
   el.querySelectorAll('[data-kup]').forEach((b) => b.addEventListener('click', async () => {
-    const f = await pickFile(b.dataset.acc, { capture: b.dataset.cap || undefined }); if (!f) return;
+    const f = b.dataset.kup === 'selfie' ? await takeSelfie() : await pickFile(b.dataset.acc); if (!f) return;
     const k = b.dataset.kup;
     $('#kn_' + k, el).textContent = 'Uploading…';
     try {
@@ -315,6 +315,10 @@ export async function kycScreen(el) {
     const v = readForm(e.target);
     const need = [['fullName', 'your full name'], ['dateOfBirth', 'your date of birth'], ['address', 'your address'], ['state', 'your state'], ['idNumber', 'your ID number']].find(([k]) => !v[k]);
     if (need) return toast('⚠️ Please add ' + need[1]);
+    const dob = new Date(v.dateOfBirth), today = new Date();
+    if (isNaN(dob) || dob > today) return toast('⚠️ Your date of birth is in the future (' + v.dateOfBirth + '). Check the year.');
+    if (today.getFullYear() - dob.getFullYear() > 120) return toast('⚠️ Check the year of your date of birth');
+    if (v.idExpiry && new Date(v.idExpiry) < new Date(today.toISOString().slice(0, 10))) return toast('⚠️ This ID expired on ' + v.idExpiry + '. Use an ID that is still valid, or leave the expiry date empty if it has none.');
     for (const [k, l] of [['idFront', 'a photo of the front of your ID'], ['selfie', 'a selfie holding your ID'], ['proofOfAddress', 'your proof of address']]) if (!files[k]) return toast('⚠️ Please add ' + l);
     if (!v.consent) return toast('⚠️ Please confirm your details are true');
     await busy(e.target.querySelector('[type=submit]'), async () => {
@@ -355,6 +359,7 @@ export async function settingsScreen(el) {
       <button class="btn btn-outline btn-block btn-sm" id="push">Enable push on this device</button>`) +
     card(cardHead('🔐 Security') + `
       ${item({ icon: '🔑', title: 'Change password', attrs: 'id="pw"' })}
+      ${item({ icon: '🔐', title: 'Two-step verification', sub: state.user?.twoFactor ? 'On' : 'Off - add a code at sign-in to protect your health data', attrs: 'id="tfa"' })}
       ${item({ icon: '📵', title: 'Sign out of all devices', attrs: 'id="all"' })}
       ${item({ icon: '🪪', title: 'Identity verification', sub: (me.kycStatus || '').replace('_', ' ').toLowerCase(), attrs: 'data-go="/kyc"' })}`) +
     card(cardHead('🛡️ Privacy & your data') + `
@@ -367,6 +372,7 @@ export async function settingsScreen(el) {
   $$('[data-pref]', el).forEach((c) => (c.onchange = async () => { const np = { ...(state.user.notificationPrefs || {}), [c.dataset.pref]: c.checked }; await patch('/auth/profile', { notificationPrefs: np }).catch(toastErr); state.user.notificationPrefs = np; }));
   $('#mkt', el).onchange = (e) => patch('/auth/profile', { marketingOptIn: e.target.checked }).catch(toastErr);
   $('#push', el).onclick = (e) => busy(e.target, async () => { await enablePush(); toast('✅ Push notifications enabled'); });
+  $('#tfa', el).onclick = () => twoFactorSettings(() => settingsScreen(el));
   $('#pw', el).onclick = () => formModal('Change password', [
     { name: 'currentPassword', label: 'Current password', type: 'password' },
     { name: 'newPassword', label: 'New password', type: 'password', autocomplete: 'new-password', required: true, hint: 'At least 8 characters' },
@@ -504,4 +510,62 @@ export async function earningsScreen(el, _p, q) {
     <p><b>Escrow</b> payments go straight to your bank through PayScrow when the patient releases them.</p>
     <p><b>Payouts</b>: ${sched}, when your available balance is at least ${money(pol.minPayout)}. You can also cash out once a day.</p></div>`);
   el.onclick = async (ev) => { const b = ev.target.closest('[data-got]'); if (b) await busy(b, async () => { await post('/payments/' + b.dataset.got + '/confirm'); toast('✅ Cash receipt confirmed'); earningsScreen(el, _p, q); }); };
+}
+
+// ================= TWO-STEP VERIFICATION =================
+const saveUser = (patch, token) => {
+  if (token) auth.token = token;
+  auth.user = { ...auth.user, ...patch };
+  setState({ user: auth.user });
+};
+function showBackupCodes(codes) {
+  modal(`<div class="modal-title">🔑 Your backup codes</div>
+    <p class="muted small">Each code works once if you lose your phone or can't get emails. Save them now: they won't be shown again.</p>
+    <pre class="backup-codes">${codes.map(esc).join('\n')}</pre>
+    <div class="row"><button class="btn btn-primary btn-sm grow" id="bccopy">Copy</button><button class="btn btn-outline btn-sm grow" id="bcdl">Download</button></div>`, (box) => {
+    $('#bccopy', box).onclick = () => navigator.clipboard?.writeText(codes.join('\n')).then(() => toast('📋 Copied'));
+    $('#bcdl', box).onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([`N-Health backup codes for ${state.user.email}\nEach code works once.\n\n${codes.join('\n')}\n`], { type: 'text/plain' })); a.download = 'nhealth-backup-codes.txt'; a.click(); };
+  });
+}
+async function twoFactorSettings(after) {
+  const st = await get('/auth/2fa').catch(toastErr);
+  if (!st) return;
+  if (st.enabled) {
+    return formModal('🔐 Two-step verification is on', [{ name: 'code', label: st.method === 'totp' ? 'Code from your authenticator app (or a backup code)' : 'Code we email you (or a backup code)', inputmode: 'numeric' }], {
+      intro: `<p class="muted mb8">Method: <b>${st.method === 'totp' ? 'Authenticator app' : 'Code by email'}</b> • ${st.backupCodesLeft} backup codes left.${st.method === 'email' ? ' Leave the code empty and press a button to get one by email.' : ''}</p>
+        <button type="button" class="btn btn-outline btn-block mb8" id="newbc">New backup codes</button>`,
+      submit: st.required ? 'Close' : 'Turn off',
+      onMount: (box) => {
+        $('#newbc', box).onclick = async () => { try { const r = await post('/auth/2fa/backup-codes', { code: box.querySelector('[name=code]').value || undefined }); if (r.codeSent) return toast('📧 Code sent to ' + r.codeSent); showBackupCodes(r.backupCodes); } catch (e) { toastErr(e); } };
+      },
+      onSubmit: async (v) => {
+        if (st.required) return;
+        const r = await post('/auth/2fa/disable', { code: v.code || undefined });
+        if (r.codeSent) { toast('📧 Code sent to ' + r.codeSent + ' - enter it and press Turn off'); throw new Error('Enter the code we emailed you'); }
+        saveUser({ twoFactor: null }); toast('Two-step verification is off'); after?.();
+      },
+    });
+  }
+  modal(`<div class="modal-title">🔐 Two-step verification</div>
+    <p class="muted">Signing in will need your password <b>and</b> a 6-digit code, so nobody can open your health records with your password alone.</p>
+    <button class="btn btn-primary btn-block" id="tf-app">📱 Use an authenticator app (recommended)</button>
+    <button class="btn btn-outline btn-block mt8" id="tf-mail">✉️ Get codes by email</button>`, (box) => {
+    $('#tf-app', box).onclick = () => busy($('#tf-app', box), async () => {
+      const s = await post('/auth/2fa/setup', { method: 'totp' });
+      formModal('📱 Set up your authenticator app', [{ name: 'code', label: 'Enter the 6-digit code the app shows', inputmode: 'numeric', required: true }], {
+        intro: `<p class="small muted">1. Install Google Authenticator, Microsoft Authenticator or Authy.<br>2. Scan this code (or tap the link on this phone):</p>
+          <div class="center"><img src="${s.qr}" width="180" height="180" alt="QR code for your authenticator app"><div><a href="${esc(s.otpauth)}" class="small">Open in authenticator app</a></div>
+          <div class="small muted mt8">Or enter this key: <code style="user-select:all;word-break:break-all">${esc(s.secret)}</code></div></div>`,
+        submit: 'Turn on',
+        onSubmit: async (v) => { const r = await post('/auth/2fa/enable', { method: 'totp', code: v.code }); saveUser({ twoFactor: 'totp' }, r.token); toast('🔐 Two-step verification is on'); setTimeout(() => showBackupCodes(r.backupCodes), 50); after?.(); },
+      });
+    });
+    $('#tf-mail', box).onclick = () => busy($('#tf-mail', box), async () => {
+      const s = await post('/auth/2fa/setup', { method: 'email' });
+      formModal('✉️ Confirm your email code', [{ name: 'code', label: `Code we emailed to ${s.sentTo}`, inputmode: 'numeric', required: true }], {
+        submit: 'Turn on',
+        onSubmit: async (v) => { const r = await post('/auth/2fa/enable', { method: 'email', code: v.code }); saveUser({ twoFactor: 'email' }, r.token); toast('🔐 Two-step verification is on'); setTimeout(() => showBackupCodes(r.backupCodes), 50); after?.(); },
+      });
+    });
+  });
 }

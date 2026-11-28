@@ -134,3 +134,23 @@ export async function attributeSignup(user: { id: string; email: string; role: s
     }
   } catch (e) { console.warn('[marketing] attribution failed', (e as Error).message); }
 }
+
+/**
+ * A member's invite link (/?ref=CODE) is tracked as marketing link "inv-CODE", created the first time it is opened,
+ * so invite opens, devices (same phone or shared on), places and sign-ups show up in Marketing like any campaign.
+ */
+export async function ensureInviteLink(slug: string) {
+  const m = /^inv-([A-Z0-9]{4,20})$/i.exec(slug);
+  if (!m) return null;
+  const code = m[1].toUpperCase();
+  const canonical = 'inv-' + code;
+  const existing = await prisma.marketingLink.findUnique({ where: { slug: canonical } });
+  if (existing) return existing;
+  const u = await prisma.user.findUnique({ where: { referralCode: code }, select: { id: true, name: true, role: true } });
+  if (!u) return null;
+  return prisma.marketingLink.upsert({
+    where: { inviterId: u.id },
+    create: { slug: canonical, label: `Invite · ${u.name}`, channel: 'invite', campaign: 'invites', audience: u.role === 'PATIENT' ? 'PATIENT' : 'ALL', landing: 'signup', inviterId: u.id, notes: 'Created automatically from the member\'s invite link' },
+    update: {},
+  }).catch(() => prisma.marketingLink.findUnique({ where: { slug: canonical } }));
+}

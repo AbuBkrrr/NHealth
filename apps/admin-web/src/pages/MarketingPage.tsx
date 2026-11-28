@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, getErrorMessage } from '../api/client';
+import { ThreadModal } from './OpsPages';
 
 /**
  * Super admin → Marketing.
@@ -49,7 +50,7 @@ export function MarketingPage() {
   const [linkId, setLinkId] = useState('');
   const ov = useLoad<any>(`/admin-ops/marketing/overview?days=${days}${linkId ? '&linkId=' + linkId : ''}`, null);
   const links = useLoad<any[]>('/admin-ops/marketing/links', []);
-  const TABS: [string, string][] = [['overview', 'Overview'], ['opens', 'Recent opens'], ['links', 'Links, QR & share kit'], ['leads', 'Enquiries (Talk to our team)'], ['broadcast', 'Broadcast'], ['settings', 'Ads & page settings']];
+  const TABS: [string, string][] = [['overview', 'Overview'], ['opens', 'Recent opens'], ['links', 'Links, QR & share kit'], ['leads', 'Enquiries (Talk to our team)'], ['invites', 'Invites'], ['broadcast', 'Broadcast'], ['settings', 'Ads & page settings']];
   return (
     <div>
       <h1 className="page-title">Marketing</h1>
@@ -67,6 +68,7 @@ export function MarketingPage() {
       {tab === 'opens' && <Opens ov={ov.data} />}
       {tab === 'links' && <Links links={links} />}
       {tab === 'leads' && <Leads ov={ov.data} reload={ov.reload} />}
+      {tab === 'invites' && <Invites />}
       {tab === 'broadcast' && <Broadcast links={links.data} />}
       {tab === 'settings' && <Settings />}
     </div>
@@ -219,19 +221,28 @@ function Links({ links }: { links: { data: any[]; reload: () => void } }) {
 }
 
 function Leads({ ov, reload }: { ov: any; reload: () => void }) {
+  const [open, setOpen] = useState<any | null>(null);
+  const load = useCallback(async () => (await api.get(`/admin-ops/marketing/leads/${open?.id}/messages`)).data.messages, [open]);
   if (!ov) return <div className="empty-state">Loading…</div>;
+  const phone = (p?: string) => String(p || '').replace(/\D/g, '').replace(/^0/, '234');
   const setStatus = async (id: string, status: string) => { await api.patch(`/admin-ops/marketing/leads/${id}`, { status }); reload(); };
   return (
     <div className="card">
       <div className="toolbar"><h3 style={{ margin: 0, flex: 1 }}>Leads from the pitch page</h3><button className="outline" onClick={() => download('/admin-ops/marketing/leads.csv', 'nhealth-leads.csv')}>Export CSV</button></div>
-      <table><thead><tr><th>When</th><th>Name</th><th>Contact</th><th>Interest</th><th>From link</th><th>Location</th><th>Opens before form</th><th>Message</th><th>Status</th></tr></thead>
+      <table><thead><tr><th>When</th><th>Name</th><th>Contact</th><th>Interest</th><th>From link</th><th>Location</th><th>Opens before form</th><th>Message</th><th>Status</th><th /></tr></thead>
         <tbody>{ov.leads.map((l: any) => (
           <tr key={l.id}><td>{fmt(l.createdAt)}</td><td><b>{l.name}</b>{l.organization && <div className="mk-sub">{l.organization}</div>}</td>
             <td>{l.email}<div className="mk-sub">{l.phone}</div>{!l.consent && <div className="mk-sub">no marketing consent</div>}</td><td>{l.interest}</td><td>{l.link}</td>
             <td>{[l.city, l.country].filter(Boolean).join(', ') || '—'}</td><td>{l.opensBefore ? `opened ${l.opensBefore}×` : '—'}</td><td className="mk-sub">{l.message}</td>
-            <td><select style={{ minWidth: 130 }} value={l.status} onChange={(e) => setStatus(l.id, e.target.value)}>{['NEW', 'CONTACTED', 'REGISTERED', 'LOST'].map((s) => <option key={s}>{s}</option>)}</select></td></tr>
+            <td><select style={{ minWidth: 130 }} value={l.status} onChange={(e) => setStatus(l.id, e.target.value)}>{['NEW', 'CONTACTED', 'REGISTERED', 'LOST'].map((s) => <option key={s}>{s}</option>)}</select></td>
+            <td><button onClick={() => setOpen(l)}>Reply</button></td></tr>
         ))}</tbody></table>
       {ov.leads.length === 0 && <div className="empty-state">No leads yet.</div>}
+      {open && <ThreadModal title={`Reply to ${open.name}`} sub={[open.email, open.phone, open.organization].filter(Boolean).join(' · ')} load={load}
+        channels={[...(open.email ? [['email', 'Send by email'] as [string, string]] : []), ...(open.phone ? [['whatsapp', 'Send on WhatsApp'] as [string, string]] : [])]}
+        send={async (body, channel) => { const r = await api.post(`/admin-ops/marketing/leads/${open.id}/reply`, { body, channel }); reload(); return r.data.warning; }}
+        extra={open.phone ? <a className="mk-btn" target="_blank" rel="noreferrer" href={`https://wa.me/${phone(open.phone)}`}>Open WhatsApp chat</a> : undefined}
+        onClose={() => { setOpen(null); reload(); }} />}
     </div>
   );
 }
@@ -303,5 +314,38 @@ function Settings() {
       </div>
       <button onClick={save}>Save</button> {msg && <span className="mk-sub">{msg}</span>}
     </div>
+  );
+}
+
+/** Members' invite links: who invites, where they share, whether links get passed on, and who joins. */
+function Invites() {
+  const [days, setDays] = useState(30);
+  const [r, setR] = useState<any>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => { api.get('/admin-ops/marketing/invites?days=' + days).then((x) => setR(x.data)).catch((e) => setErr(getErrorMessage(e))); }, [days]);
+  if (err) return <div className="error-text">{err}</div>;
+  if (!r) return <div className="empty-state">Loading…</div>;
+  const t = r.totals;
+  return (
+    <>
+      <div className="toolbar"><select value={days} onChange={(e) => setDays(Number(e.target.value))}>{[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}</select></div>
+      <div className="stat-grid">
+        {[[t.inviters, 'Members inviting'], [t.opens, 'Invite link opens'], [t.devices, 'Different devices'], [t.shared, 'Links passed on (2+ devices)'], [t.signups, 'Joined'], [t.confirmed, 'Confirmed (earned a coin)']].map(([v, l]) => (
+          <div className="stat-card" key={String(l)}><div className="stat-number">{v}</div><div className="stat-label">{l}</div></div>))}
+      </div>
+      <div className="card" style={{ padding: 0 }}>
+        <h3 style={{ margin: 12 }}>Invite links by member</h3>
+        <p className="page-subtitle" style={{ margin: '0 12px 8px' }}>Every member's invite link (/?ref=CODE) is tracked automatically. "Shared" means it was opened on several different phones, so it was passed on. "Their invitees invited" shows word of mouth spreading.</p>
+        <table><thead><tr><th>Member</th><th>Code</th><th>Opens</th><th>Devices</th><th>Same device again</th><th>Verdict</th><th>Shared from</th><th>Where</th><th>Joined</th><th>Confirmed</th><th>Coins</th><th>Their invitees invited</th><th>Last open</th></tr></thead>
+          <tbody>{r.rows.map((x: any) => (
+            <tr key={x.slug}><td><b>{x.inviter?.name}</b><div className="mk-sub">{x.inviter?.role} · {x.inviter?.email}</div></td><td>{x.inviter?.code}</td>
+              <td>{x.opens}</td><td>{x.devices}</td><td>{x.repeatOpens}</td>
+              <td><span className={`badge ${x.devices > 1 ? 'badge-warning' : 'badge-role'}`}>{x.verdict}</span></td>
+              <td className="mk-sub">{Object.entries(x.channels).map(([k, n]) => `${k} ${n}`).join(' · ') || '—'}</td>
+              <td className="mk-sub">{x.cities.join(', ') || '—'}</td>
+              <td><b>{x.signups}</b></td><td>{x.confirmed}</td><td>{x.coins}</td><td>{x.inviteesWhoInvited}</td><td>{fmt(x.lastOpen)}</td></tr>))}</tbody></table>
+        {r.rows.length === 0 && <div className="empty-state">No invite links opened in this period yet.</div>}
+      </div>
+    </>
   );
 }

@@ -41,6 +41,8 @@ const mail = (r) => `${r}.${S}@test.io`;
     return txt;
   };
 
+  // Sign-up consent steps: provider terms (providers) and data-use consent (everyone)
+  const agree = async (p) => { for (let i = 0; i < 2; i++) { const id = await p.waitForSelector('#ptchk, #dcchk', { timeout: 8000 }).then((e) => e.getAttribute('id')).catch(() => null); if (!id) return; await p.check('#' + id); await p.click('#' + id.replace('chk', 'ok')); await p.waitForTimeout(400); } };
   // ---------------- 1. Patient sign-up through the UI ----------------
   const pp = await newPage();
   await pp.goto(WEB + '/'); await pp.waitForTimeout(1500);
@@ -54,7 +56,7 @@ const mail = (r) => `${r}.${S}@test.io`;
   await pp.fill('[name=password]', 'password123'); await pp.fill('[name=password2]', 'password123');
   await pp.click('#auth-form [type=submit]'); await pp.waitForTimeout(1500);
   if ((await pp.textContent('#app')).includes('Hello')) fail('signup blocked without accepting terms'); else pass('signup requires terms acceptance');
-  await pp.check('[name=acceptTerms]'); await pp.click('#auth-form [type=submit]'); await pp.waitForTimeout(2500);
+  await pp.check('[name=acceptTerms]'); await pp.click('#auth-form [type=submit]'); await agree(pp); await pp.waitForTimeout(2500);
   const ptxt = await pp.textContent('#app');
   ptxt.includes('Hello') ? pass('patient sign-up via UI → home') : fail('patient sign-up via UI', ptxt.slice(0, 200));
   const patient = await (async () => { const r = await j('/auth/login', { email: mail('patient'), password: 'password123' }); return r.data; })();
@@ -67,7 +69,7 @@ const mail = (r) => `${r}.${S}@test.io`;
   await dp.selectOption('#prov-role', 'DOCTOR'); await dp.waitForTimeout(300);
   await dp.fill('[name=name]', 'Tunde Bello'); await dp.fill('[name=email]', mail('doctor')); await dp.fill('[name=phone]', '08032223333');
   await dp.fill('[name=licenseNumber]', 'MDCN/12345'); await dp.fill('[name=password]', 'password123'); await dp.fill('[name=password2]', 'password123');
-  await dp.check('[name=acceptTerms]'); await dp.click('#auth-form [type=submit]'); await dp.waitForTimeout(2500);
+  await dp.check('[name=acceptTerms]'); await dp.click('#auth-form [type=submit]'); await agree(dp); await dp.waitForTimeout(2500);
   (await dp.textContent('#app')).match(/under review|Verify/) ? pass('doctor sign-up via UI → dashboard with verification banner') : fail('doctor sign-up via UI', (await dp.textContent('#app')).slice(0, 200));
   const doctor = (await j('/auth/login', { email: mail('doctor'), password: 'password123', role: 'PROVIDER' })).data;
 
@@ -78,11 +80,11 @@ const mail = (r) => `${r}.${S}@test.io`;
   await ip.fill('[name=instName]', 'Lagos City Hospital'); await ip.fill('[name=licenseNumber]', 'HEFAMAA-777'); await ip.fill('[name=name]', 'Ngozi Admin');
   await ip.fill('[name=email]', mail('institution')); await ip.fill('[name=phone]', '08034445555'); await ip.fill('[name=address]', '12 Marina, Lagos');
   await ip.fill('[name=password]', 'password123'); await ip.fill('[name=password2]', 'password123');
-  await ip.check('[name=acceptTerms]'); await ip.click('#auth-form [type=submit]'); await ip.waitForTimeout(2500);
+  await ip.check('[name=acceptTerms]'); await ip.click('#auth-form [type=submit]'); await agree(ip); await ip.waitForTimeout(2500);
   (await ip.textContent('#app')).includes('Lagos City Hospital') ? pass('institution sign-up via UI → dashboard') : fail('institution sign-up via UI', (await ip.textContent('#app')).slice(0, 200));
   const inst = (await j('/auth/login', { email: mail('institution'), password: 'password123', role: 'PROVIDER' })).data;
 
-  const reg = async (role, profile) => (await must(`${role.toLowerCase()} sign-up API`, j('/auth/register', { email: mail(role.toLowerCase()), password: 'password123', name: role[0] + role.slice(1).toLowerCase() + ' Test', role, phone: '0803' + Math.floor(Math.random() * 1e7), acceptTerms: true, profile })));
+  const reg = async (role, profile) => (await must(`${role.toLowerCase()} sign-up API`, j('/auth/register', { email: mail(role.toLowerCase()), password: 'password123', name: role[0] + role.slice(1).toLowerCase() + ' Test', role, phone: '0803' + Math.floor(Math.random() * 1e7), acceptTerms: true, dataConsent: true, providerTerms: true, profile })));
   const pharm = await reg('PHARMACY', { pharmacyName: 'HealthPlus Yaba', licenseNumber: 'PCN-1', address: 'Yaba' });
   const lab = await reg('LAB', { labName: 'Synlab Ikeja', licenseNumber: 'MLSCN-1', address: 'Ikeja' });
   const nurse = await reg('NURSE', { licenseNumber: 'NMCN-1', specialty: 'Home Care' });
@@ -302,7 +304,7 @@ const mail = (r) => `${r}.${S}@test.io`;
   await pp.goto(WEB + '/#/profile'); await pp.waitForTimeout(1500);
   await pp.click('#logout'); await pp.waitForTimeout(500); await pp.click('#modal [data-yes]'); await pp.waitForTimeout(1500);
   (await pp.textContent('#app')).includes('Welcome to N-Health') ? pass('logout returns to sign-in') : fail('logout');
-  const tmp = (await j('/auth/register', { email: mail('deleteme'), password: 'password123', name: 'Del', role: 'PATIENT', acceptTerms: true })).data;
+  const tmp = (await j('/auth/register', { email: mail('deleteme'), password: 'password123', name: 'Del', role: 'PATIENT', acceptTerms: true, dataConsent: true, providerTerms: true })).data;
   await must('privacy export', j('/privacy/export', null, tmp.token));
   await must('account deletion', j('/privacy/delete', { confirm: 'DELETE' }, tmp.token));
 
