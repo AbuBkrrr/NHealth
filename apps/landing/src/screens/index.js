@@ -37,6 +37,13 @@ const withInvite = (screen) => async (el, ...a) => {
     el.insertAdjacentHTML('beforeend', `<div class="card flyer-card"><div class="row"><div style="font-size:28px">📣</div><div class="grow"><b>Your N-Health flyer</b><div class="small muted">A flyer with your QR code. Customers scan it and land on your page to book or order.</div></div></div>
       <button class="btn btn-primary btn-sm btn-block mt8" data-go="/flyer">Get my flyer</button></div>`);
   }
+  // New accounts confirm their email from home (it also completes the invite of whoever invited them).
+  const u = state.user;
+  if (u && !u.emailVerified && !u.phoneVerified && el.isConnected && !el.querySelector('#vemail')) {
+    const esc = (x) => String(x || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    el.querySelector('.app-bar')?.insertAdjacentHTML('afterend', `<div class="banner info" id="vemail">📧 Confirm your email to secure your account. We sent a 6-digit code to ${esc(u.email || '')}. <button class="btn btn-sm btn-primary" id="vemailb">Confirm</button></div>`);
+    el.querySelector('#vemailb')?.addEventListener('click', () => S.verifyEmail(() => el.querySelector('#vemail')?.remove()));
+  }
   if (html && el.isConnected && !el.querySelector('.invite-card')) el.insertAdjacentHTML('beforeend', html);
   if (html) C.loadInviteStats(el);
   return r;

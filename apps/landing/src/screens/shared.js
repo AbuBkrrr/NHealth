@@ -176,7 +176,7 @@ export async function profileScreen(el) {
     const text = `Join me on N-Health - doctors, pharmacies, labs and emergency help in one app. Use my code ${me.referralCode}: ${webOrigin()}`;
     if (navigator.share) navigator.share({ title: 'N-Health', text }).catch(() => null); else { await navigator.clipboard?.writeText(text); toast('📋 Invite copied'); }
   };
-  $('#ve', el)?.addEventListener('click', verifyEmail);
+  $('#ve', el)?.addEventListener('click', () => verifyEmail());
   $('#vp', el)?.addEventListener('click', verifyPhone);
   $$('[data-switch]', el).forEach((c) => (c.onclick = async () => {
     if (c.dataset.switch === role) return;
@@ -233,9 +233,9 @@ async function providerCard(host, role) {
     { onSubmit: async (v) => { await patch('/provider-profile', v); toast('✅ Saved'); providerCard(host, role); } });
 }
 
-async function verifyEmail() {
+export async function verifyEmail(after) {
   try { await post('/auth/verify-email/send'); } catch (e) { return toastErr(e); }
-  formModal('📧 Verify email', [{ name: 'code', label: 'Code sent to your email', inputmode: 'numeric', required: true }], { submit: 'Verify', onSubmit: async (v) => { await post('/auth/verify-email/confirm', v); toast('✅ Email verified'); go('/profile', { replace: true }); } });
+  formModal('📧 Verify email', [{ name: 'code', label: 'Code sent to your email', inputmode: 'numeric', required: true }], { submit: 'Verify', onSubmit: async (v) => { await post('/auth/verify-email/confirm', v); toast('✅ Email verified'); if (after) { await refreshMe().catch(() => null); return after(); } go('/profile', { replace: true }); } });
 }
 async function verifyPhone() {
   try { await post('/auth/verify-phone/send'); } catch (e) { return toastErr(e); }

@@ -21,6 +21,7 @@ export async function homeScreen(el) {
     <div class="balance-card"><div class="balance-label">Reward coins</div><div class="balance-amount" id="bal">…</div>
       <div style="font-size:11px;opacity:.85;margin-top:2px" id="ins"></div>
       <div class="balance-actions"><button class="btn-primary" id="checkin">📅 Check in +1 🪙</button><button class="btn-outline" data-go="/patient/wallet">🎯 Quests</button></div></div>
+    ${!u.emailVerified && !u.phoneVerified ? `<div class="banner info" id="vemail">📧 Confirm your email to secure your account. We sent a 6-digit code to ${esc(u.email || '')}. <button class="btn btn-sm btn-primary" id="vemailb">Confirm</button></div>` : ''}
     ${u.kycStatus === 'IN_REVIEW' ? '<div class="banner info" data-go="/kyc">⏳ Your identity documents are being checked. We will notify you when it is done.</div>' : u.kycStatus !== 'APPROVED' ? '<div class="banner info">🪪 Verify your identity to unlock emergency dispatch, insurance and donations.<button class="btn btn-sm btn-primary" data-go="/kyc">Verify</button></div>' : ''}
     <div class="quick-actions">
       <div class="quick-action emergency" data-go="/patient/emergency" tabindex="0"><span class="icon">🚨</span><span class="label">${t('Emergency')}</span></div>
@@ -40,6 +41,7 @@ export async function homeScreen(el) {
     <div id="fhp"></div>${inviteCard()}<div id="up">${skeleton(1)}</div><div id="rem"></div><div id="rx"></div><div id="fac"></div><div id="tip"></div>`;
   loadBalance().then((b) => { $('#bal', el) && ($('#bal', el).textContent = '🪙 ' + coins(b)); });
   loadInviteStats(el);
+  $('#vemailb', el)?.addEventListener('click', () => import('./shared.js').then((m) => m.verifyEmail(() => $('#vemail', el)?.remove())));
   $('#checkin', el)?.addEventListener('click', (e) => busy(e.target, async () => {
     try { const r = await post('/quests/checkin/claim'); toast(`📅 Checked in: +${r.coins} 🪙${r.streak > 1 ? ' • 🔥 ' + r.streak + '-day streak' : ''}`); loadBalance().then((b) => { const x = $('#bal', el); if (x) x.textContent = '🪙 ' + coins(b); }); e.target.textContent = '✓ Checked in today'; }
     catch (err) { if (err.status === 409) { e.target.textContent = '✓ Checked in today'; toast('You already checked in today. See you tomorrow!'); } else throw err; }

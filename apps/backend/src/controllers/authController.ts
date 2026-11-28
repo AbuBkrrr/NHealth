@@ -467,7 +467,7 @@ export async function confirmVerifyPhone(req: Request, res: Response) {
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export async function googleAuth(req: Request, res: Response) {
-  const { credential, role = 'PATIENT' } = req.body;
+  const { credential, role = 'PATIENT', referralCode } = req.body;
   if (!credential) return res.status(400).json({ error: 'Missing credential' });
 
   try {
@@ -486,6 +486,8 @@ export async function googleAuth(req: Request, res: Response) {
       // Auto-register with Google — only supports PATIENT self-registration.
       // Provider signups must go through email registration to collect license/specialty.
       const finalRole = (role === 'PROVIDER') ? 'PATIENT' : role;
+      // Invite links work for Google sign-ups too.
+      const referrer = typeof referralCode === 'string' && referralCode ? await prisma.user.findUnique({ where: { referralCode: referralCode.toUpperCase().slice(0, 20) } }) : null;
 
       const createdUser = await prisma.user.create({
         data: {
@@ -498,10 +500,13 @@ export async function googleAuth(req: Request, res: Response) {
           termsAcceptedAt: new Date(),
           privacyAcceptedAt: new Date(),
           referralCode: makeReferralCode(),
+          referredById: referrer?.id,
         },
       });
 
       await createRoleProfile(createdUser.id, finalRole as any, {}).catch(() => {});
+      // Google has already confirmed the email, so the person who invited them earns their coin now.
+      await rewardInviter(createdUser.id).catch(() => null);
 
       user = await getUserWithProfiles({ id: createdUser.id });
     }

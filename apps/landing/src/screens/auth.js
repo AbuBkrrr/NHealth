@@ -174,7 +174,7 @@ function googleButton(host, role) {
     window.google.accounts.id.initialize({
       client_id: state.config.googleClientId,
       callback: async (resp) => {
-        try { const r = await post('/auth/google', { credential: resp.credential, role }); startSession(r.token, r.user); } catch (e) { toastErr(e); }
+        try { const r = await post('/auth/google', { credential: resp.credential, role, referralCode: (() => { try { return localStorage.getItem('nh_ref') || undefined; } catch { return undefined; } })() }); startSession(r.token, r.user); } catch (e) { toastErr(e); }
       },
     });
     window.google.accounts.id.renderButton(host, { theme: 'outline', size: 'large', width: 300, text: 'continue_with', shape: 'pill' });
