@@ -115,12 +115,12 @@ export function toast(msg, ms = 2800) {
 export const toastErr = (e) => toast('⚠️ ' + (e?.message || 'Something went wrong'));
 
 let modalClose = null;
-export function modal(html, onMount) {
+export function modal(html, onMount, onClose) {
   const ov = $('#modal');
   const box = ov.querySelector('.modal-content');
   box.innerHTML = `<button class="close-btn" aria-label="Close" data-close>✕</button>${html}`;
   ov.classList.add('active');
-  const close = () => { ov.classList.remove('active'); box.innerHTML = ''; modalClose = null; };
+  const close = () => { if (modalClose !== close) return; ov.classList.remove('active'); box.innerHTML = ''; modalClose = null; onClose?.(); };
   modalClose = close;
   box.querySelector('[data-close]').onclick = close;
   ov.onclick = (e) => { if (e.target === ov) close(); };

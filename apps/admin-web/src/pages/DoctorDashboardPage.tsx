@@ -7,7 +7,7 @@ export function DoctorDashboardPage() {
 
   const appointments = [
     { id: '1', patientName: 'Amara Okafor', time: '10:00 AM', type: 'In-Person', status: 'confirmed' },
-    { id: '2', patientName: 'John Adeyemi', time: '11:30 AM', type: 'Video Call', status: 'pending' },
+    { id: '2', patientName: 'John Adeyemi', time: '11:30 AM', type: 'In person', status: 'pending' },
   ];
 
   const patients = [

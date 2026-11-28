@@ -1058,3 +1058,20 @@ describe('consents, support chat, enquiry replies, invite tracking, in-person on
     } finally { await saveInsuranceBroker({ enabled: false }, admin.id); }
   });
 });
+
+describe('provider verification contact', () => {
+  it('lets an admin tell a pending provider what is missing (in-app + email), logged and shown in the queue', async () => {
+    const admin = await prisma.user.create({ data: { email: `vc-${uniq()}@test.io`, name: 'Verifier', passwordHash: 'x', role: 'ADMIN' } });
+    const adminTok = (await import('../src/utils/jwt')).signToken({ userId: admin.id, role: 'ADMIN' as any, isSuperAdmin: false, tv: 0 } as any, process.env.JWT_SECRET!, '1h');
+    const doc = await register('DOCTOR', { specialty: 'GP', licenseNumber: 'MDCN-VC' + uniq() });
+    const pat = await register('PATIENT');
+    expect((await request(app).post(`/api/admin-ops/verifications/${pat.user.id}/contact`).set(auth(adminTok)).send({ message: 'x' })).status).toBe(404);
+    const r = await request(app).post(`/api/admin-ops/verifications/${doc.user.id}/contact`).set(auth(adminTok)).send({ message: 'Please upload your MDCN licence and proof of address.' });
+    expect(r.status).toBe(200);
+    expect(r.body.sent).toContain('in-app');
+    const n = await prisma.notification.findFirst({ where: { userId: doc.user.id, type: 'kyc' }, orderBy: { createdAt: 'desc' } });
+    expect(n?.body).toMatch(/MDCN licence/);
+    const q = await request(app).get('/api/admin-ops/verifications?status=PENDING&q=' + encodeURIComponent(doc.email)).set(auth(adminTok));
+    expect(q.body[0].lastContactedAt).toBeTruthy();
+  });
+});

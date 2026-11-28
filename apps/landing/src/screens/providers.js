@@ -42,7 +42,7 @@ export async function doctorRequests(el, _p, q) {
     const list = all.filter((a) => (tab === 'pending' ? a.status === 'PENDING' : tab === 'upcoming' ? ['CONFIRMED', 'IN_PROGRESS'].includes(a.status) : ['COMPLETED', 'CANCELLED'].includes(a.status)))
       .sort((a, b) => (tab === 'past' ? -1 : 1) * (new Date(a.scheduledAt) - new Date(b.scheduledAt)));
     tb.innerHTML = list.length ? list.map((a) => `<div class="service-request"><div class="header"><span class="patient-name">${esc(a.patient.user.name)}</span>${badge(a.status)}</div>
-      <div class="service-type">📅 ${relDay(a.scheduledAt)} • ${esc(a.type === 'VIDEO' ? 'Remote' : 'In person')} • ${esc(a.paymentStatus.replace('_', ' ').toLowerCase())}</div>${a.reason ? `<div class="muted small">${esc(a.reason)}</div>` : ''}
+      <div class="service-type">📅 ${relDay(a.scheduledAt)} • In person • ${esc(a.paymentStatus.replace('_', ' ').toLowerCase())}</div>${a.reason ? `<div class="muted small">${esc(a.reason)}</div>` : ''}
       <div class="actions">${a.status === 'PENDING' ? `<button class="accept" data-act="CONFIRM" data-id="${a.id}">✓ Accept</button><button class="refer" data-refer="${a.id}">↗ Refer</button><button class="decline" data-act="CANCEL" data-id="${a.id}">✕ Decline</button>` : ''}
       ${['CONFIRMED', 'IN_PROGRESS'].includes(a.status) ? `<button class="accept" data-act="COMPLETE" data-id="${a.id}">✓ Complete</button><button class="refer" data-go="/doctor/patient/${a.patientId}">📋 Record</button>` : ''}
       <button class="refer" data-go="/chat/${a.patient.user.id}">💬</button></div></div>`).join('') : empty('📋', tab === 'pending' ? 'No pending requests' : 'Nothing here');

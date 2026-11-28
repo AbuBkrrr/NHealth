@@ -6,6 +6,7 @@ import { render, go, back, home, onNav, current, softRefresh, currentPattern } f
 import { connect, disconnect } from './lib/realtime.js';
 import { registerSW } from './lib/push.js';
 import { initInstallPrompt } from './lib/install.js';
+import { initSupport } from './lib/support.js';
 import { toast, esc, $ } from './lib/ui.js';
 import { t } from './lib/i18n.js';
 import { S, P, V } from './screens/index.js';
@@ -53,6 +54,7 @@ export async function startSession(token, user) {
   try { next = sessionStorage.getItem('nh_after_login'); sessionStorage.removeItem('nh_after_login'); } catch { /* */ }
   go(next && /^\/provider\/[\w-]+$/.test(next) ? next : home(user.role), { replace: true });
   warmUp();
+  setTimeout(() => import('./screens/auth.js').then((m) => m.ensureConsents(state.user)), 1500);
 }
 export function logout(msg) {
   auth.clear();
@@ -69,7 +71,7 @@ export async function refreshUnread() {
 }
 export async function refreshMe() {
   const me = await get('/auth/me');
-  const user = { ...auth.user, ...me, role: me.activeRole || auth.user?.role, kycStatus: me.kycStatus, verificationStatus: me.verificationStatus };
+  const user = { ...auth.user, ...me, role: me.activeRole || auth.user?.role, kycStatus: me.kycStatus, verificationStatus: me.verificationStatus, dataConsent: !!me.dataConsentAt, providerTerms: !!me.providerTermsAt };
   auth.user = user;
   setState({ user });
   return user;
@@ -142,7 +144,7 @@ const DEFAULT_CONFIG = { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, e
   const cfg = get('/config').then((c) => setState({ config: c })).catch(() => { if (!state.config) setState({ config: DEFAULT_CONFIG }); });
   if (auth.token && auth.user) {
     setState({ user: auth.user });
-    refreshMe().catch(() => null); // a 401 signs out through the unauthorized handler
+    refreshMe().then((u) => setTimeout(() => import('./screens/auth.js').then((m) => m.ensureConsents(u)), 2000)).catch(() => null); // a 401 signs out through the unauthorized handler
     connect();
     refreshUnread();
   }
@@ -166,6 +168,8 @@ const DEFAULT_CONFIG = { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, e
     if (q.get('topup')) { sessionStorage.setItem('nh_topup', q.get('topup')); history.replaceState(null, '', location.pathname + '#/patient/wallet'); }
     if (q.get('kyc')) history.replaceState(null, '', location.pathname + '#/kyc');
     // Invite links: https://www.<domain>/?ref=CODE -> sign-up with the friend's code filled in
+    // Members' invite links are tracked in Marketing (opens, devices, shares, sign-ups).
+    if (q.get('ref')) import('./lib/marketing.js').then((m) => m.trackOpen('inv-' + q.get('ref').toUpperCase().slice(0, 20))).catch(() => null);
     if (q.get('ref') && !pM) { try { localStorage.setItem('nh_ref', q.get('ref').toUpperCase().slice(0, 20)); } catch { /* */ } history.replaceState(null, '', location.pathname + (state.user ? '' : '#/auth?mode=register')); }
     if (q.get('paid')) { sessionStorage.setItem('nh_paid', q.get('paid')); history.replaceState(null, '', location.pathname + '#/patient/appointments'); }
     if (q.get('settle')) { sessionStorage.setItem('nh_settle', q.get('settle')); history.replaceState(null, '', location.pathname + '#/provider/earnings'); }
@@ -176,6 +180,7 @@ const DEFAULT_CONFIG = { gateways: [], currencies: ['NGN'], rates: { NGN: 1 }, e
   });
   registerSW();
   initInstallPrompt();
+  initSupport();
 })();
 
 /** After returning from a card checkout: the server verifies the payment with the gateway before marking it paid. */

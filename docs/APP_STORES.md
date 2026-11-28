@@ -101,11 +101,11 @@ npm run ios              # builds the web app, copies it in, opens Xcode
 - **Subtitle (Apple, 30 chars):** Doctors, drugs, labs, ambulance
 - **Short description (Play, 80 chars):** Book doctors, order medicines, book tests and call an ambulance across Nigeria.
 - **Category:** Medical (Apple) / Medical (Play)
-- **Keywords (Apple):** doctor,hospital,pharmacy,lab,ambulance,nurse,health,clinic,Nigeria,telemedicine,blood bank,HMO
+- **Keywords (Apple):** doctor,hospital,pharmacy,lab,ambulance,nurse,health,clinic,Nigeria,appointments,blood bank,HMO
 - **Description:**
 
   > N-Health brings Nigerian healthcare into one app.
-  > • Book verified doctors for video or in-person visits
+  > • Book in-person and home visits with verified doctors and nurses
   > • Order medicines from nearby pharmacies, with delivery
   > • Book lab and scan tests, with home sample collection, and get results on your phone
   > • Emergency: call an ambulance with live tracking, or alert the nearest hospital before you arrive

@@ -471,3 +471,9 @@ td.fac-gap { color: var(--error); font-weight: 700; }
   .users-table td:first-child a { font-weight: 700; font-size: 15px; }
   .users-email { word-break: break-all; }
 }
+/* Conversation (support chat / enquiry replies) */
+.thread { max-height: 46vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; background: #f5f7fa; border-radius: 10px; padding: 10px; }
+.thread-msg { max-width: 80%; padding: 8px 10px; border-radius: 10px; font-size: 14px; white-space: pre-wrap; }
+.thread-msg.them { align-self: flex-start; background: #fff; border: 1px solid #e3e6ea; }
+.thread-msg.staff { align-self: flex-end; background: #e8f0fe; }
+.thread-meta { font-size: 11px; color: var(--text-secondary); margin-top: 4px; white-space: normal; }

@@ -265,6 +265,7 @@ r.get('/admin-ops/donations/pending', ...A, h(don.adminPendingDonations));
 r.get('/admin-ops/stats', ...A, h(adm.platformStats));
 r.get('/admin-ops/verifications', ...A, h(adm.verificationQueue));
 r.post('/admin-ops/verifications/:userId', ...A, h(adm.decideVerification));
+r.post('/admin-ops/verifications/:userId/contact', ...A, sensitiveLimiter, h(adm.contactProvider));
 r.get('/admin-ops/campaigns', ...A, h(adm.campaignQueue));
 r.post('/admin-ops/campaigns/:id', ...A, h(adm.decideCampaign));
 r.get('/admin-ops/kyc', ...A, h(adm.kycList));
